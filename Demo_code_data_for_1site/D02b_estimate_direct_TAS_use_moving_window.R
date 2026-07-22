@@ -7,7 +7,7 @@
 # please compare them with TAS_tot (direct thermal response), TAS_totp (p value) in the file "acclimation_data.csv". 
 
 library(librarian)
-shelf(dplyr, lubridate, gslnls, caret, performance, ggpubr, ggplot2, zoo, bayesplot, brms)
+shelf(dplyr, lubridate, gslnls, caret, performance, ggpubr, ggplot2, zoo, bayesplot, brms, nlme)
 rm(list=ls())
 
 ####################Attention: If you only download this folder, you need to change this directory to the location where you place this folder
