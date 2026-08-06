@@ -1,0 +1,43 @@
+[workspace]
+authors = ["Alexey Shiklomanov <alexey.shiklomanov@gmail.com>"]
+channels = ["conda-forge"]
+name = "thermal_acclimation_in_ecosystem_respiration"
+platforms = ["linux-64", "osx-arm64"] # missing win-64
+version = "0.1.0"
+
+[tasks]
+deps = {
+  cmd = ["Rscript", "dependencies.R"],
+  description = "Install additional R package dependencies."
+}
+
+[dependencies]
+r-mumin = ">=1.48.19,<2"
+r-vsurf = ">=1.2.1,<2"
+r-bayesplot = ">=1.15.0,<2"
+r-boot = ">=1.3_32,<2"
+r-brms = ">=2.23.0,<3"
+r-car = ">=3.1_5,<4"
+r-caret = ">=7.0_1,<8"
+r-corrplot = ">=0.95,<0.96"
+r-dplyr = ">=1.2.1,<2"
+r-fbasics = ">=4052.98,<4053"
+r-ggplot2 = ">=4.0.3,<5"
+r-ggpubr = ">=1.0.0,<2"
+r-lme4 = ">=2.0_6,<3"
+r-lubridate = ">=1.9.5,<2"
+r-mblm = ">=0.12.1,<0.13"
+r-nlme = ">=3.1_170,<4"
+r-performance = ">=0.17.1,<0.18"
+r-randomforest = ">=4.7_1.2,<5"
+r-ranger = ">=0.18.0,<0.19"
+r-rsample = ">=1.3.2,<2"
+r-sf = ">=1.1_2,<2"
+r-suncalc = ">=0.5.3,<0.6"
+r-terra = ">=1.9_34,<2"
+r-tidyr = ">=1.3.2,<2"
+r-tidyverse = ">=2.0.0,<3"
+r-vip = ">=0.4.6,<0.5"
+r-zoo = ">=1.8_15,<2"
+r-librarian = ">=1.8.1,<2"
+r-remotes = ">=2.5.0,<3"
