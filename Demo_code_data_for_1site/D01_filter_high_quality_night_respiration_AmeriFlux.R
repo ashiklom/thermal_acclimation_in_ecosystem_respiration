@@ -44,11 +44,8 @@ for (file in files_AmeriFlux_BASE) {
   
   # get the exact time zone, not using daylight saving so choose a winter date
   tz <- tz_offset(as.Date("2000-01-01"), tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
-  if (tz$utc_offset_h > 0) {
-    tz_site  <- paste0('GMT-', tz$utc_offset_h)
-  } else {
-    tz_site  <- paste0('GMT+', -tz$utc_offset_h)
-  }
+  # NOTE: Original logic here created `GMT+/-X`-style names, but these don't work with modern R (or maybe Arch Linux?)
+  tz_site <- tz[1, "tz_name"]
   
   # get sunrise and sunset time
   sunrise_set <- getSunlightTimes(
