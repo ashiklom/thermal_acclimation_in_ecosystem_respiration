@@ -44,3 +44,4 @@ scripts/.DS_Store
 !.pixi/config.toml
 
 /data-raw/
+_creds.toml
