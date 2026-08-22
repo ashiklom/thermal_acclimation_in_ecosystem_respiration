@@ -183,7 +183,7 @@
 
 <div class="note">
   <strong>FR-FBn workflow note:</strong>
-  <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code> has a site-specific branch that replaces <code>TS_F_MDS_1</code> with predictions from <code>TS_RandomForest/FR-FBn_TS_rfp.csv</code> when that file is present.
+  <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code> has a site-specific branch that replaces <code>TS_F_MDS_1</code> with predictions from <code>data-raw/TS_RandomForest/FR-FBn_TS_rfp.csv</code> when that file is present.
   The downloaded CSV itself is compatible with the expected input schema and contains measured soil temperature, but the complete FR-FBn R workflow may still depend on that separate prediction file.
 </div>
 

@@ -35,7 +35,7 @@
 </div>
 
 <h2>Implementation Strategy</h2>
-<p><code>01_01</code> will use <code>site_ID</code> as the function input and retain one output file per site in <code>TS_RandomForest</code>.</p>
+<p><code>01_01</code> will use <code>site_ID</code> as the function input and retain one output file per site in <code>data-raw/TS_RandomForest</code>.</p>
 <p><code>01_02a</code> and <code>01_02b</code> will return one growing-season feature row from each successful site function call, write the two per-site respiration files, and merge those rows into their existing aggregate CSV.</p>
 <p>The command-line form will support both <code>--sites=SITE1,SITE2</code> and a positional comma-separated site argument, plus <code>--overwrite</code>.</p>
 <pre><code>Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm,FR-Pue
@@ -54,7 +54,7 @@ Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R US-Ha
 
 <h2>Execution Test</h2>
 <p>The end-to-end test used <code>US-Ha1</code> as the AmeriFlux site and <code>DE-Akm</code> as the EuroFlux site.</p>
-<p><code>DE-Akm</code> was selected because it is an eligible non-<code>FR-Bn</code> EuroFlux site with a local FLUXNET input file.</p>
+<p><code>DE-Akm</code> was selected because it is an eligible EuroFlux site with a local FLUXNET input file.</p>
 <p>The first pass used <code>--overwrite</code> for both sites.</p>
 <pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=US-Ha1,DE-Akm --overwrite
 Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R --sites=US-Ha1 --overwrite

@@ -100,7 +100,13 @@
 <body>
 
 <h1>Workflow Improvements</h1>
-<p class="meta">Proposed changes to the thermal acclimation pipeline, grouped by impact</p>
+<p class="meta">Proposed changes to the thermal acclimation pipeline, grouped by impact; recent completed changes are noted below.</p>
+
+<div class="tier tier-tiny">
+  <span class="tier-tag">Completed</span>
+  <p><strong>Recent baseline changes:</strong> Workflow 01 now supports per-site execution, skip behavior, aggregate-row replacement during overwrite runs, and explicit site validation.</p>
+  <p>The major R workflows now use the repository-relative <code>data-raw</code> input path instead of machine-specific absolute paths.</p>
+</div>
 
 <nav class="toc">
   <strong>Contents</strong>
@@ -194,20 +200,18 @@
   <span class="tier-tag">Tiny</span>
 
   <div class="item">
-    <div class="item-title">Replace hard-coded absolute paths with <code>here::here()</code></div>
+    <div class="item-title">Replace hard-coded absolute paths with a project-relative data path</div>
     <p>
-      Six scripts contain hard-coded paths to external disks or other users' home directories.
-      Replace all with <code>here::here("data-raw", ...)</code> or a configured base path.
+      This item is complete for the current workflows: the former external-disk paths were replaced with
+      <code>dir_rawdata &lt;- 'data-raw'</code> and downstream paths use <code>file.path()</code>.
+      A future <code>here::here()</code> change could improve execution from arbitrary working directories,
+      but it is no longer a correction for machine-specific paths.
     </p>
-    <table>
-      <tr><th>File</th><th>Current Value</th></tr>
-      <tr><td><code>01_02b</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
-      <tr><td><code>02_01a</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
-      <tr><td><code>02_01b</code></td><td><code>/Users/junnawang/YaleLab/data_server</code></td></tr>
-      <tr><td><code>03_01</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
-      <tr><td><code>04_01</code></td><td><code>/Volumes/MaloneLab/Research/...</code></td></tr>
-      <tr><td><code>04_02</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
-    </table>
+      <table>
+       <tr><th>Scope</th><th>Current Value</th></tr>
+       <tr><td>Workflow 01 input data</td><td><code>data-raw</code>, resolved from the repository root</td></tr>
+       <tr><td>Remaining portability improvement</td><td>Use a project-root helper such as <code>here::here()</code> when scripts must run outside the repository root</td></tr>
+     </table>
   </div>
 
   <div class="item">

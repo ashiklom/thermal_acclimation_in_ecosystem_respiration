@@ -142,45 +142,45 @@ Step 04: Future Projections
   </tr>
   <tr>
     <td><code>AmeriFlux_BASE</code></td>
-    <td><code>SiteData/AmeriFlux_BASE/</code></td>
+    <td><code>data-raw/SiteData/AmeriFlux_BASE/</code></td>
     <td><code>.zip</code></td>
     <td>Site-specific (see below)</td>
     <td>Read via <code>amerifluxr::amf_read_base()</code>; raw FC, requires u* filtering</td>
   </tr>
   <tr>
     <td><code>FLUXNET2015</code></td>
-    <td><code>SiteData/FLUXNET2015/unzip/</code></td>
+    <td><code>data-raw/SiteData/FLUXNET2015/unzip/</code></td>
     <td><code>_FLUXNET2015_FULLSET_(HH|HR)_</code></td>
     <td>Standardized (<code>TS_F_MDS_1</code>, etc.)</td>
     <td>Half-hourly or hourly; pre-processed u* and gap-filling</td>
   </tr>
   <tr>
     <td><code>FLUXNET2020</code></td>
-    <td><code>SiteData/FLUXNET2020/unzip/</code></td>
+    <td><code>data-raw/SiteData/FLUXNET2020/unzip/</code></td>
     <td><code>_FLUXNET2015_FULLSET_(HH|HR)_</code></td>
     <td>Standardized (same as 2015)</td>
     <td>Retains FLUXNET2015 file naming convention despite being 2020 release</td>
   </tr>
   <tr>
     <td><code>FLUXNET2025</code></td>
-    <td><code>SiteData/FLUXNET07202025/unzip/</code></td>
+    <td><code>data-raw/SiteData/FLUXNET07202025/unzip/</code></td>
     <td><code>.csv</code></td>
     <td>Standardized (same convention)</td>
     <td>Most recent FLUXNET release; used for European sites</td>
   </tr>
   <tr>
     <td><code>ICOS2020</code></td>
-    <td><code>SiteData/ICOS_after2020/</code></td>
+    <td><code>data-raw/SiteData/ICOS_after2020/</code></td>
     <td><code>.csv</code></td>
     <td>Standardized</td>
     <td>Used only in 01_01 (soil temp estimation), not in main QC pipeline</td>
   </tr>
   <tr>
     <td><code>ICOS2025</code></td>
-    <td><code>SiteData/Ecosystem final quality...release 2025-1/unzip/</code></td>
+    <td><code>data-raw/SiteData/Ecosystem final quality...release 2025-1/unzip/</code></td>
     <td><code>.csv</code></td>
     <td>Standardized</td>
-    <td>ICOS L2 ETC-Archive format; always paired with FLUXNET2025</td>
+    <td>Normalized by <code>93-download-icos.py</code>; paired with FLUXNET2025 only when configured in <code>site_info</code></td>
   </tr>
 </table>
 
@@ -439,12 +439,12 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <div class="step-card">
   <h3>01_01 &mdash; Estimate Missing Soil Temperatures</h3>
   <p><strong>Runtime:</strong> ~5 minutes</p>
-  <p><strong>Input:</strong> FluxNet tower data (TA, TS, SWC, NEE, GPP) from all sources</p>
-  <p><strong>Output:</strong> <code>data/soil_temp_estimation.csv</code></p>
+  <p><strong>Input:</strong> FluxNet tower data (TA, TS, and NETRAD where available) from all sources</p>
+  <p><strong>Output:</strong> one file per processed site under <code>data-raw/TS_RandomForest/{site}_TS_rfp.csv</code></p>
   <p>
     For sites where soil temperature (TS) measurements have gaps, this script trains a Random Forest model
     (<code>randomForest</code>, 500 trees) on paired TA&ndash;TS observations to predict missing TS values.
-    It uses TA, VPD, SWC, DOY, hour, and minute as predictors, limited to 60,000 training samples.
+    It uses TA and, where configured, NETRAD as predictors, with at most 60,000 training samples.
     Results are validated against held-out data (R&sup2; reported per site).
   </p>
   <p>
@@ -458,8 +458,8 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <div class="step-card">
   <h3>01_02a &mdash; Quality-Control Nightly NEE (EuroFlux / ICOS)</h3>
   <p><strong>Runtime:</strong> ~30 minutes</p>
-  <p><strong>Input:</strong> FLUXNET2015/2020/2025 and ICOS2025 data, site metadata, RF-predicted TS from 01_01</p>
-  <p><strong>Output:</strong> <code>data/NEE_QC/*.csv</code> per site</p>
+  <p><strong>Input:</strong> FLUXNET2015/2020/2025 and normalized ICOS2025 data, site metadata, and RF-predicted TS from 01_01 where configured</p>
+  <p><strong>Output:</strong> <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code> per site, plus <code>data/growing_season_feature_EuropFlux.csv</code></p>
   <p>
     Processes <strong>only EuroFlux/ICOS sources</strong>. Filters nighttime NEE observations
     for use as ecosystem respiration (ER) proxies using the standardized FLUXNET column names.
@@ -482,8 +482,8 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <div class="step-card">
   <h3>01_02b &mdash; Quality-Control Nightly NEE (AmeriFlux)</h3>
   <p><strong>Runtime:</strong> ~30 minutes</p>
-  <p><strong>Input:</strong> AmeriFlux BASE data, site metadata</p>
-  <p><strong>Output:</strong> <code>data/NEE_QC_water_gpp/*.csv</code> per site</p>
+  <p><strong>Input:</strong> AmeriFlux BASE data, site metadata, and per-site TS predictions where configured</p>
+  <p><strong>Output:</strong> <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code> per site, plus <code>data/growing_season_feature_AmeriFlux.csv</code></p>
   <p>
     Processes <strong>only AmeriFlux_BASE sources</strong>. Uses site-specific column names
     from <code>site_info.csv</code> and performs additional pre-processing not needed for FLUXNET.
@@ -651,16 +651,16 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
     <th>Description</th>
   </tr>
   <tr>
-    <td><code>data/soil_temp_estimation.csv</code></td>
-    <td>Random Forest predictions of missing soil temperatures</td>
+    <td><code>data-raw/TS_RandomForest/*.csv</code></td>
+    <td>Per-site soil-temperature predictions from 01_01</td>
   </tr>
   <tr>
-    <td><code>data/NEE_QC/*.csv</code></td>
-    <td>Quality-controlled nighttime NEE per site (EuroFlux/ICOS, temperature-only model)</td>
+    <td><code>data-raw/RespirationData/*_nightNEE.csv</code></td>
+    <td>Quality-controlled nighttime NEE per site</td>
   </tr>
   <tr>
-    <td><code>data/NEE_QC_water_gpp/*.csv</code></td>
-    <td>Quality-controlled nighttime NEE per site (AmeriFlux, temperature+water+GPP model)</td>
+    <td><code>data-raw/RespirationData/*_ac.csv</code></td>
+    <td>Gap-filled ancillary and respiration data per site</td>
   </tr>
   <tr>
     <td><code>data/outcome_temp.csv</code></td>

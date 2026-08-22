@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ICOS Sites: Download and Integration Status</title>
   <style>
     body { font-family: sans-serif; max-width: 900px; margin: 2em auto; line-height: 1.6; }
@@ -12,7 +13,7 @@
     th { background: #f5f5f5; }
     code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
     pre { background: #f5f5f5; padding: 1em; overflow-x: auto; border-radius: 5px; }
-    .issue { background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.5em 1em; margin: 1em 0; }
+    .note { background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.5em 1em; margin: 1em 0; }
     .ok { background: #d4edda; border-left: 4px solid #28a745; padding: 0.5em 1em; margin: 1em 0; }
   </style>
 </head>
@@ -20,152 +21,59 @@
 
 <h1>ICOS Sites: Download and Integration Status</h1>
 
-<h2>What We've Done</h2>
+<p>This page records the current ICOS/FLUXNET acquisition and integration state after the downloader and Workflow 01 refactors.</p>
 
-<ol>
-  <li><strong>Wrote <code>workflows/91-download-ameriflux.R</code></strong> &mdash; Downloads AmeriFlux BASE-BADM data using <code>amerifluxr::amf_download_base</code>. Accepts <code>--sites</code>, <code>--site_info</code>, <code>--overwrite</code>, <code>--credentials</code> flags. Tested successfully; CSV data matches demo zip exactly.</li>
+<h2>Current Download Scripts</h2>
+<table>
+  <tr><th>Script</th><th>Purpose</th><th>Current behavior</th></tr>
+  <tr><td><code>workflows/91-download-ameriflux.R</code></td><td>Download AmeriFlux BASE-BADM archives</td><td>Uses <code>amerifluxr::amf_download_base</code>; supports site selection, credentials, and overwrite.</td></tr>
+  <tr><td><code>workflows/92-download-fluxnet.sh</code></td><td>Download FLUXNET archives</td><td>Uses <code>pixi run fluxnet-shuttle download</code>, then extracts CSV files to <code>FLUXNET07202025/unzip</code>.</td></tr>
+  <tr><td><code>workflows/93-download-icos.py</code></td><td>Download ICOS ETC level-2 data</td><td>Uses <code>icoscp</code> and writes a normalized FLUXNET-style CSV for each requested site.</td></tr>
+</table>
 
-  <li><strong>Downloaded all 8 AmeriFlux <code>estimate_Ts==YES</code> sites</strong> &mdash;
-    US-Ha1, US-Los, US-Ho1, US-Ho2, US-PFa, US-SRG, CA-Man, US-Ced.
-    Files in <code>data-raw/SiteData/AmeriFlux_BASE/</code>.</li>
+<p>All paths in the download shell and R workflows are relative to the repository root, so commands should be run from that directory.</p>
 
-  <li><strong>Wrote <code>workflows/92-download-fluxnet.sh</code></strong> &mdash; Uses <code>fluxnet-shuttle</code> CLI (Python) to download FLUXNET data from ICOS/EUF data hubs, then unzips HH CSVs into <code>data-raw/SiteData/FLUXNET07202025/unzip/</code>. Tested successfully for all 8 FLUXNET sites.</li>
+<h2>ICOS L2 Normalization</h2>
+<p><code>workflows/93-download-icos.py</code> queries the ICOS Fluxnet, Meteo, and Meteosens products and merges them on <code>TIMESTAMP</code>.</p>
+<p>It writes files named <code>{site}_ICOS_L2_FLUXNET_HH.csv</code> under <code>data-raw/SiteData/Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip/</code>.</p>
+<p>The normalized file supplies the standardized fields needed by the EuroFlux workflows, including <code>TA_F_MDS</code>, <code>NEE_VUT_REF</code>, <code>TS_F_MDS_1</code>, <code>SWC_F_MDS_1</code>, <code>NETRAD</code>, and <code>NIGHT</code>.</p>
 
-  <li><strong>Downloaded all 8 FLUXNET <code>estimate_Ts==YES</code> sites</strong> &mdash;
-    FR-Pue, CZ-RAJ, DE-Akm, DE-Hte, FR-FBn, FR-Fon, FR-Bil, CH-Dav.
-    ZIP files in <code>data-raw/SiteData/</code>, extracted HH CSVs in <code>data-raw/SiteData/FLUXNET07202025/unzip/</code>.</li>
-
-  <li><strong>Ran <code>01_01_estimate_soil_temperature_at_some_sites.R</code></strong> &mdash;
-    All 8 AmeriFlux sites completed successfully (all <code>*_TS_rfp.csv</code> files created).
-    Failed on FLUXNET sites due to missing data (see below).</li>
-</ol>
-
-<h2>Issues Identified</h2>
-
-<h3>Issue 1: <code>amerifluxr::amf_download_fluxnet</code> does not work for these sites</h3>
-
-<p>The R function <code>amf_download_fluxnet()</code> rejects all FLUXNET estimate_Ts site IDs with "No valid Site ID" errors.
-The function calls <code>amf_check_site_id()</code> which returns <code>FALSE</code> for FR-Pue, CZ-RAJ, DE-Akm, DE-Hte, FR-FBn, FR-Fon, FR-Bil, CH-Dav.
-This appears to be a limitation of the API &mdash; these sites may not be registered in the AmeriFlux FLUXNET product catalog despite being available through ICOS/EUF.</p>
-
-<p><strong>Workaround:</strong> Use <code>fluxnet-shuttle</code> CLI (Python) instead, which downloads from ICOS/EUF data hubs directly.</p>
-
-<h3>Issue 2: FR-FBn has no soil temperature data in FLUXNET harmonized format</h3>
-
-<div class="issue">
-  <strong>This is the critical blocker.</strong> All other FLUXNET sites have <code>TS_F_MDS_1</code> columns in their FLUXMET_HH files, but FR-FBn has <strong>zero</strong> <code>TS_*</code> columns. This is exactly why <code>estimate_Ts=YES</code> for this site &mdash; TS must be estimated from TA and NETRAD. But the pipeline needs <em>some</em> measured TS to train the estimation model.
+<div class="ok">
+  <strong>FR-FBn validation:</strong>
+  The downloader was tested successfully against FR-FBn and produced a 70,128-row, 30-minute normalized file with measured soil temperature.
+  The generated file is ignored by Git because <code>data-raw/</code> is ignored.
 </div>
 
+<div class="note">
+  <strong>Important:</strong>
+  FR-FBn still requires <code>data-raw/TS_RandomForest/FR-FBn_TS_rfp.csv</code> when running the current <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code> branch.
+  The normalized ICOS file solves the missing measured-TS input problem, but the prediction file must first be created by <code>01_01_estimate_soil_temperature_at_some_sites.R --sites=FR-FBn</code>.
+</div>
+
+<h2>FLUXNET Estimate-TS Sites</h2>
+<p>The current <code>data/site_info.csv</code> marks 16 sites with <code>estimate_Ts=YES</code>.</p>
 <table>
-  <tr><th>Site</th><th>source</th><th>TS_F_MDS columns in FLUXMET_HH</th><th>Status</th></tr>
-  <tr><td>FR-Pue</td><td>FLUXNET2025</td><td>14</td><td>OK &mdash; FLUXNET-only, has TS</td></tr>
-  <tr><td>CZ-RAJ</td><td>FLUXNET2025</td><td>12</td><td>OK &mdash; FLUXNET-only, has TS</td></tr>
-  <tr><td>DE-Akm</td><td>FLUXNET2025</td><td>6</td><td>OK &mdash; FLUXNET-only, has TS</td></tr>
-  <tr><td>DE-Hte</td><td>FLUXNET2025</td><td>6</td><td>OK &mdash; FLUXNET-only, has TS</td></tr>
-  <tr><td>FR-Fon</td><td>FLUXNET2025_ICOS2025</td><td>12</td><td>OK &mdash; has TS in FLUXNET part</td></tr>
-  <tr><td>CH-Dav</td><td>FLUXNET2025_ICOS2025</td><td>16</td><td>OK &mdash; has TS in FLUXNET part</td></tr>
-  <tr><td>FR-Bil</td><td>FLUXNET2025_ICOS2025</td><td>16</td><td>OK &mdash; has TS in FLUXNET part</td></tr>
-  <tr style="background: #fff3cd;"><td><strong>FR-FBn</strong></td><td>FLUXNET2025_ICOS2025</td><td><strong>0</strong></td><td><strong>BLOCKED &mdash; no TS data</strong></td></tr>
+  <tr><th>Group</th><th>Sites</th><th>Model in <code>01_01</code></th></tr>
+  <tr><td>AmeriFlux BASE</td><td>US-Ha1, US-Los, US-Ho1, US-Ho2, US-PFa, US-SRG, CA-Man, US-Ced</td><td>Random Forest using TA and site-specific NETRAD where available</td></tr>
+  <tr><td>FLUXNET/ICOS</td><td>FR-Pue, CZ-RAJ, DE-Akm, DE-Hte, FR-FBn, FR-Fon, CH-Dav, FR-Bil</td><td>Random Forest for DE-Akm, FR-Pue, CZ-RAJ; linear regression for DE-Hte and FR-FBn; current fallback branch for the remaining sites</td></tr>
 </table>
 
-<h3>Issue 3: <code>FLUXNET2025_ICOS2025</code> source requires data from two directories</h3>
+<p><code>01_01</code> writes one prediction file per site to <code>data-raw/TS_RandomForest/{site}_TS_rfp.csv</code>.</p>
 
-<p>The 01_01 script splits source on <code>_</code> and reads from two separate directories in sequence:</p>
-<ol>
-  <li><code>FLUXNET2025</code> &rarr; <code>data-raw/SiteData/FLUXNET07202025/unzip/*.csv</code></li>
-  <li><code>ICOS2025</code> &rarr; <code>data-raw/SiteData/Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip/*.csv</code></li>
-</ol>
+<h2>Running the Integration Workflows</h2>
+<p>Workflow 01 now accepts either <code>--sites=SITE1,SITE2</code> or one positional comma-separated site list, plus <code>--overwrite</code>.</p>
+<pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=FR-FBn
+Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=FR-FBn</code></pre>
+<p>Without a site argument, the scripts process all eligible sites. Existing per-site outputs and aggregate feature rows are skipped unless <code>--overwrite</code> is supplied.</p>
+<p>The two respiration outputs are written to <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code>; growing-season features are written to <code>data/growing_season_feature_EuropFlux.csv</code> or <code>data/growing_season_feature_AmeriFlux.csv</code>.</p>
 
-<p>It then <code>bind_rows()</code> the two, splicing on timestamp continuity. For sites like CH-Dav and FR-Bil that already have TS in the FLUXNET file, the ICOS2025 directory is redundant (and currently empty &mdash; causing a <code>read.csv("")</code> error). For FR-FBn, the ICOS2025 file was supposed to supply the measured TS that the FLUXNET file lacks.</p>
-
-<h3>Issue 4: ICOS native L2 format uses different column names</h3>
-
-<p>The ICOS ETC-Archive (native L2) uses sensor-level naming (<code>TS_1_1_1</code>, <code>TA_1_1_1</code>, <code>RA_1_1_1</code>) while the pipeline expects FLUXNET-harmonized names (<code>TS_F_MDS_1</code>, <code>TA_F_MDS</code>, <code>NETRAD</code>). The original author likely had pre-processed ICOS data with FLUXNET-compatible column names.</p>
-
-<h2>Suggestions for Next Steps</h2>
-
-<h3>Option A: Fix FR-FBn specifically (recommended)</h3>
-<p>The simplest path for the 4 sites with <code>FLUXNET2025_ICOS2025</code> source:</p>
-<ol>
-  <li>For FR-Fon, CH-Dav, FR-Bil: change source in <code>site_info.csv</code> from <code>FLUXNET2025_ICOS2025</code> to just <code>FLUXNET2025</code>. Their FLUXMET_HH files already contain all needed columns.</li>
-  <li>For FR-FBn: either skip the site, or find another data source for measured soil temperature (e.g., ICOS data portal, author's original data, or manual download of the ICOS L2 product with appropriate column renaming).</li>
-</ol>
-
-<h3>Option B: Download ICOS L2 and adapt the script</h3>
-<p>Download the ICOS ETC-Archive L2 product for FR-FBn, inspect its column names, and either:</p>
+<h2>Known Limitations</h2>
 <ul>
-  <li>Add a mapping step that renames ICOS columns to FLUXNET names before <code>bind_rows()</code></li>
-  <li>Or add a separate ICOS reader path in the script with site-specific column mappings in <code>site_info.csv</code> (similar to how AmeriFlux sites specify <code>TS_1_1_1</code>, <code>TA_PI_F_1_1_1</code> etc.)</li>
+  <li><code>icoscp</code> selects the first object returned for each datatype; the API ordering should be checked if multiple product versions are available.</li>
+  <li>The normalized ICOS CSV is intentionally not a byte-for-byte archive copy; missing values use <code>-9999</code>.</li>
+  <li>The full EuroFlux respiration workflow has not been rerun as part of downloader validation.</li>
+  <li>Compound sources such as <code>FLUXNET2025_ICOS2025</code> still require every referenced input file to be present; use a standalone normalized ICOS file only for sites configured to consume it.</li>
 </ul>
-
-<h3>Option C: Create a synthetic TS for FR-FBn</h3>
-<p>Use the relationship between TA and TS from nearby sites (e.g., FR-Fon) to generate a plausible TS time series for FR-FBn. This is scientifically questionable but would allow the pipeline to run.</p>
-
-<h3>Option D: Skip FR-FBn</h3>
-<p>It's one site out of 16. Remove it from <code>id_estimate_TS</code> or filter it out. The analysis would still have 15 sites.</p>
-
-<h2>Current File Inventory</h2>
-
-<h3>AmeriFlux BASE (all complete)</h3>
-<pre>
-data-raw/SiteData/AmeriFlux_BASE/
-  AMF_CA-Man_BASE-BADM_3-5.zip
-  AMF_US-Ced_BASE-BADM_9-5.zip
-  AMF_US-Ha1_BASE-BADM_27-5.zip
-  AMF_US-Ho1_BASE-BADM_15-5.zip
-  AMF_US-Ho2_BASE-BADM_10-5.zip
-  AMF_US-Kon_BASE-BADM_5-5.zip
-  AMF_US-Los_BASE-BADM_35-5.zip
-  AMF_US-PFa_BASE-BADM_35-5.zip
-  AMF_US-SRG_BASE-BADM_20-5.zip
-</pre>
-
-<h3>FLUXNET (downloaded, extracted)</h3>
-<pre>
-data-raw/SiteData/*.zip
-  ICOS_FR-Pue_FLUXNET_2000-2025_v1.3_r1.zip
-  EUF_CZ-RAJ_FLUXNET_2012-2024_v1.3_r1.zip
-  EUF_DE-Akm_FLUXNET_2009-2024_v1.3_r2.zip
-  EUF_DE-Hte_FLUXNET_2009-2018_v1.3_r2.zip
-  ICOS_FR-FBn_FLUXNET_2008-2024_v1.3_r1.zip   &larr; has no TS data
-  ICOS_FR-Fon_FLUXNET_2019-2024_v1.3_r1.zip
-  ICOS_FR-Bil_FLUXNET_2014-2025_v1.3_r1.zip
-  ICOS_CH-Dav_FLUXNET_1997-2024_v1.3_r1.zip
-
-data-raw/SiteData/FLUXNET07202025/unzip/
-  *_FLUXMET_HH_*.csv  (8 files, one per site)
-  *_FLUXMET_DD_*.csv, *_ERA5_*.csv, *_BIF*.csv, etc.
-</pre>
-
-<h3>ICOS L2 (MISSING)</h3>
-<pre>
-data-raw/SiteData/Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip/
-  (empty &mdash; no files downloaded)
-</pre>
-
-<h3>TS estimation outputs</h3>
-<pre>
-data-raw/TS_RandomForest/
-  CA-Man_TS_rfp.csv
-  US-Ced_TS_rfp.csv
-  US-Ha1_TS_rfp.csv
-  US-Ho1_TS_rfp.csv
-  US-Ho2_TS_rfp.csv
-  US-Los_TS_rfp.csv
-  US-PFa_TS_rfp.csv
-  US-SRG_TS_rfp.csv
-  (missing: FR-FBn, FR-Fon, CH-Dav, FR-Bil, FR-Pue, CZ-RAJ, DE-Akm, DE-Hte)
-</pre>
-
-<h2>Scripts</h2>
-
-<table>
-  <tr><th>Script</th><th>Purpose</th><th>Status</th></tr>
-  <tr><td><code>workflows/91-download-ameriflux.R</code></td><td>Download AmeriFlux BASE-BADM data</td><td>Complete, tested</td></tr>
-  <tr><td><code>workflows/92-download-fluxnet.sh</code></td><td>Download FLUXNET data via fluxnet-shuttle CLI</td><td>Complete, tested</td></tr>
-  <tr><td><code>workflows/92-download-fluxnet.R</code></td><td>Download FLUXNET via amerifluxr (alternative)</td><td>Not functional &mdash; API rejects site IDs</td></tr>
-  <tr><td><code>workflows/01_01_estimate_soil_temperature_at_some_sites.R</code></td><td>Estimate TS via RF/lm</td><td>Runs for AmeriFlux sites; fails for FR-FBn (missing TS data)</td></tr>
-</table>
 
 </body>
 </html>
