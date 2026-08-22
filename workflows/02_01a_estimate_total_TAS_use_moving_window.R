@@ -15,9 +15,7 @@ rm(list=ls())
 
 set.seed(123)
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
-# dir_rawdata <- '/Users/junnawang/YaleLab/data_server'
+dir_rawdata <- 'data-raw'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
@@ -321,4 +319,3 @@ for (id in 1:nrow(site_info)) {
 # end of each site
 write.csv(outcome, file = file.path('data', 'outcome_temp.csv'), row.names = F)
 write.csv(outcome_siteyear, file = file.path('data', 'outcome_siteyear_temp.csv'), row.names = F)
-

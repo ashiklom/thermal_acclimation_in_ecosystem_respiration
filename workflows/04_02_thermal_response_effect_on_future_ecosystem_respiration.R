@@ -8,8 +8,7 @@ shelf(dplyr, ggplot2, caret, performance, zoo, bayesplot, brms, gslnls, lubridat
 rm(list=ls())
 
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
+dir_rawdata <- 'data-raw'
 ####################End Attention
 
 options(na.action = "na.omit")

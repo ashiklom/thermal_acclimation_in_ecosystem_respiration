@@ -9,12 +9,12 @@ shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo, sf)
 rm(list=ls())
 
 ####################Attention: If you only download this folder, you need to change this directory to the location where you place this folder
-dir_rawdata <- 'Demo_code_data_for_1site'
+dir_rawdata <- 'data-raw/'
 ####################End Attention
 
 files_AmeriFlux_BASE <- list.files(dir_rawdata, pattern=".zip$", full.names = F)
 
-site_info <- read.csv(file.path(dir_rawdata, 'site_info.csv'))
+site_info <- read.csv(file.path('data', 'site_info.csv'))
 
 feature_gs <- data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())  # growing season feature
 

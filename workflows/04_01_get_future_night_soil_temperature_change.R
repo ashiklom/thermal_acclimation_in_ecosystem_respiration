@@ -12,15 +12,13 @@ shelf(dplyr, terra)
 rm(list=ls())
 
 ####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-# dir_rawdata <- '/Users/junnawang/YaleLab/data_server/'
+dir_rawdata <- 'data-raw'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 xy <- data.frame(x=site_info$LONG, y=site_info$LAT)
 
 #----------------Step 1: get monthly temperature of the current period
-# dir <- '/Users/jw2946/Documents/data/climate/wc2.1_2.5m_tmin/'
 dir <- file.path(dir_rawdata, 'Climate', 'wc2.1_2.5m_tmin')
 #
 files <- list.files(dir)
@@ -77,4 +75,3 @@ for (ssp in ssps) {
   write.csv(Tmin_month, file=file.path('data', paste0('Tmin_month_', ssp, '_wc.csv')), row.names=FALSE)
   #
 }
-
