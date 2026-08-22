@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow 01 Refactor</title>
+  <style>
+    :root { --bg: #fdfdfd; --fg: #1a1a1a; --accent: #2563eb; --muted: #6b7280; --border: #e5e7eb; --card: #f9fafb; }
+    * { box-sizing: border-box; }
+    body { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; color: var(--fg); background: var(--bg); }
+    h1 { font-size: 1.8rem; }
+    h2 { margin-top: 2rem; border-bottom: 2px solid var(--accent); }
+    .card { margin: 1rem 0; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+    code { padding: 0.1em 0.3em; background: #f3f4f6; border-radius: 3px; }
+    pre { overflow-x: auto; padding: 1rem; background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; }
+    li { margin-bottom: 0.4rem; }
+    .meta { color: var(--muted); }
+  </style>
+</head>
+<body>
+<h1>Workflow 01 Refactor</h1>
+<p class="meta">Plan and implementation record for <code>01_01</code>, <code>01_02a</code>, and <code>01_02b</code>.</p>
+
+<h2>Plan</h2>
+<div class="card">
+  <ol>
+    <li>Keep package loading, input discovery, and the existing site-specific transformations unchanged wherever possible.</li>
+    <li>Move the body of each existing site loop into a <code>process_site(name_site, ...)</code> function that resolves the matching row in <code>site_info</code>.</li>
+    <li>Add command-line parsing for an optional comma-separated site list and the <code>--overwrite</code> flag.</li>
+    <li>When no site list is supplied, derive the candidate sites from <code>site_info</code> and the workflow's supported source or temperature-estimation rules.</li>
+    <li>Skip a site by default when its per-site output files exist, or when its row already exists in the relevant growing-season aggregate.</li>
+    <li>When overwriting, process selected sites again and replace their rows in aggregate output rather than appending duplicates.</li>
+    <li>Validate requested site names and report skipped or unsupported sites clearly.</li>
+  </ol>
+</div>
+
+<h2>Implementation Strategy</h2>
+<p><code>01_01</code> will use <code>site_ID</code> as the function input and retain one output file per site in <code>TS_RandomForest</code>.</p>
+<p><code>01_02a</code> and <code>01_02b</code> will return one growing-season feature row from each successful site function call, write the two per-site respiration files, and merge those rows into their existing aggregate CSV.</p>
+<p>The command-line form will support both <code>--sites=SITE1,SITE2</code> and a positional comma-separated site argument, plus <code>--overwrite</code>.</p>
+<pre><code>Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm,FR-Pue
+Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R US-Ha1 --overwrite</code></pre>
+
+<h2>Implementation Notes</h2>
+<p>Implementation is intentionally limited to high-level control flow, selection, skip checks, and aggregate-file bookkeeping.</p>
+<p>The existing calculations, special cases, diagnostics, and output schemas remain unchanged.</p>
+<p><code>01_01</code> now processes only requested eligible temperature-estimation sites and skips existing per-site prediction files unless <code>--overwrite</code> is supplied.</p>
+<p><code>01_02a</code> and <code>01_02b</code> now process only requested sites from their respective source groups, preserve existing aggregate rows, and replace selected aggregate rows during overwrite runs.</p>
+
+<h2>Verification</h2>
+<p>All three scripts parse successfully with <code>Rscript</code> without executing the data-intensive workflow.</p>
+<p><code>git diff --check</code> reports no whitespace errors in the edited workflow files.</p>
+<p>The final diff was reviewed for accidental changes inside site-specific processing logic and for correct overwrite behavior.</p>
+
+<h2>Execution Test</h2>
+<p>The end-to-end test used <code>US-Ha1</code> as the AmeriFlux site and <code>DE-Akm</code> as the EuroFlux site.</p>
+<p><code>DE-Akm</code> was selected because it is an eligible non-<code>FR-Bn</code> EuroFlux site with a local FLUXNET input file.</p>
+<p>The first pass used <code>--overwrite</code> for both sites.</p>
+<pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=US-Ha1,DE-Akm --overwrite
+Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R --sites=US-Ha1 --overwrite
+Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm --overwrite</code></pre>
+<p>The successful site-level runs created <code>US-Ha1_TS_rfp.csv</code>, <code>DE-Akm_TS_rfp.csv</code>, both per-site AmeriFlux respiration files, both per-site EuroFlux respiration files, and the corresponding aggregate feature files.</p>
+<p>The test also exposed and corrected local-environment issues: 2025 FLUXNET discovery now selects the site-specific <code>FLUXMET_HH</code> file, workflow inputs use local <code>data-raw</code> paths, respiration output directories are created automatically, and AmeriFlux timezone handling uses the IANA timezone returned by <code>tz_lookup_coords()</code>.</p>
+<p>The second pass omitted <code>--overwrite</code>:</p>
+<pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=US-Ha1,DE-Akm
+Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R --sites=US-Ha1
+Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm</code></pre>
+<p>All three skip runs exited successfully without re-running the data-processing calculations.</p>
+</body>
+</html>

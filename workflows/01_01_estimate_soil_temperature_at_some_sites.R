@@ -13,7 +13,22 @@ shelf(randomForest, caret, amerifluxr, lubridate, tidyverse, ranger)
 
 rm(list=ls())
 
-dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
+dir_rawdata <- 'data-raw'
+
+args <- commandArgs(trailingOnly = TRUE)
+overwrite <- '--overwrite' %in% args
+site_arg <- args[grepl('^--sites=', args)]
+positional_sites <- args[!grepl('^--', args)]
+if (length(site_arg) > 1 || length(positional_sites) > 1) {
+  stop('Provide at most one comma-separated site list.')
+}
+requested_sites <- if (length(site_arg) == 1) {
+  sub('^--sites=', '', site_arg)
+} else if (length(positional_sites) == 1) {
+  positional_sites
+} else {
+  NULL
+}
 
 #--------A function to predict soil temperature
 # inputs: a data frame data with 2-3 columns (TS, TA, NETRAD), the last column is optional
@@ -68,16 +83,20 @@ files_FLUXNET2015  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNE
 files_FLUXNET2020  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
 files_ICOS_after2020 <- list.files(path=file.path(dir_rawdata, 'SiteData', 'ICOS_after2020'), pattern = ".csv$", full.names = TRUE)
 #
-files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern=".csv$", full.names = T)
+files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern="FLUXMET_HH.*\\.csv$", full.names = T)
 files_ICOS2025 <- list.files(file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
 
 # 
 id_estimate_TS <- which(site_info$estimate_Ts == 'YES')
 
 
-for (id in id_estimate_TS) {
-  # id <- id_estimate_TS[4]
-  name_site <- site_info$site_ID[id]
+process_site <- function(name_site, overwrite = FALSE) {
+  id <- match(name_site, site_info$site_ID)
+  output_file <- file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv'))
+  if (!overwrite && file.exists(output_file)) {
+    message('Skipping ', name_site, ': output already exists.')
+    return(invisible(NULL))
+  }
   
   if (site_info$source[id] %in% c("AmeriFlux_BASE", "AmeriFlux_FLUXNET")) {
     a <- amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
@@ -180,12 +199,22 @@ for (id in id_estimate_TS) {
   } 
   plot(data$TS_pred)
   
-  write.csv(data, file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')), row.names = F)
+  write.csv(data, file=output_file, row.names = F)
+}
+
+candidate_sites <- site_info$site_ID[id_estimate_TS]
+sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ',')))
+unknown_sites <- setdiff(sites, candidate_sites)
+if (length(unknown_sites) > 0) {
+  stop('Sites are not eligible for temperature estimation: ', paste(unknown_sites, collapse = ', '))
+}
+for (name_site in sites) {
+  process_site(name_site, overwrite)
 }
 
 # all R2 should be higher than 0.83. 
 # check TS prediction quality
-# data <- read.csv("/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation/TS_RandomForest/US-Ho2_TS_rfp.csv")
+# data <- read.csv(file.path('data-raw', 'TS_RandomForest', 'US-Ho2_TS_rfp.csv'))
 # plot(ymd_hms(data$TIMESTAMP[140000:170000]), data$TS_pred[140000:170000])
 # data %>% group_by(year(TIMESTAMP)) %>% summarise(TS=mean(TS_pred, na.rm=T))
-# 
+#

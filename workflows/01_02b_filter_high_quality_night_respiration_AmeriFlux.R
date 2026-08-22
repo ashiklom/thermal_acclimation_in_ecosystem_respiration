@@ -12,21 +12,39 @@ library(librarian)
 shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo)
 rm(list=ls())
 
+args <- commandArgs(trailingOnly = TRUE)
+overwrite <- '--overwrite' %in% args
+site_arg <- args[grepl('^--sites=', args)]
+positional_sites <- args[!grepl('^--', args)]
+if (length(site_arg) > 1 || length(positional_sites) > 1) {
+  stop('Provide at most one comma-separated site list.')
+}
+requested_sites <- if (length(site_arg) == 1) {
+  sub('^--sites=', '', site_arg)
+} else if (length(positional_sites) == 1) {
+  positional_sites
+} else {
+  NULL
+}
+
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
-# dir_rawdata <- '/Users/junnawang/YaleLab/data_server'
+dir_rawdata <- 'data-raw'
 ####################End Attention
 
 files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 
-feature_gs <- data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())  # growing season feature
+process_site <- function(name_site) {
+  id <- match(name_site, site_info$site_ID)
+  output_dir <- file.path(dir_rawdata, 'RespirationData')
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  output_files <- file.path(output_dir, paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
+  if (!overwrite && all(file.exists(output_files))) {
+    message('Skipping ', name_site, ': respiration outputs already exist.')
+    return(NULL)
+  }
 
-# put a for loop here
-for (id in 1:nrow(site_info)) {
-  # id = 116
   print(id)
   data_source <- site_info$source[id]
   # This script only works for FLUXNET products
@@ -54,12 +72,8 @@ for (id in 1:nrow(site_info)) {
   lat_site   <- sites$LOCATION_LAT[sites$SITE_ID==name_site]
   
   # get the exact time zone, not using daylight saving so choose a winter date
-  tz <- tz_offset(as.Date("2000-01-01"), tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
-  if (tz$utc_offset_h > 0) {
-    tz_site  <- paste0('GMT-', tz$utc_offset_h)
-  } else {
-    tz_site  <- paste0('GMT+', -tz$utc_offset_h)
-  }
+  tz_site <- tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate')
+  tz <- tz_offset(as.Date("2000-01-01"), tz_site)
   
   # get sunrise and sunset time
     sunrise_set <- getSunlightTimes(
@@ -495,8 +509,35 @@ for (id in 1:nrow(site_info)) {
   write.csv(ac, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
   write.csv(a_measure_night_complete, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
 
-  feature_gs <- bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
+  data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
 }
 
-# output growing season features
-write.csv(feature_gs, file=file.path('data', 'growing_season_feature_AmeriFlux.csv'), row.names = F)
+feature_file <- file.path('data', 'growing_season_feature_AmeriFlux.csv')
+feature_gs <- if (file.exists(feature_file)) read.csv(feature_file) else {
+  data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())
+}
+candidate_sites <- site_info$site_ID[site_info$source == 'AmeriFlux_BASE']
+sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ',')))
+unknown_sites <- setdiff(sites, candidate_sites)
+if (length(unknown_sites) > 0) {
+  stop('Sites are not eligible for AmeriFlux processing: ', paste(unknown_sites, collapse = ', '))
+}
+
+if (overwrite) {
+  feature_gs <- feature_gs[!feature_gs$site_ID %in% sites, , drop = FALSE]
+}
+
+for (name_site in sites) {
+  output_files <- file.path(dir_rawdata, 'RespirationData', paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
+  already_aggregated <- name_site %in% feature_gs$site_ID
+  if (!overwrite && (all(file.exists(output_files)) || already_aggregated)) {
+    message('Skipping ', name_site, ': already processed.')
+    next
+  }
+  feature <- process_site(name_site)
+  if (!is.null(feature)) {
+    feature_gs <- bind_rows(feature_gs, feature)
+  }
+}
+
+write.csv(feature_gs, file=feature_file, row.names = F)
