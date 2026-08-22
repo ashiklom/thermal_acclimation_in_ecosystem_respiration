@@ -45,3 +45,6 @@ scripts/.DS_Store
 
 /data-raw/
 _creds.toml
+
+# don't gitignore agent documentation, even though it's HTML
+!_agent-docs/*.html

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Description — Thermal Acclimation in Ecosystem Respiration</title>
+  <style>
+    :root {
+      --bg: #fdfdfd;
+      --fg: #1a1a1a;
+      --accent: #2563eb;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --card-bg: #f9fafb;
+      --code-bg: #f3f4f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.7;
+      color: var(--fg);
+      background: var(--bg);
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.35rem; margin-top: 2.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.25rem; }
+    h3 { font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 0.4rem; color: var(--accent); }
+    p { margin-bottom: 0.75rem; }
+    ul, ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.3rem; }
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      background: var(--code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+      font-size: 0.85em;
+      line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; }
+    .step-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin: 1rem 0;
+    }
+    .step-card h3 { margin-top: 0; }
+    .meta { color: var(--muted); font-size: 0.9em; margin-bottom: 2rem; }
+    .flow-diagram {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      text-align: center;
+      font-family: monospace;
+      font-size: 0.9em;
+      line-height: 2;
+      white-space: pre;
+    }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: var(--card-bg); font-weight: 600; }
+    .note {
+      background: #eff6ff;
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.95em;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Workflow Description</h1>
+<p class="meta">Thermal Acclimation in Ecosystem Respiration &mdash; Steps 01&ndash;04</p>
+
+<p>
+  This pipeline estimates how ecosystem respiration (ER) acclimates to temperature changes and projects future ER under climate warming.
+  It processes FLUXNET/AmeriFlux eddy covariance data through four sequential stages: data preparation, thermal acclimation estimation,
+  driver identification, and future prediction.
+</p>
+
+<h2>High-Level Flow</h2>
+
+<div class="flow-diagram">
+Step 01: Data Preparation
+  |-- 01_01: Estimate missing soil temperatures via Random Forest
+  |-- 01_02a: Quality-control nighttime NEE (EuroFlux/ICOS sources)
+  '-- 01_02b: Quality-control nighttime NEE (AmeriFlux sources)
+           |
+           v
+Step 02: Thermal Acclimation Estimation
+  |-- 02_01a: Fit temperature-respiration curves (14-day windows)
+  |-- 02_01b: Fit temperature+water+GPP respiration curves (14-day windows)
+  |-- 02_02: Decompose acclimation into direct vs. indirect components
+  '-- 02_03: Validate decomposition via simulation
+           |
+           v
+Step 03: Driver Identification
+  |-- 03_01: Assemble climate, soil, and spectral predictors
+  '-- 03_02: Random Forest to identify drivers of acclimation
+           |
+           v
+Step 04: Future Projections
+  |-- 04_01: Estimate future nighttime temperature change (SSP2-4.5)
+  '-- 04_02: Project future ER with and without acclimation effects
+</div>
+
+<!-- ============================================================ -->
+<h2>Data Sources &amp; the Two-Pipeline Architecture</h2>
+
+<p>
+  The pipeline processes eddy covariance data from multiple international flux tower networks.
+  Each source provides data in different formats, with different column naming conventions and
+  quality control standards.
+  The scripts handle these differences through a dispatch mechanism keyed on the
+  <code>source</code> column in <code>data/site_info.csv</code>.
+</p>
+
+<h3>Supported Data Sources</h3>
+
+<table>
+  <tr>
+    <th>Source</th>
+    <th>Directory</th>
+    <th>File Pattern</th>
+    <th>Column Names</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td><code>AmeriFlux_BASE</code></td>
+    <td><code>SiteData/AmeriFlux_BASE/</code></td>
+    <td><code>.zip</code></td>
+    <td>Site-specific (see below)</td>
+    <td>Read via <code>amerifluxr::amf_read_base()</code>; raw FC, requires u* filtering</td>
+  </tr>
+  <tr>
+    <td><code>FLUXNET2015</code></td>
+    <td><code>SiteData/FLUXNET2015/unzip/</code></td>
+    <td><code>_FLUXNET2015_FULLSET_(HH|HR)_</code></td>
+    <td>Standardized (<code>TS_F_MDS_1</code>, etc.)</td>
+    <td>Half-hourly or hourly; pre-processed u* and gap-filling</td>
+  </tr>
+  <tr>
+    <td><code>FLUXNET2020</code></td>
+    <td><code>SiteData/FLUXNET2020/unzip/</code></td>
+    <td><code>_FLUXNET2015_FULLSET_(HH|HR)_</code></td>
+    <td>Standardized (same as 2015)</td>
+    <td>Retains FLUXNET2015 file naming convention despite being 2020 release</td>
+  </tr>
+  <tr>
+    <td><code>FLUXNET2025</code></td>
+    <td><code>SiteData/FLUXNET07202025/unzip/</code></td>
+    <td><code>.csv</code></td>
+    <td>Standardized (same convention)</td>
+    <td>Most recent FLUXNET release; used for European sites</td>
+  </tr>
+  <tr>
+    <td><code>ICOS2020</code></td>
+    <td><code>SiteData/ICOS_after2020/</code></td>
+    <td><code>.csv</code></td>
+    <td>Standardized</td>
+    <td>Used only in 01_01 (soil temp estimation), not in main QC pipeline</td>
+  </tr>
+  <tr>
+    <td><code>ICOS2025</code></td>
+    <td><code>SiteData/Ecosystem final quality...release 2025-1/unzip/</code></td>
+    <td><code>.csv</code></td>
+    <td>Standardized</td>
+    <td>ICOS L2 ETC-Archive format; always paired with FLUXNET2025</td>
+  </tr>
+</table>
+
+<h3>Source Dispatch Mechanism</h3>
+
+<p>
+  The <code>source</code> field in <code>site_info.csv</code> can be a single source
+  (e.g., <code>AmeriFlux_BASE</code>) or a compound value with sources joined by underscores
+  (e.g., <code>FLUXNET2025_ICOS2025</code>).
+  The dispatch logic splits on <code>_</code> and iterates over components to locate the
+  correct file list:
+</p>
+
+<pre><code># Typical dispatch pattern (01_01, 01_02a)
+data_source <- unlist(strsplit(site_info$source[id], "_"))
+for (isource in seq_along(data_source)) {
+  if (data_source[isource] == "FLUXNET2015")  files <- files_FLUXNET2015
+  else if (data_source[isource] == "FLUXNET2020")  files <- files_FLUXNET2020
+  else if (data_source[isource] == "ICOS2020")     files <- files_ICOS_after2020
+  else if (data_source[isource] == "FLUXNET2025")  files <- files_FLUXNET2025
+  else if (data_source[isource] == "ICOS2025")     files <- files_ICOS2025
+}</code></pre>
+
+<p>
+  For AmeriFlux sites, the scripts check <code>source %in% c("AmeriFlux_BASE", "AmeriFlux_FLUXNET")</code>
+  and branch into a separate code path.
+</p>
+
+<h3>Multi-Source Concatenation</h3>
+
+<p>
+  Sites with compound source values (e.g., <code>FLUXNET2025_ICOS2025</code>) have their
+  data files read separately and concatenated chronologically.
+  Overlapping records are handled by matching on <code>TIMESTAMP_START</code>:
+</p>
+
+<pre><code># Concatenate ICOS data after FLUXNET2025 data
+irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
+a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])</code></pre>
+
+<h3>Two Parallel Pipelines: EuroFlux vs. AmeriFlux</h3>
+
+<div class="note">
+  <strong>Key architectural detail:</strong> <code>01_02a</code> and <code>01_02b</code> are <em>not</em>
+  model-variant pairs &mdash; they are <strong>source-specific pipelines</strong> that happen to produce
+  the same output format. <code>01_02a</code> processes EuroFlux/ICOS sources; <code>01_02b</code>
+  processes AmeriFlux sources. They share no common processing code despite ~80% structural similarity.
+</div>
+
+<table>
+  <tr>
+    <th>Script</th>
+    <th>Sources Processed</th>
+    <th>Key Differences</th>
+  </tr>
+  <tr>
+    <td><code>01_02a</code></td>
+    <td>FLUXNET2015, FLUXNET2020, FLUXNET2025, ICOS2025</td>
+    <td>Standardized column names; QC flags from dataset; <code>NIGHT</code> column provided; no u* filtering needed (pre-processed)</td>
+  </tr>
+  <tr>
+    <td><code>01_02b</code></td>
+    <td>AmeriFlux_BASE</td>
+    <td>Site-specific column names via <code>site_info</code> config; computes nighttime via <code>suncalc</code>; performs REddyProc u* threshold estimation and NEE gap-filling; extensive site-specific sensor corrections</td>
+  </tr>
+</table>
+
+<p>
+  Steps 02&ndash;04 are <strong>source-agnostic</strong>: they read the standardized output files
+  (<code>_nightNEE.csv</code>, <code>_ac.csv</code>) and never reference data source identifiers.
+</p>
+
+<h3>Column Name Conventions by Source</h3>
+
+<p>
+  FLUXNET and ICOS sources use a standardized naming scheme with suffixes that encode
+  processing method and quality:
+</p>
+
+<table>
+  <tr>
+    <th>Column</th>
+    <th>Meaning</th>
+    <th>Source</th>
+  </tr>
+  <tr>
+    <td><code>TA_F_MDS</code></td>
+    <td>Air temperature, gap-filled by marginal distribution sampling</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>TS_F_MDS_1</code> / <code>TS_F_MDS_2</code></td>
+    <td>Soil temperature at layer 1/2, gap-filled</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>NEE_VUT_REF</code></td>
+    <td>Net ecosystem exchange, VUT method with reference u*</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>NEE_VUT_REF_QC</code></td>
+    <td>Quality flag for NEE (0=measured, 1&ndash;2=good gap-fill, 3=poor)</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>SWC_F_MDS_1</code></td>
+    <td>Soil water content, gap-filled</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>GPP_DT_VUT_REF</code></td>
+    <td>Gross primary production, daytime VUT method</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>NIGHT</code></td>
+    <td>Nighttime indicator (1=night, 0=day), computed from solar geometry</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+  <tr>
+    <td><code>TIMESTAMP_START</code></td>
+    <td>Measurement start time (<code>YYYYMMDDHHMM</code>)</td>
+    <td>FLUXNET/ICOS</td>
+  </tr>
+</table>
+
+<p>
+  AmeriFlux sites use <strong>site-specific variable names</strong> configured in <code>site_info.csv</code>.
+  For example, soil temperature might be <code>TS_PI_F_1_1_1</code>, <code>TS_1_1_1</code>,
+  <code>TS_PI_1</code>, or <code>TS_2_1_1</code> depending on the site and sensor depth.
+  Air temperature might be <code>TA_PI_F_1_1_1</code>, <code>TA_1_1_1</code>, <code>T_SONIC</code>,
+  or <code>T_SONIC_1_1_1</code>.
+  NEE is constructed by summing component fluxes, e.g., <code>FC + SC_PI_F</code> or <code>FC_1_1_1 + SC_1_1_1</code>.
+  These mappings are read dynamically:
+</p>
+
+<pre><code># AmeriFlux column dispatch (01_02b)
+NEEvars <- trimws(unlist(strsplit(site_info$NEE[id], "\\+")))
+ac$TA <- a[, trimws(site_info$TA[id])]
+ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
+
+<h3>Quality Control Differences by Source</h3>
+
+<table>
+  <tr>
+    <th>Step</th>
+    <th>FLUXNET/ICOS (01_02a)</th>
+    <th>AmeriFlux (01_02b)</th>
+  </tr>
+  <tr>
+    <td>File reading</td>
+    <td><code>read.csv()</code></td>
+    <td><code>amerifluxr::amf_read_base()</code></td>
+  </tr>
+  <tr>
+    <td>u* filtering</td>
+    <td>Not needed (pre-processed in product)</td>
+    <td>REddyProc u* threshold estimation per site</td>
+  </tr>
+  <tr>
+    <td>Night detection</td>
+    <td>Uses <code>NIGHT</code> column from dataset</td>
+    <td>Computes sunrise/sunset via <code>suncalc</code> package</td>
+  </tr>
+  <tr>
+    <td>NEE quality filter</td>
+    <td><code>NEE_VUT_REF_QC == 0</code> (measured only)</td>
+    <td>Post gap-filling QC from REddyProc</td>
+  </tr>
+  <tr>
+    <td>TS quality filter</td>
+    <td><code>TS_F_MDS_1_QC %in% c(0, 1, 2)</code></td>
+    <td>No explicit QC flag; relies on PI gap-filling</td>
+  </tr>
+  <tr>
+    <td>-9999 sentinel</td>
+    <td>Explicitly replaced with <code>NA</code></td>
+    <td>Handled internally by <code>amf_read_base()</code></td>
+  </tr>
+</table>
+
+<h3>Site-Specific Corrections</h3>
+
+<p>
+  Both pipelines apply extensive per-site corrections for sensor issues, missing data,
+  and site-specific quirks. These are hard-coded conditionals within the scripts.
+</p>
+
+<p><strong>FLUXNET/ICOS corrections (01_02a):</strong></p>
+<ul>
+  <li><strong>CZ-Stn:</strong> Uses <code>TS_F_MDS_2</code> instead of <code>TS_F_MDS_1</code> (first soil layer incomplete)</li>
+  <li><strong>FR-Fon, CH-Dav, DE-Akm, DE-Hte, FR-Bil, FR-Pue, FR-FBn, CZ-RAJ:</strong> Reads predicted TS from Random Forest output generated by 01_01</li>
+  <li><strong>FI-Sod:</strong> Cross-calibrates soil temperature profiles using linear regression between measurement depths for the first 5 years</li>
+  <li><strong>GF-Guy:</strong> Uses air temperature as proxy for soil temperature (tropical site with no TS sensor)</li>
+  <li><strong>FR-Pue:</strong> Reads PI-provided SWC from separate CSV files (2003&ndash;2015, 2016&ndash;2020) with unit conversion (&times;100)</li>
+  <li><strong>CH-Dav:</strong> Enforces minimum TS &ge; 2&deg;C threshold</li>
+  <li><strong>ZA-Kru, FI-Sod, GF-Guy:</strong> Relaxed gap thresholds (gap_max=60 days, gap_total=0.7&ndash;0.8)</li>
+</ul>
+
+<p><strong>AmeriFlux corrections (01_02b):</strong></p>
+<ul>
+  <li><strong>US-Myb:</strong> Discards first year; combines TS from two depths using regression</li>
+  <li><strong>US-CMW, CA-Mer:</strong> Truncates to data after 2000/1999 respectively</li>
+  <li><strong>US-Jo2:</strong> Replaces TA with sonic temperature for a bad period using linear regression</li>
+  <li><strong>US-BZS:</strong> Replaces TA for 2012&ndash;2014 using nearby US-BZF site data via regression</li>
+  <li><strong>US-Ha2:</strong> Combines data from two measurement locations (<code>FC_1_1_1 + FC_2_1_1</code>)</li>
+  <li><strong>US-NR1, US-ICh, US-ICs:</strong> Uses PI gap-filled TS data</li>
+  <li><strong>US-Cwt:</strong> No TS sensor; estimates from TA using relationship from nearby US-xGB</li>
+  <li><strong>US-MBP:</strong> Estimates missing TS from TA via linear regression</li>
+  <li><strong>US-BZo:</strong> Uses recent data (&gt;2021) for TS~TA regression calibration</li>
+  <li><strong>CA-ARB, CA-ARF, CA-KLP, US-Rms, US-SRS, US-ChR:</strong> Cold-area sites; uses TA &gt; 0 for growing-season TS~TA regression</li>
+  <li><strong>US-KM4:</strong> Uses PI gap-filled SW_IN data</li>
+  <li><strong>CA-Man:</strong> Combines NEE from FC + SC when NEE is incomplete</li>
+  <li><strong>US-ICt, US-ICh, US-ICs (Arctic):</strong> Special daytime handling for midnight-sun periods</li>
+</ul>
+
+<h3>Soil Temperature Estimation (01_01) &mdash; Source-Specific Model Choice</h3>
+
+<p>
+  Script 01_01 uses different modeling strategies depending on data availability, which
+  varies by source:
+</p>
+
+<table>
+  <tr>
+    <th>Model</th>
+    <th>Sites</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td>Random Forest with NETRAD</td>
+    <td>DE-Akm, FR-Pue, US-Los, US-SRG, CA-Man, US-Ced, US-Ho1, CZ-RAJ</td>
+    <td>Net radiation available as additional predictor</td>
+  </tr>
+  <tr>
+    <td>Linear regression with NETRAD</td>
+    <td>DE-Hte, FR-FBn</td>
+    <td>Limited data prevents RF training</td>
+  </tr>
+  <tr>
+    <td>Linear regression without NETRAD</td>
+    <td>GF-Guy and remaining sites</td>
+    <td>No net radiation sensor; uses TA as TS proxy</td>
+  </tr>
+</table>
+
+<p>
+  NETRAD column name also varies by AmeriFlux site: <code>NETRAD_1_1_1</code> (US-Los, US-Ced),
+  <code>NETRAD</code> (US-SRG, CA-Man), or <code>NETRAD_2_1_1</code> (US-Ho1).
+</p>
+
+<!-- ============================================================ -->
+<h2>Step 01: Data Preparation</h2>
+
+<div class="step-card">
+  <h3>01_01 &mdash; Estimate Missing Soil Temperatures</h3>
+  <p><strong>Runtime:</strong> ~5 minutes</p>
+  <p><strong>Input:</strong> FluxNet tower data (TA, TS, SWC, NEE, GPP) from all sources</p>
+  <p><strong>Output:</strong> <code>data/soil_temp_estimation.csv</code></p>
+  <p>
+    For sites where soil temperature (TS) measurements have gaps, this script trains a Random Forest model
+    (<code>randomForest</code>, 500 trees) on paired TA&ndash;TS observations to predict missing TS values.
+    It uses TA, VPD, SWC, DOY, hour, and minute as predictors, limited to 60,000 training samples.
+    Results are validated against held-out data (R&sup2; reported per site).
+  </p>
+  <p>
+    <strong>Source handling:</strong> Dispatches to the correct file list based on the <code>source</code>
+    column. For multi-source sites, concatenates data chronologically.
+    Site-specific NETRAD column mapping is handled inline (see table above).
+    The output is consumed by 01_02a for sites that need RF-predicted TS.
+  </p>
+</div>
+
+<div class="step-card">
+  <h3>01_02a &mdash; Quality-Control Nightly NEE (EuroFlux / ICOS)</h3>
+  <p><strong>Runtime:</strong> ~30 minutes</p>
+  <p><strong>Input:</strong> FLUXNET2015/2020/2025 and ICOS2025 data, site metadata, RF-predicted TS from 01_01</p>
+  <p><strong>Output:</strong> <code>data/NEE_QC/*.csv</code> per site</p>
+  <p>
+    Processes <strong>only EuroFlux/ICOS sources</strong>. Filters nighttime NEE observations
+    for use as ecosystem respiration (ER) proxies using the standardized FLUXNET column names.
+  </p>
+  <p>Quality control pipeline:</p>
+  <ul>
+    <li>Reads <code>TS_F_MDS_1</code>, <code>TA_F_MDS</code>, <code>NEE_VUT_REF</code> directly</li>
+    <li>Filters by <code>TS_F_MDS_1_QC %in% c(0, 1, 2)</code> (excludes poor gap-fills)</li>
+    <li>Filters by <code>NEE_VUT_REF_QC == 0</code> (measured, not gap-filled)</li>
+    <li>Uses the provided <code>NIGHT</code> column (no solar geometry computation needed)</li>
+    <li>Applies per-site TS substitutions (e.g., <code>TS_F_MDS_2</code> for CZ-Stn, RF predictions for 8 sites)</li>
+    <li>Growing-season identification (handles southern-hemisphere date conventions)</li>
+    <li>Gap detection: removes years with &gt;14-day continuous gaps in growing season</li>
+    <li>Gap-fills TA and TS via hourly/climatological means</li>
+    <li>Removes flagged years specified in site metadata</li>
+    <li>Replaces <code>-9999</code> sentinel values with <code>NA</code></li>
+  </ul>
+</div>
+
+<div class="step-card">
+  <h3>01_02b &mdash; Quality-Control Nightly NEE (AmeriFlux)</h3>
+  <p><strong>Runtime:</strong> ~30 minutes</p>
+  <p><strong>Input:</strong> AmeriFlux BASE data, site metadata</p>
+  <p><strong>Output:</strong> <code>data/NEE_QC_water_gpp/*.csv</code> per site</p>
+  <p>
+    Processes <strong>only AmeriFlux_BASE sources</strong>. Uses site-specific column names
+    from <code>site_info.csv</code> and performs additional pre-processing not needed for FLUXNET.
+  </p>
+  <p>Key differences from 01_02a:</p>
+  <ul>
+    <li>Reads data via <code>amerifluxr::amf_read_base()</code> (handles ZIP extraction and timestamp parsing)</li>
+    <li>Constructs NEE by summing component fluxes (e.g., <code>FC + SC_PI_F</code>)</li>
+    <li>Computes nighttime from sunrise/sunset via <code>suncalc</code> (no <code>NIGHT</code> column provided)</li>
+    <li>Performs u* threshold estimation via REddyProc (FLUXNET products already include this)</li>
+    <li>Applies extensive site-specific sensor corrections (US-Myb, US-Jo2, US-BZS, US-Ha2, US-Cwt, etc.)</li>
+    <li>Handles Arctic midnight-sun periods for US-ICt, US-ICh, US-ICs</li>
+    <li>Retains SWC, GPP, and ERA5 soil moisture for the temperature+water+GPP model variant</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 02: Thermal Acclimation Estimation</h2>
+
+<div class="step-card">
+  <h3>02_01a &mdash; Fit Temperature-Respiration Curves</h3>
+  <p><strong>Runtime:</strong> ~2 days (Bayesian MCMC per site&times;window&times;year)</p>
+  <p><strong>Input:</strong> QC'd nighttime NEE from 01_02a and 01_02b, site metadata</p>
+  <p><strong>Output:</strong> <code>data/outcome_temp.csv</code>, <code>data/outcome_siteyear_temp.csv</code></p>
+  <p>
+    Fits a quadratic temperature-response model to ER in 14-day moving windows across all available years:
+  </p>
+  <pre><code>NEE ~ exp(alpha * TS + beta * TS^2) * C0</code></pre>
+  <p>
+    Uses Bayesian regression via <code>brms</code> (Stan backend) with informative priors.
+    Selects the 3 "control" years closest to the median growing-season soil temperature.
+    For each site&times;window&times;year, extracts posterior means of &alpha;, &beta;, and C&sub0;.
+  </p>
+  <p>
+    Computes <strong>TAS</strong> (Thermal Acclimation Strength) as the window-to-window change in the
+    temperature-response curve midpoint. Also computes day/night temperature sensitivity metrics.
+  </p>
+  <p>
+    Handles edge cases: extends the fitting window (up to +24 days) if too few observations (&lt;25),
+    removes windows with predominantly negative NEE (i.e., not ER-dominated).
+  </p>
+  <p><strong>Source handling:</strong> This step is fully source-agnostic. It reads the standardized
+    <code>_nightNEE.csv</code> files produced by 01_02a and 01_02b, which have identical column
+    names regardless of original data source.</p>
+</div>
+
+<div class="step-card">
+  <h3>02_01b &mdash; Fit Temperature+Water+GPP Respiration Curves</h3>
+  <p><strong>Runtime:</strong> ~2 days</p>
+  <p><strong>Input:</strong> QC'd nighttime NEE from 01_02b, site metadata, ERA5 soil moisture</p>
+  <p><strong>Output:</strong> <code>data/outcome_temp_water_gpp.csv</code>, <code>data/outcome_siteyear_temp_water_gpp.csv</code></p>
+  <p>
+    Extends 02_01a by adding soil water content (SWC) and GPP as covariates in the ER model.
+    This allows decomposition of thermal acclimation into temperature-driven and water/GPP-mediated components.
+  </p>
+</div>
+
+<div class="step-card">
+  <h3>02_02 &mdash; Decompose Acclimation Components</h3>
+  <p><strong>Runtime:</strong> ~1 minute</p>
+  <p><strong>Input:</strong> Outputs from 02_01a and 02_01b</p>
+  <p><strong>Output:</strong> <code>data/acclimation_data.csv</code></p>
+  <p>
+    Decomposes total acclimation (<strong>TAS_tot</strong>) into:
+  </p>
+  <ul>
+    <li><strong>TAS</strong> (direct): thermal acclimation from the temperature-only model</li>
+    <li><strong>TAS_app</strong> (apparent): <code>TAS_tot - TAS</code>, representing the indirect effect mediated by water/GPP</li>
+  </ul>
+  <p>
+    Aggregates per-window results into per-site annual metrics including:
+    mean growing-season temperature, elevation, soil organic carbon, LAI, warming rate, and climate classification.
+  </p>
+</div>
+
+<div class="step-card">
+  <h3>02_03 &mdash; Validate Decomposition via Simulation</h3>
+  <p><strong>Runtime:</strong> ~5 minutes</p>
+  <p><strong>Input:</strong> Decomposition results from 02_02</p>
+  <p><strong>Output:</strong> Validation metrics and diagnostic plots</p>
+  <p>
+    Tests whether the decomposition method correctly recovers known acclimation signals
+    using simulated data with prescribed direct and indirect effects.
+    Confirms the method can distinguish temperature-driven from water-mediated acclimation.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 03: Driver Identification</h2>
+
+<div class="step-card">
+  <h3>03_01 &mdash; Assemble Predictors</h3>
+  <p><strong>Runtime:</strong> ~10 minutes</p>
+  <p><strong>Input:</strong> Site metadata, WorldClim climate data, soil data, MODIS LAI</p>
+  <p><strong>Output:</strong> <code>data/predictor_data.csv</code></p>
+  <p>
+    Compiles environmental predictors for each site: elevation, mean annual air temperature (MATA),
+    soil organic carbon (SOC), leaf area index (LAI), and historical warming rate.
+    Also computes climate classification (K&ouml;ppen) and IGBP land cover type.
+  </p>
+</div>
+
+<div class="step-card">
+  <h3>03_02 &mdash; Random Forest Driver Analysis</h3>
+  <p><strong>Runtime:</strong> ~10 minutes</p>
+  <p><strong>Input:</strong> Acclimation data from 02_02, predictor data from 03_01</p>
+  <p><strong>Output:</strong> <code>data/partial_plot.csv</code>, <code>data/varImp_plot.csv</code></p>
+  <p>
+    Uses Random Forest (<code>randomForest</code>) with 5-fold cross-validation to identify
+    which environmental factors drive variation in:
+  </p>
+  <ul>
+    <li><strong>Direct TAS:</strong> Elevation and LAI are dominant drivers</li>
+    <li><strong>Total TAS:</strong> LAI, elevation, MATA, and SOC all contribute</li>
+    <li><strong>Apparent TAS:</strong> MATA, SOC, and LAI dominate (opposite pattern from direct TAS)</li>
+  </ul>
+  <p>
+    Generates bootstrap confidence intervals (200 resamples) for partial dependence plots,
+    stratified by climate&ndash;vegetation class.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Step 04: Future Projections</h2>
+
+<div class="step-card">
+  <h3>04_01 &mdash; Estimate Future Nighttime Temperature Change</h3>
+  <p><strong>Runtime:</strong> ~30 minutes</p>
+  <p><strong>Input:</strong> WorldClim v2.1 monthly minimum temperature (baseline 2000&ndash;2020; future 2041&ndash;2060, SSP2-4.5, 13 GCMs)</p>
+  <p><strong>Output:</strong> <code>data/Tmin_month_ssp245.csv</code></p>
+  <p>
+    Computes the difference in monthly nighttime air temperature between the historical baseline
+    and the SSP2-4.5 mid-century ensemble mean.
+    Extracts changes at each FLUXNET site using a 5-cell spatial neighborhood.
+  </p>
+</div>
+
+<div class="step-card">
+  <h3>04_02 &mdash; Project Future Ecosystem Respiration</h3>
+  <p><strong>Runtime:</strong> ~7 hours (Bayesian MCMC per site&times;window)</p>
+  <p><strong>Input:</strong> Growing-season features (01), acclimation data (03), future temperature changes (04_01)</p>
+  <p><strong>Output:</strong> <code>data/acclimation_data_future_ssp245.csv</code></p>
+  <p>
+    For each site, fits the ER temperature-response model to control-year data, then projects:
+  </p>
+  <ol>
+    <li><strong>Present ER:</strong> baseline nighttime respiration from the fitted model</li>
+    <li><strong>Future ER (no acclimation):</strong> applies the TS change directly to the temperature-response curve</li>
+    <li><strong>Future ER (with acclimation):</strong> modifies the response using the estimated acclimation strength:
+      <pre><code>ER_future_acclimated = ER_present * exp(TAS_tot * DeltaT_growing_season)</code></pre>
+    </li>
+  </ol>
+  <p>
+    The difference between scenarios (2) and (3) quantifies how much thermal acclimation
+    buffers or amplifies the warming-driven increase in ecosystem respiration.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Key Data Structures</h2>
+
+<table>
+  <tr>
+    <th>File</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><code>data/soil_temp_estimation.csv</code></td>
+    <td>Random Forest predictions of missing soil temperatures</td>
+  </tr>
+  <tr>
+    <td><code>data/NEE_QC/*.csv</code></td>
+    <td>Quality-controlled nighttime NEE per site (EuroFlux/ICOS, temperature-only model)</td>
+  </tr>
+  <tr>
+    <td><code>data/NEE_QC_water_gpp/*.csv</code></td>
+    <td>Quality-controlled nighttime NEE per site (AmeriFlux, temperature+water+GPP model)</td>
+  </tr>
+  <tr>
+    <td><code>data/outcome_temp.csv</code></td>
+    <td>Per-window TAS estimates (temperature-only)</td>
+  </tr>
+  <tr>
+    <td><code>data/outcome_temp_water_gpp.csv</code></td>
+    <td>Per-window TAS estimates (temperature+water+GPP)</td>
+  </tr>
+  <tr>
+    <td><code>data/acclimation_data.csv</code></td>
+    <td>Decomposed acclimation metrics per site</td>
+  </tr>
+  <tr>
+    <td><code>data/predictor_data.csv</code></td>
+    <td>Environmental predictors per site</td>
+  </tr>
+  <tr>
+    <td><code>data/partial_plot.csv</code></td>
+    <td>Partial dependence curves with bootstrap CIs</td>
+  </tr>
+  <tr>
+    <td><code>data/varImp_plot.csv</code></td>
+    <td>Variable importance for direct, total, and apparent TAS</td>
+  </tr>
+  <tr>
+    <td><code>data/Tmin_month_ssp245.csv</code></td>
+    <td>Monthly nighttime temperature change per site (SSP2-4.5)</td>
+  </tr>
+  <tr>
+    <td><code>data/acclimation_data_future_ssp245.csv</code></td>
+    <td>Future ER projections with and without acclimation</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>Dependencies</h2>
+
+<p>All scripts are written in R and use the following key packages:</p>
+<ul>
+  <li><code>amerifluxr</code> &mdash; reading AmeriFlux BASE data (01_02b)</li>
+  <li><code>randomForest</code> &mdash; soil temperature estimation (01_01) and driver analysis (03_02)</li>
+  <li><code>brms</code> / <code>rstan</code> &mdash; Bayesian regression for ER model fitting (02_01a/b, 04_02)</li>
+  <li><code>REddyProc</code> &mdash; u* threshold estimation and NEE gap-filling for AmeriFlux (01_02b)</li>
+  <li><code>suncalc</code> &mdash; solar geometry for nighttime detection (01_02b)</li>
+  <li><code>terra</code> &mdash; raster operations for climate projections (04_01)</li>
+  <li><code>tidyverse</code> &mdash; data manipulation throughout</li>
+  <li><code>librarian</code> &mdash; non-standard package loading (auto-installs missing packages)</li>
+  <li><code>ncdf4</code> &mdash; NetCDF reading for WorldClim and ERA5 data</li>
+</ul>
+
+</body>
+</html>

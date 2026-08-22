@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Improvements — Thermal Acclimation in Ecosystem Respiration</title>
+  <style>
+    :root {
+      --bg: #fdfdfd;
+      --fg: #1a1a1a;
+      --accent: #2563eb;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --card-bg: #f9fafb;
+      --code-bg: #f3f4f6;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --purple: #7c3aed;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.7;
+      color: var(--fg);
+      background: var(--bg);
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.35rem; margin-top: 2.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.25rem; }
+    h3 { font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 0.4rem; }
+    p { margin-bottom: 0.75rem; }
+    ul, ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.3rem; }
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      background: var(--code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+      font-size: 0.85em;
+      line-height: 1.5;
+    }
+    pre code { background: none; padding: 0; }
+    .meta { color: var(--muted); font-size: 0.9em; margin-bottom: 2rem; }
+    .tier {
+      border-left: 4px solid;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0;
+      background: var(--card-bg);
+      border-radius: 0 8px 8px 0;
+    }
+    .tier-cosmetic { border-color: var(--green); }
+    .tier-tiny { border-color: #60a5fa; }
+    .tier-small { border-color: var(--amber); }
+    .tier-medium { border-color: #f59e0b; }
+    .tier-large { border-color: var(--red); }
+    .tier-arch { border-color: var(--purple); }
+    .tier h3 { margin-top: 0; }
+    .tier-tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15em 0.5em;
+      border-radius: 3px;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+    .tier-cosmetic .tier-tag { background: var(--green); }
+    .tier-tiny .tier-tag { background: #60a5fa; }
+    .tier-small .tier-tag { background: var(--amber); }
+    .tier-medium .tier-tag { background: #f59e0b; }
+    .tier-large .tier-tag { background: var(--red); }
+    .tier-arch .tier-tag { background: var(--purple); }
+    .item { margin-bottom: 1rem; }
+    .item-title { font-weight: 600; margin-bottom: 0.25rem; }
+    .item-files { color: var(--muted); font-size: 0.85em; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: var(--card-bg); font-weight: 600; }
+    .toc { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin: 1.5rem 0; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc li { margin-bottom: 0.2rem; }
+    .toc a { text-decoration: none; color: var(--accent); }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<h1>Workflow Improvements</h1>
+<p class="meta">Proposed changes to the thermal acclimation pipeline, grouped by impact</p>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ul>
+    <li><a href="#cosmetic">Tier 1: Cosmetic — Formatting & Style</a></li>
+    <li><a href="#tiny">Tier 2: Tiny — Path & Configuration Fixes</a></li>
+    <li><a href="#small">Tier 3: Small — Deduplicate Repeated Patterns</a></li>
+    <li><a href="#medium">Tier 4: Medium — Error Handling & Robustness</a></li>
+    <li><a href="#large">Tier 5: Large — Structural Refactors</a></li>
+    <li><a href="#arch">Tier 6: Architectural — Pipeline Orchestration</a></li>
+    <li><a href="#parallel">Parallelization Across Sites</a></li>
+  </ul>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="cosmetic">Tier 1: Cosmetic — Formatting & Style</h2>
+<p>Zero functional impact. Improves readability and consistency.</p>
+
+<div class="tier tier-cosmetic">
+  <span class="tier-tag">Cosmetic</span>
+
+  <div class="item">
+    <div class="item-title">Standardize assignment operators</div>
+    <p>
+      The codebase mixes <code>=</code> and <code>&lt;-</code> inconsistently.
+      R convention favors <code>&lt;-</code> for assignment.
+      Replace all <code>=</code> assignments with <code>&lt;-</code> except inside function arguments.
+    </p>
+    <div class="item-files">All 11 R scripts</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Remove commented-out code</div>
+    <p>
+      Debugging plots and old code paths are left commented out in production scripts.
+      These should be removed (git history preserves them if ever needed).
+    </p>
+    <div class="item-files">
+      <code>01_01</code> lines 188&ndash;190,
+      <code>01_02a</code> lines 170&ndash;177,
+      <code>03_01</code> lines 217&ndash;230
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Remove <code>rm(list=ls())</code> from all scripts</div>
+    <p>
+      Clearing the global environment at the top of every script is dangerous and unnecessary
+      if the pipeline is properly managed (see Tier 6).
+      Each script should only depend on its declared inputs, not on a clean environment.
+    </p>
+    <div class="item-files">Every script (lines 13&ndash;14 in most files)</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Consistent header comments</div>
+    <p>
+      Add a standardized header to each script: purpose, inputs, outputs, estimated runtime.
+      Some scripts have partial headers; others have none.
+    </p>
+    <div class="item-files">All scripts</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Fix inconsistent output column naming</div>
+    <p>
+      Column names differ between model variants: <code>TAS_tot</code> vs <code>TAS</code>,
+      <code>TAS_totp</code> vs <code>TASp</code>.
+      Adopt a single naming convention (e.g., <code>TAS_direct</code>, <code>TAS_total</code>, <code>TAS_apparent</code>).
+    </p>
+    <div class="item-files"><code>02_01a</code>, <code>02_01b</code>, <code>02_02</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Consistent <code>na.action</code> in model calls</div>
+    <p>
+      Some <code>lm()</code> calls specify <code>na.action = na.omit</code> explicitly;
+      others rely on the default.
+      Standardize across all scripts. Avoid setting <code>options(na.action = "na.omit")</code> globally
+      (<code>04_02</code> line 15) as it silently affects all downstream model fits.
+    </p>
+    <div class="item-files"><code>04_02</code>, various <code>lm()</code> calls</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="tiny">Tier 2: Tiny — Path & Configuration Fixes</h2>
+<p>Low risk, high portability gain. Fixes that make the code run on other machines.</p>
+
+<div class="tier tier-tiny">
+  <span class="tier-tag">Tiny</span>
+
+  <div class="item">
+    <div class="item-title">Replace hard-coded absolute paths with <code>here::here()</code></div>
+    <p>
+      Six scripts contain hard-coded paths to external disks or other users' home directories.
+      Replace all with <code>here::here("data-raw", ...)</code> or a configured base path.
+    </p>
+    <table>
+      <tr><th>File</th><th>Current Value</th></tr>
+      <tr><td><code>01_02b</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
+      <tr><td><code>02_01a</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
+      <tr><td><code>02_01b</code></td><td><code>/Users/junnawang/YaleLab/data_server</code></td></tr>
+      <tr><td><code>03_01</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
+      <tr><td><code>04_01</code></td><td><code>/Volumes/MaloneLab/Research/...</code></td></tr>
+      <tr><td><code>04_02</code></td><td><code>/Volumes/WZZ_disk/Thermal_Acclimation</code></td></tr>
+    </table>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Replace magic numbers with named constants</div>
+    <p>
+      Dozens of hard-coded numeric literals make the code fragile and hard to understand.
+      Extract them into named constants at the top of each script (or a shared config file).
+    </p>
+    <table>
+      <tr><th>File</th><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>01_01</code></td><td><code>60000</code></td><td>Max RF training samples</td></tr>
+      <tr><td><code>01_02a/b</code></td><td><code>14</code></td><td>Gap threshold (days)</td></tr>
+      <tr><td><code>02_01a/b</code></td><td><code>14</code></td><td>Window size (days)</td></tr>
+      <tr><td><code>02_01a/b</code></td><td><code>100</code>, <code>60</code></td><td>Min observation thresholds</td></tr>
+      <tr><td><code>02_01a/b</code></td><td><code>24</code></td><td>Max window extension (days)</td></tr>
+      <tr><td><code>02_01a/b</code></td><td><code>25</code></td><td>Min observations after extension</td></tr>
+      <tr><td><code>02_01a/b</code></td><td><code>0.2</code></td><td>NEE positivity threshold</td></tr>
+      <tr><td><code>03_02</code></td><td><code>200</code></td><td>Bootstrap iterations</td></tr>
+      <tr><td><code>04_02</code></td><td><code>90</code>, <code>200</code></td><td>nobs thresholds per site type</td></tr>
+    </table>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Replace brittle row-index subsetting with logical filtering</div>
+    <p>
+      <code>01_02b</code> line 45 uses <code>a[17521:245424, ]</code> to select rows for US-Myb.
+      This will silently break if the source data changes.
+      Replace with a logical filter on a meaningful column (e.g., date range, site identifier).
+    </p>
+    <div class="item-files"><code>01_02b</code> line 45</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Replace <code>librarian::shelf()</code> with <code>library()</code></div>
+    <p>
+      <code>librarian</code> auto-installs missing packages, which masks broken environments.
+      Use <code>library()</code> (or a <code>renv.lock</code> / <code>DESCRIPTION</code>) so missing
+      dependencies fail loudly rather than silently installing unvetted versions.
+    </p>
+    <div class="item-files">All scripts</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Fix site-to-data-source lookup to use a named vector or list</div>
+    <p>
+      <code>01_01</code> lines 86&ndash;92 hard-code a site-name&ndash;to&ndash;NETRAD-column mapping
+      with if/else chains. Replace with a named vector or lookup table.
+    </p>
+    <div class="item-files"><code>01_01</code> lines 86&ndash;92</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="small">Tier 3: Small — Deduplicate Repeated Patterns</h2>
+<p>Extract shared logic into reusable functions. Reduces maintenance burden and bug surface.</p>
+
+<div class="tier tier-small">
+  <span class="tier-tag">Small</span>
+
+  <div class="item">
+    <div class="item-title">Extract data-source file lookup into a function</div>
+    <p>
+      The pattern of splitting <code>data_source</code> by <code>_</code> and dispatching to
+      the correct file list appears ~4 times across <code>01_01</code>, <code>01_02a</code>,
+      and <code>01_02b</code>.
+    </p>
+    <pre><code>get_data_files <- function(data_source, file_lists) {
+  parts <- strsplit(data_source, "_")[[1]]
+  Reduce(union, lapply(parts, function(p) file_lists[[p]]))
+}</code></pre>
+    <div class="item-files"><code>01_01</code>, <code>01_02a</code>, <code>01_02b</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract growing-season gap detection into a function</div>
+    <p>
+      The ~20-line block that identifies growing-season gaps and computes per-year completeness
+      is copy-pasted between <code>01_02a</code> and <code>01_02b</code>.
+    </p>
+    <pre><code>detect_growing_season_gaps <- function(ac, growing_season_dates, gap_threshold) {
+  # ... shared logic ...
+}</code></pre>
+    <div class="item-files"><code>01_02a</code> lines 220&ndash;249, <code>01_02b</code> lines 395&ndash;425</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract years-to-remove parsing into a function</div>
+    <p>
+      The string-parsing logic that converts <code>"2005,2008:2010"</code> into a numeric vector
+      is duplicated between <code>01_02a</code> and <code>01_02b</code>.
+    </p>
+    <pre><code>parse_years_to_remove <- function(year_str) {
+  parts <- strsplit(year_str, ",")[[1]]
+  unlist(lapply(parts, function(part) {
+    if (grepl(":", part)) {
+      bounds <- as.integer(strsplit(part, ":")[[1]])
+      seq(bounds[1], bounds[2])
+    } else {
+      as.integer(part)
+    }
+  }))
+}</code></pre>
+    <div class="item-files"><code>01_02a</code> lines 264&ndash;277, <code>01_02b</code> lines 440&ndash;453</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract gap-filling TA/TS/NEE into a function</div>
+    <p>
+      The climatological gap-filling pattern (<code>group_by(DOY, HOUR, MINUTE) %&gt;% summarise(...)
+      %&gt;% left_join(...) %&gt;% coalesce</code>) appears in <code>01_02b</code>,
+      <code>02_01a</code>, and <code>03_01</code>.
+    </p>
+    <div class="item-files"><code>01_02b</code>, <code>02_01a</code>, <code>03_01</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract TS regression correction into a function</div>
+    <p>
+      Site-specific soil temperature sensor corrections (the linear regression offsets for
+      US-Myb, US-Jo2, US-Cwt, US-MBP) are hard-coded inline and duplicated between
+      <code>02_01a</code> and <code>02_01b</code>.
+      Extract into a function with site-specific parameters stored in a configuration table.
+    </p>
+    <div class="item-files"><code>02_01a</code> lines 61&ndash;73, <code>02_01b</code> lines 86&ndash;98</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract bootstrap partial dependence into a function</div>
+    <p>
+      The bootstrap partial dependence computation is repeated 3 times in <code>03_02</code>
+      (for TAS_direct, TAS_total, TAS_apparent).
+      Extract into a single function parameterized by the response variable.
+    </p>
+    <div class="item-files"><code>03_02</code> lines 159&ndash;196, 281&ndash;317, 366&ndash;402</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="medium">Tier 4: Medium — Error Handling & Robustness</h2>
+<p>Prevents silent failures and mysterious crashes. Moderate effort, high reliability gain.</p>
+
+<div class="tier tier-medium">
+  <span class="tier-tag">Medium</span>
+
+  <div class="item">
+    <div class="item-title">Add <code>tryCatch</code> around file I/O</div>
+    <p>
+      No <code>read.csv()</code> call is wrapped in error handling.
+      A single missing file crashes the entire loop and loses all progress.
+      Wrap each file read in <code>tryCatch</code> with a warning and skip.
+    </p>
+    <div class="item-files">All scripts with site loops</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Validate <code>list.files()</code> results before use</div>
+    <p>
+      Patterns like <code>files[grepl(name_site, files)]</code> can return <code>character(0)</code>,
+      causing <code>read.csv("")</code> to fail with a confusing error.
+      Check length and skip with a warning.
+    </p>
+    <div class="item-files"><code>01_01</code>, <code>01_02a</code>, <code>01_02b</code>, <code>02_01a</code>, <code>02_01b</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Add bounds checking on computed indices</div>
+    <p>
+      <code>01_01</code> line 114 computes <code>irow_start</code> without bounds checking;
+      <code>01_02a</code> line 187 indexes <code>tmp$DOY[7]</code> assuming at least 7 elements exist.
+      Add guards: <code>if (nrow(tmp) &lt; 7) next</code>.
+    </p>
+    <div class="item-files"><code>01_01</code>, <code>01_02a</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Handle edge case in <code>rle()</code> for gap detection</div>
+    <p>
+      <code>01_02b</code> line 211: <code>min(rle_x$lengths[rle_x$values == TRUE])</code>
+      returns <code>Inf</code> if no <code>TRUE</code> values exist.
+      Add a check: <code>if (!any(rle_x$values)) next</code>.
+    </p>
+    <div class="item-files"><code>01_02b</code> line 211</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Log skipped sites/windows/years</div>
+    <p>
+      When sites are skipped due to insufficient data, the current code either
+      silently continues or prints a bare <code>print(id)</code>.
+      Add structured logging: how many sites were processed, how many skipped, and why.
+      A simple summary table at the end of each script is sufficient.
+    </p>
+    <div class="item-files">All scripts with site loops</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Add input validation on <code>site_info</code> columns</div>
+    <p>
+      Scripts assume columns like <code>site_info$estimate_Ts</code>,
+      <code>site_info$SWC_use</code>, <code>site_info$years2remove</code> exist.
+      Add <code>stopifnot()</code> or check with <code>%in%</code> before use.
+    </p>
+    <div class="item-files"><code>01_02a</code>, <code>01_02b</code>, <code>02_01a</code>, <code>02_01b</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Fix potential bug in southern-hemisphere detection</div>
+    <p>
+      <code>01_02b</code> line 82: <code>if (name_site %in% c())</code> &mdash;
+      the <code>c()</code> is empty, so southern-hemisphere logic never triggers for AmeriFlux sites.
+      This likely should be a non-empty character vector of southern-hemisphere site IDs.
+    </p>
+    <div class="item-files"><code>01_02b</code> line 82</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Fix climate class matching in <code>03_02</code></div>
+    <p>
+      <code>03_02</code> line 49: <code>Climate_class %in% c("Dfc, Dfd", "Dwc")</code>
+      &mdash; the string <code>"Dfc, Dfd"</code> with a space won't match individual values
+      <code>"Dfc"</code> or <code>"Dfd"</code> in the data. Should be
+      <code>Climate_class %in% c("Dfc", "Dfd", "Dwc")</code> or use <code>grepl</code>.
+    </p>
+    <div class="item-files"><code>03_02</code> line 49</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="large">Tier 5: Large — Structural Refactors</h2>
+<p>Significant restructuring. High effort, high long-term payoff.</p>
+
+<div class="tier tier-large">
+  <span class="tier-tag">Large</span>
+
+  <div class="item">
+    <div class="item-title">Merge <code>02_01a</code> and <code>02_01b</code> into a single parameterized script</div>
+    <p>
+      These files are ~85% identical. The only material difference is that <code>02_01b</code>
+      adds SWC/GPP mediators. Refactor into a single function with a <code>model_variant</code>
+      parameter (<code>"temperature_only"</code> vs <code>"temperature_water_gpp"</code>).
+      This eliminates ~300 lines of duplication and ensures bug fixes apply to both variants.
+    </p>
+    <div class="item-files"><code>02_01a</code>, <code>02_01b</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Merge <code>01_02a</code> and <code>01_02b</code> into a single parameterized script</div>
+    <p>
+      Same situation: ~80% identical code with the difference being which ancillary variables to retain.
+      Parameterize by <code>retain_extra_vars = TRUE/FALSE</code>.
+    </p>
+    <div class="item-files"><code>01_02a</code>, <code>01_02b</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Replace incremental <code>rbind</code> with pre-allocation or list accumulation</div>
+    <p>
+      Several scripts grow data frames row-by-row with <code>rbind()</code> inside loops,
+      which is O(n&sup2;) in memory copies. Use <code>lapply()</code> to collect results in a list,
+      then <code>bind_rows()</code> once at the end. For very large datasets, pre-allocate
+      with <code>data.frame(matrix(NA, nrow = n_sites * n_windows, ncol = ...))</code>.
+    </p>
+    <div class="item-files">
+      <code>01_02a</code> line 235,
+      <code>02_01a</code> lines 258, 298,
+      <code>02_01b</code> (similar pattern)
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract ER model fitting into a reusable function</div>
+    <p>
+      The BRM model fitting logic (fit, check convergence, extend window, refit) is
+      repeated in both <code>02_01a</code> and <code>02_01b</code>, and again in <code>04_02</code>.
+      Extract into a shared <code>fit_er_model()</code> function that handles the full fitting
+      pipeline including error recovery and window extension.
+    </p>
+    <div class="item-files"><code>02_01a</code>, <code>02_01b</code>, <code>04_02</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Extract Random Forest analysis into a reusable function</div>
+    <p>
+      <code>03_02</code> runs the same RF pipeline (tune, fit, variable importance, bootstrap
+      partial dependence) three times for three different response variables.
+      Extract into a function parameterized by the response variable name and data.
+    </p>
+    <div class="item-files"><code>03_02</code></div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Standardize output schema across steps</div>
+    <p>
+      Each script writes to different filenames with inconsistent column names.
+      Define a shared output schema (e.g., a list of column-name standards) and have
+      each script validate its output against it before writing.
+    </p>
+    <div class="item-files">All output-writing scripts</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="arch">Tier 6: Architectural — Pipeline Orchestration</h2>
+<p>Transforms the project from a collection of scripts into a reproducible, cacheable pipeline.</p>
+
+<div class="tier tier-arch">
+  <span class="tier-tag">Architectural</span>
+
+  <div class="item">
+    <div class="item-title">Adopt <code>targets</code> for pipeline orchestration</div>
+    <p>
+      The current workflow is a sequence of R scripts that must be run manually in order.
+      There is no dependency tracking, no caching, and no way to know if outputs are stale.
+      A <code>targets</code> pipeline would:
+    </p>
+    <ul>
+      <li>Automatically detect which steps need re-running when inputs change</li>
+      <li>Cache intermediate results (critical for steps that take hours/days)</li>
+      <li>Make the full dependency graph explicit and inspectable</li>
+      <li>Enable parallel execution of independent branches (e.g., 02_01a and 02_01b)</li>
+    </ul>
+    <p>
+      Suggested structure:
+    </p>
+    <pre><code># _targets.R
+list(
+  tar_target(site_info, read_csv("data/site_info.csv")),
+  tar_target(raw_data, load_raw_data(site_info)),
+  tar_target(soil_temp, estimate_missing_soil_temp(raw_data)),
+  tar_target(nec_qc, quality_control_nightly_nee(soil_temp, site_info)),
+  tar_target(acclimation_temp, fit_er_curves(nec_qc$temp, model = "temperature_only")),
+  tar_target(acclimation_water, fit_er_curves(nec_qc$water_gpp, model = "temperature_water_gpp")),
+  tar_target(acclimation_decomposed, decompose_acclimation(acclimation_temp, acclimation_water)),
+  # ... etc
+)</code></pre>
+    <div class="item-files">Project-wide</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Adopt <code>renv</code> for dependency management</div>
+    <p>
+      Currently there is no record of which package versions were used.
+      <code>renv::snapshot()</code> creates a lockfile that ensures reproducibility.
+      Combined with <code>targets</code>, this makes the full analysis reproducible from a clean install.
+    </p>
+    <div class="item-files">Project-wide</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Replace <code>librarian::shelf()</code> with <code>library()</code> + <code>renv</code></div>
+    <p>
+      <code>librarian</code> silently installs missing packages, which masks environment problems.
+      With <code>renv</code> managing the package library, <code>library()</code> is sufficient
+      and failures are informative.
+    </p>
+    <div class="item-files">All scripts</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Create a shared utility R package or module</div>
+    <p>
+      After extracting duplicated patterns (Tier 3), place shared functions in a local
+      package (e.g., <code>R/utils.R</code> sourced at the top, or a minimal <code>{thermal.acclimation}</code>
+      package). This avoids copy-pasting utility functions across scripts and makes them
+      independently testable.
+    </p>
+    <div class="item-files">Project-wide</div>
+  </div>
+
+  <div class="item">
+    <div class="item-title">Add a Makefile or <code>targets</code>-driven CLI entry point</div>
+    <p>
+      Provide a single command to run the full pipeline:
+      <code>make all</code> or <code>targets::tar_make()</code>.
+      Individual steps should also be runnable in isolation for development.
+    </p>
+    <div class="item-files">Project-wide</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="parallel">Parallelization Across Sites</h2>
+
+<p>
+  A natural question when considering a <code>targets</code> refactor (Tier 6) is whether
+  individual steps can run in parallel across sites. The answer varies by script.
+</p>
+
+<h3>Per-Site Parallelization Map</h3>
+
+<table>
+  <tr>
+    <th>Script</th>
+    <th>Parallelizable?</th>
+    <th>Cross-Site Dependency</th>
+    <th>Caveats</th>
+  </tr>
+  <tr>
+    <td><code>01_01</code></td>
+    <td style="color: var(--green); font-weight: 600;">Yes</td>
+    <td>None</td>
+    <td>Trivial; each site trains its own RF on its own data</td>
+  </tr>
+  <tr>
+    <td><code>01_02a</code></td>
+    <td style="color: var(--green); font-weight: 600;">Yes</td>
+    <td>None</td>
+    <td>Trivial gather of <code>feature_gs</code> at end (one row per site)</td>
+  </tr>
+  <tr>
+    <td><code>01_02b</code></td>
+    <td style="color: var(--green); font-weight: 600;">Yes</td>
+    <td>US-BZS reads US-BZF raw data</td>
+    <td>Input-level dependency (raw file), not output-level &mdash; no task ordering; hoist <code>amf_site_info()</code> API call out of loop</td>
+  </tr>
+  <tr>
+    <td><code>02_01a/b</code></td>
+    <td style="color: var(--amber); font-weight: 600;">Partially</td>
+    <td>Pooled brm fit per time window</td>
+    <td>See details below</td>
+  </tr>
+  <tr>
+    <td><code>03_01</code></td>
+    <td style="color: var(--green); font-weight: 600;">Yes</td>
+    <td>None (trivial join at end)</td>
+    <td>Per-site summary computation; final assembly is just a left-join</td>
+  </tr>
+  <tr>
+    <td><code>03_02</code></td>
+    <td style="color: var(--red); font-weight: 600;">No</td>
+    <td>RF trained on combined multi-site dataset</td>
+    <td>Fundamentally non-parallelizable; learns cross-site relationships</td>
+  </tr>
+  <tr>
+    <td><code>04_02</code></td>
+    <td style="color: var(--green); font-weight: 600;">Yes</td>
+    <td>None</td>
+    <td>Per-site brm with generic priors; most expensive step (~7 hrs) and biggest speedup target</td>
+  </tr>
+</table>
+
+<h3>The 02_01a/b Bottleneck</h3>
+
+<p>
+  These scripts loop over sites but first fit a <strong>pooled brm model on all sites' data
+  in each 14-day time window</strong> before site-specific year-level fits can run.
+  The pooled fit initializes priors:
+</p>
+
+<pre><code># 02_01a, line 165 — data from ALL sites in this window
+data <- a_measure_night_complete %>% filter(between(DOY, window_start, window_end))
+mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE), data = data, ...)
+
+# mod0 posteriors become the priors for per-site fits
+priors$prior[priors$nlpar == 'alpha'] &lt;- paste0("normal(", brms::fixef(mod0)["alpha_Intercept", "Estimate"], ", 1.0)")</code></pre>
+
+<p><strong>Recommended refactor:</strong> Split into two phases:</p>
+<ol>
+  <li><strong>Phase 1 (sequential):</strong> Run the pooled brm fit for each time window once.
+    This is fast relative to the per-site fits because it only runs once per window.</li>
+  <li><strong>Phase 2 (parallel):</strong> With priors established, run all site&times;year fits
+    in parallel &mdash; these are fully independent once priors are available.</li>
+</ol>
+<p>
+  Alternatively, use generic priors (e.g., <code>normal(0, 1)</code>) instead of data-derived priors.
+  The per-site fits will converge anyway given enough MCMC iterations; the pooled fit
+  just speeds convergence slightly.
+</p>
+
+<h3>The 03_02 Non-Parallelizable Step</h3>
+
+<p>
+  The Random Forest in 03_02 is trained on the combined multi-site dataset (~117 sites,
+  one row each) to learn cross-site predictor&ndash;response relationships. This cannot
+  be split per-site. However, it runs in ~10 minutes (fast), so parallelization is
+  unnecessary here.
+</p>
+
+<h3>Recommended Parallelization Strategy</h3>
+
+<p>
+  If using <code>targets</code>, the pipeline graph naturally exposes parallelism.
+  Within each step, parallelize the site loop with <code>future.apply::future_lapply()</code>
+  or <code>furrr::future_map()</code>:
+</p>
+
+<pre><code># Example: parallelize 04_02 (biggest speedup: ~7hrs → ~20min on 20 cores)
+library(future.apply)
+plan(multisession, workers = 20)
+
+results <- future_lapply(seq_along(site_ids), function(i) {
+  # ... existing per-site brm fitting logic ...
+})</code></pre>
+
+<p><strong>Key prerequisite:</strong> Hoist the <code>amf_site_info()</code> API call in <code>01_02b</code>
+out of the site loop before parallelizing, to avoid N identical network calls and
+potential rate-limit issues.</p>
+
+<h2>Summary Table</h2>
+
+<table>
+  <tr>
+    <th>Tier</th>
+    <th>Impact</th>
+    <th>Effort</th>
+    <th>Items</th>
+  </tr>
+  <tr>
+    <td style="color: var(--green); font-weight: 600;">1. Cosmetic</td>
+    <td>Readability</td>
+    <td>Low</td>
+    <td>6</td>
+  </tr>
+  <tr>
+    <td style="color: #60a5fa; font-weight: 600;">2. Tiny</td>
+    <td>Portability</td>
+    <td>Low</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td style="color: var(--amber); font-weight: 600;">3. Small</td>
+    <td>Maintainability</td>
+    <td>Medium</td>
+    <td>6</td>
+  </tr>
+  <tr>
+    <td style="color: #f59e0b; font-weight: 600;">4. Medium</td>
+    <td>Reliability</td>
+    <td>Medium</td>
+    <td>8</td>
+  </tr>
+  <tr>
+    <td style="color: var(--red); font-weight: 600;">5. Large</td>
+    <td>Code quality</td>
+    <td>High</td>
+    <td>6</td>
+  </tr>
+  <tr>
+    <td style="color: var(--purple); font-weight: 600;">6. Architectural</td>
+    <td>Reproducibility</td>
+    <td>High</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td style="color: #0d9488; font-weight: 600;">7. Parallelization</td>
+    <td>Runtime</td>
+    <td>Medium</td>
+    <td>7 scripts assessed</td>
+  </tr>
+</table>
+
+<p style="color: var(--muted); font-size: 0.9em; margin-top: 2rem;">
+  Recommended approach: work through tiers bottom-up.
+  Tier 6 (targets + renv) first provides the infrastructure that makes all other improvements
+  safer and easier to implement incrementally.
+  The parallelization gains from Tier 7 are the biggest runtime wins
+  (04_02 alone drops from ~7 hours to ~20 minutes on 20 cores).
+  Alternatively, Tiers 1&ndash;2 can be done immediately with near-zero risk.
+</p>
+
+</body>
+</html>
