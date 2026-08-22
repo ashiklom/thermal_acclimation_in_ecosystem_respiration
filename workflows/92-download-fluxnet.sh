@@ -1,0 +1,93 @@
+#!/bin/bash
+# Purpose: Download FLUXNET data using fluxnet-shuttle CLI
+# Usage:
+#   ./workflows/92-download-fluxnet.sh
+#   ./workflows/92-download-fluxnet.sh --sites FR-Pue CZ-RAJ
+#   ./workflows/92-download-fluxnet.sh --overwrite
+
+set -euo pipefail
+
+# Defaults
+SNAPSHOT_FILE="data-raw/fluxnet_shuttle_snapshot_20260806T143241.csv"
+OUTPUT_DIR="data-raw/SiteData"
+OVERWRITE=false
+SITES=()
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s|--sites)
+            shift
+            while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do
+                SITES+=("$1")
+                shift
+            done
+            ;;
+        -f|--snapshot)
+            SNAPSHOT_FILE="$2"
+            shift 2
+            ;;
+        -o|--overwrite)
+            OVERWRITE=true
+            shift
+            ;;
+        -d|--output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 [OPTIONS] [--sites SITE1 SITE2 ...]"
+            echo ""
+            echo "Download FLUXNET data using fluxnet-shuttle CLI"
+            echo ""
+            echo "Options:"
+            echo "  -s, --sites SITE1 SITE2  Space-separated list of site IDs to download"
+            echo "  -f, --snapshot FILE      Path to snapshot CSV file (default: fluxnet_shuttle_snapshot_*.csv)"
+            echo "  -o, --overwrite          Overwrite existing files"
+            echo "  -d, --output-dir DIR     Output directory (default: data-raw/SiteData)"
+            echo "  -h, --help               Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Check snapshot file exists
+if [[ ! -f "$SNAPSHOT_FILE" ]]; then
+    echo "Error: Snapshot file not found: $SNAPSHOT_FILE"
+    echo "Run 'pixi run fluxnet-shuttle listall' to create one"
+    exit 1
+fi
+
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+
+# Build command
+CMD=(pixi run fluxnet-shuttle download --snapshot-file "$SNAPSHOT_FILE" --output-dir "$OUTPUT_DIR" --quiet)
+
+# Add sites if specified
+if [[ ${#SITES[@]} -gt 0 ]]; then
+    CMD+=(--sites "${SITES[@]}")
+fi
+
+# Run download
+echo "Downloading FLUXNET data..."
+"${CMD[@]}"
+
+# Unzip all FLUXNET files into FLUXNET07202025/unzip/
+UNZIP_DIR="$OUTPUT_DIR/FLUXNET07202025/unzip"
+mkdir -p "$UNZIP_DIR"
+
+echo "Extracting FLUXNET data to $UNZIP_DIR..."
+for zipfile in "$OUTPUT_DIR"/ICOS_*_FLUXNET_*.zip "$OUTPUT_DIR"/EUF_*_FLUXNET_*.zip; do
+    if [[ -f "$zipfile" ]]; then
+        echo "  Extracting $(basename "$zipfile")..."
+        unzip -o -j "$zipfile" "*.csv" -d "$UNZIP_DIR" 2>/dev/null || true
+    fi
+done
+
+echo "Done. Extracted files:"
+ls -la "$UNZIP_DIR"/*.csv 2>/dev/null | head -20
