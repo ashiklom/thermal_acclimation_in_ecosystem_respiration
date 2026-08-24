@@ -85,6 +85,7 @@ files_ICOS_after2020 <- list.files(path=file.path(dir_rawdata, 'SiteData', 'ICOS
 #
 files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern="FLUXMET_HH.*\\.csv$", full.names = T)
 files_ICOS2025 <- list.files(file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
+files_TERN <- list.files(file.path(dir_rawdata, "SiteData", "TERN", "unzip"), pattern="_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE)
 
 # 
 id_estimate_TS <- which(site_info$estimate_Ts == 'YES')
@@ -95,6 +96,22 @@ process_site <- function(name_site, overwrite = FALSE) {
   output_file <- file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv'))
   if (!overwrite && file.exists(output_file)) {
     message('Skipping ', name_site, ': output already exists.')
+    return(invisible(NULL))
+  }
+
+  # TERN already supplies a measured top-soil temperature in the normalized
+  # FLUXNET-style file, so retain it under the output schema used downstream.
+  tern_file <- files_TERN[grepl(paste0('/', name_site, '_TERN_'), files_TERN)]
+  if (length(tern_file) == 1) {
+    a <- read.csv(tern_file, stringsAsFactors = FALSE)
+    a[a == -9999] <- NA
+    if (!all(c('TIMESTAMP_START', 'TS_F_MDS_1') %in% names(a))) {
+      stop(name_site, ' TERN file is missing TIMESTAMP_START or TS_F_MDS_1')
+    }
+    data <- data.frame(TIMESTAMP = ymd_hm(a$TIMESTAMP_START, tz = 'UTC') + 15 * 60,
+                       TS_pred = a$TS_F_MDS_1)
+    dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
+    write.csv(data, file = output_file, row.names = FALSE)
     return(invisible(NULL))
   }
   
@@ -202,7 +219,8 @@ process_site <- function(name_site, overwrite = FALSE) {
   write.csv(data, file=output_file, row.names = F)
 }
 
-candidate_sites <- site_info$site_ID[id_estimate_TS]
+candidate_sites <- unique(c(site_info$site_ID[id_estimate_TS],
+                            sub('_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$', '', basename(files_TERN))))
 sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ',')))
 unknown_sites <- setdiff(sites, candidate_sites)
 if (length(unknown_sites) > 0) {
