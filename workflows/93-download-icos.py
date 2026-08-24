@@ -70,7 +70,9 @@ def station_ids(site_list: Path, requested: list[str] | None) -> list[str]:
     return ids.dropna().drop_duplicates().tolist()
 
 
-def get_product(site: str, datatype: str) -> pd.DataFrame:
+def get_product(
+    site: str, datatype: str, columns: list[str] | None = None
+) -> pd.DataFrame:
     station_uri = STATION_URI.format(site=site)
     objects = meta.list_data_objects(
         datatype=DATATYPE_URI.format(datatype=datatype), station=station_uri
@@ -80,13 +82,36 @@ def get_product(site: str, datatype: str) -> pd.DataFrame:
 
     latest = objects[0]
     LOGGER.info("  %s: %s", datatype, latest.filename)
-    return Dobj(latest.uri).data
+    dobj = Dobj(latest.uri)
+    return dobj.get(columns=columns)
 
 
 def normalize(site: str) -> pd.DataFrame:
-    fluxnet = get_product(site, "etcL2Fluxnet")
-    meteo = get_product(site, "etcL2Meteo")
-    meteosens = get_product(site, "etcL2Meteosens")
+    fluxnet = get_product(
+        site,
+        "etcL2Fluxnet",
+        [
+            "TIMESTAMP",
+            "TA_F",
+            "TA_F_QC",
+            "SW_IN_F",
+            "SW_IN_F_QC",
+            "NEE_VUT_REF",
+            "NEE_VUT_REF_QC",
+        ],
+    )
+    meteo = get_product(site, "etcL2Meteo", ["TIMESTAMP", "SW_OUT", "LW_IN", "LW_OUT", "SWC_1"])
+    meteosens_object = meta.list_data_objects(
+        datatype=DATATYPE_URI.format(datatype="etcL2Meteosens"),
+        station=STATION_URI.format(site=site),
+    )
+    if not meteosens_object:
+        raise RuntimeError(f"No etcL2Meteosens level-2 product found for {site}")
+    meteosens_dobj = Dobj(meteosens_object[0].uri)
+    ts_columns = [column for column in meteosens_dobj.colNames or [] if column.startswith("TS_")]
+    if not ts_columns:
+        raise RuntimeError(f"{site} Meteosens product has no soil temperature columns")
+    meteosens = meteosens_dobj.get(columns=["TIMESTAMP", ts_columns[0]])
 
     fluxnet = fluxnet.rename(
         columns={
@@ -108,10 +133,6 @@ def normalize(site: str) -> pd.DataFrame:
     missing = sorted(set(required_fluxnet) - set(fluxnet.columns))
     if missing:
         raise RuntimeError(f"{site} Fluxnet product is missing columns: {missing}")
-
-    ts_columns = [column for column in meteosens.columns if column.startswith("TS_")]
-    if not ts_columns:
-        raise RuntimeError(f"{site} Meteosens product has no soil temperature columns")
 
     meteo_columns = [
         column

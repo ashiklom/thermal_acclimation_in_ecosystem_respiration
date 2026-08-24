@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ICOS Respiration Workflow</title>
+  <style>
+    :root { --bg: #fdfdfd; --fg: #1a1a1a; --accent: #2563eb; --muted: #6b7280; --border: #e5e7eb; --card: #f9fafb; }
+    * { box-sizing: border-box; }
+    body { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; color: var(--fg); background: var(--bg); }
+    h1 { font-size: 1.8rem; }
+    h2 { margin-top: 2rem; border-bottom: 2px solid var(--accent); }
+    code { padding: 0.1em 0.3em; background: #f3f4f6; border-radius: 3px; }
+    pre { overflow-x: auto; padding: 1rem; background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; }
+    .card { margin: 1rem 0; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+<h1>ICOS Respiration Workflow</h1>
+<p class="muted">Implementation record for the ICOS-only Workflow 01 path.</p>
+
+<h2>Purpose</h2>
+<p><code>workflows/01_02c_filter_high_quality_night_respiration_ICOS.R</code> prepares high-quality nighttime ICOS respiration observations without concatenating ICOS and FLUXNET files.</p>
+<p>It consumes only normalized files written by <code>workflows/93-download-icos.py</code> under the ICOS L2 output directory.</p>
+
+<h2>Input And Output</h2>
+<p>The expected input name is <code>{site}_ICOS_L2_FLUXNET_HH.csv</code>.</p>
+<p>The downloader-normalized columns used by the workflow are <code>TIMESTAMP_START</code>, <code>TA_F_MDS</code>, <code>TS_F_MDS_1</code>, <code>TS_F_MDS_1_QC</code>, <code>NEE_VUT_REF</code>, <code>NEE_VUT_REF_QC</code>, <code>NIGHT</code>, and optional <code>SWC_F_MDS_1</code> and <code>SW_IN_F_MDS</code>.</p>
+<p>The workflow writes <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code>.</p>
+<p>Growing-season summaries are kept separate in <code>data/growing_season_feature_ICOS.csv</code> so that an ICOS-only result cannot silently overwrite the mixed-source EuroFlux result.</p>
+
+<h2>Processing</h2>
+<div class="card">
+  <p>The workflow converts normalized timestamps to half-interval timestamps and derives calendar fields.</p>
+  <p>It filters for nonmissing air temperature, acceptable soil-temperature QC, measured NEE QC, ICOS nighttime flags, and NEE between -5 and 30.</p>
+  <p>It estimates growing-season bounds and temperature quantiles using the existing EuroFlux logic, removes years with large growing-season gaps, applies <code>year_removed</code> metadata, and writes the two established respiration schemas.</p>
+  <p>Unlike the existing EuroFlux workflow, it does not read FLUXNET files, join multiple source periods, or replace measured soil temperature with a random-forest prediction.</p>
+</div>
+
+<h2>Downloader Change</h2>
+<p>The ICOS downloader now requests only columns needed for normalization from the Fluxnet and Meteo products.</p>
+<p>For Meteosens it reads metadata first, selects the first available <code>TS_*</code> field, and requests only that field plus the timestamp.</p>
+<p>This avoids failures caused by corrupted or unnecessary large response columns, and allowed the second-site download to complete.</p>
+
+<h2>Verification</h2>
+<p>The scripts parsed successfully with <code>Rscript</code>, and <code>git diff --check</code> reported no whitespace errors.</p>
+<p>FR-FBn was downloaded or reused, then processed with:</p>
+<pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=FR-FBn --overwrite
+Rscript workflows/01_02c_filter_high_quality_night_respiration_ICOS.R --sites=FR-FBn --overwrite</code></pre>
+<p>FR-Fon was downloaded after the downloader column-selection change, then processed with the same two commands using <code>FR-Fon</code>.</p>
+<p>Both site runs completed successfully and produced ICOS respiration outputs and feature rows.</p>
+
+<h2>Feature Comparison</h2>
+<p>The ICOS-only rows are not numerically close to the existing mixed-source EuroFlux rows in every field.</p>
+<table>
+  <tr><th>Site</th><th>Field</th><th>ICOS-only</th><th>EuroFlux</th><th>Difference</th></tr>
+  <tr><td>FR-FBn</td><td>gStart</td><td>17</td><td>22</td><td>-5</td></tr>
+  <tr><td>FR-FBn</td><td>gEnd</td><td>282</td><td>280</td><td>+2</td></tr>
+  <tr><td>FR-FBn</td><td>tStart</td><td>6.8646</td><td>7.5429</td><td>-0.6783</td></tr>
+  <tr><td>FR-FBn</td><td>tEnd</td><td>23.8158</td><td>20.4366</td><td>+3.3791</td></tr>
+  <tr><td>FR-FBn</td><td>nyear</td><td>3</td><td>14</td><td>-11</td></tr>
+  <tr><td>FR-Fon</td><td>gStart</td><td>116</td><td>122</td><td>-6</td></tr>
+  <tr><td>FR-Fon</td><td>gEnd</td><td>273</td><td>288</td><td>-15</td></tr>
+  <tr><td>FR-Fon</td><td>tStart</td><td>10.7302</td><td>11.7562</td><td>-1.0261</td></tr>
+  <tr><td>FR-Fon</td><td>tEnd</td><td>18.5654</td><td>17.1641</td><td>+1.4013</td></tr>
+  <tr><td>FR-Fon</td><td>nyear</td><td>5</td><td>18</td><td>-13</td></tr>
+</table>
+<p>The dominant difference is expected: the existing EuroFlux rows were generated from source configurations that combine historical FLUXNET and ICOS periods, while this workflow intentionally uses only the current normalized ICOS product.</p>
+<p>The comparison therefore validates that the new path runs and produces the same feature schema, but it does not support treating the mixed-source and ICOS-only numerical results as interchangeable.</p>
+
+<h2>Five-Site Branch Test</h2>
+<p>The expanded ICOS test set was <code>FR-FBn</code>, <code>FR-Fon</code>, <code>CH-Dav</code>, <code>FR-Bil</code>, and <code>DE-Tha</code>.</p>
+<p>All five normalized ICOS files were available and all five completed the ICOS-only respiration workflow.</p>
+<p><code>01_01</code> completed for the four sites marked <code>estimate_Ts=YES</code> and produced their <code>TS_RandomForest</code> outputs.</p>
+<p><code>DE-Tha</code> was intentionally not accepted by <code>01_01</code>, because the existing workflow only permits sites marked <code>estimate_Ts=YES</code>.</p>
+<p>The test exercised the existing linear-regression branch for <code>FR-FBn</code> and the fallback branch for <code>FR-Fon</code>, <code>CH-Dav</code>, and <code>FR-Bil</code>.</p>
+<p>The random-forest branches listed in <code>01_01</code> are not currently represented among ICOS-backed sites marked <code>estimate_Ts=YES</code> in <code>data/site_info.csv</code>; <code>DE-Akm</code> and <code>CZ-RAJ</code> are configured as FLUXNET-only there.</p>
+<pre><code>uv run --script workflows/93-download-icos.py --sites CH-Dav FR-Bil DE-Tha
+Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=FR-FBn,FR-Fon,CH-Dav,FR-Bil --overwrite
+Rscript workflows/01_02c_filter_high_quality_night_respiration_ICOS.R --sites=FR-FBn,FR-Fon,CH-Dav,FR-Bil,DE-Tha --overwrite</code></pre>
+</body>
+</html>
