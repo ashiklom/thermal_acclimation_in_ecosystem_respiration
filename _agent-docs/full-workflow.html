@@ -73,6 +73,9 @@
   <p>2026-08-24: Added combined ICOS/TERN/AmeriFlux feature loading, removed the deprecated EuroFlux workflow, and added source-specific temperature dispatch.</p>
   <p>2026-08-24: Added <code>02_00_build_cross_site_prior.R</code> and refactored <code>02_01a</code> to load its persisted total-model priors and accept site selection.</p>
   <p>2026-08-24: The prior workflow completed and wrote <code>data/cross_site_priors_total.rds</code> for 7 sites and 26 windows; one legacy site without source-specific features was skipped.</p>
+  <p>2026-08-24: Downloaded the 71 AmeriFlux BASE archives, requested normalized ICOS files, and obtained the normalized AU-Tum TERN file using the documented downloader commands.</p>
+  <p>2026-08-24: An archive-header audit found confirmed metadata mismatches for US-Uaf, US-BZo, and US-SRS; their <code>NEE</code>, <code>USTAR</code>, and <code>VPD</code> mappings were corrected in <code>data/site_info.csv</code>.</p>
+  <p>2026-08-24: Removed the temporary fragile column resolver from the AmeriFlux R workflow; mappings are now explicit metadata again. US-CMW was not changed because its two candidate SWC fields require source documentation.</p>
   <p>2026-08-24: Step 01 and the three-site TAS validation were attempted; temperature estimation and AmeriFlux processing skip or fail at missing local archives, ICOS/TERN normalized inputs are absent, and TAS stops at missing respiration inputs.</p>
   <p>2026-08-24: Full data execution is blocked in this checkout because normalized raw input directories are absent.</p>
 </div>
