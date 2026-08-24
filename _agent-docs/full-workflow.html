@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Full Workflow Implementation Record</title>
+  <style>
+    :root { --bg: #fdfdfd; --fg: #1a1a1a; --accent: #2563eb; --muted: #6b7280; --border: #e5e7eb; --card: #f9fafb; --warn: #92400e; --ok: #166534; }
+    * { box-sizing: border-box; }
+    body { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; color: var(--fg); background: var(--bg); }
+    h1 { font-size: 1.8rem; }
+    h2 { margin-top: 2rem; border-bottom: 2px solid var(--accent); padding-bottom: .25rem; }
+    h3 { margin-top: 1.25rem; color: var(--accent); }
+    p { margin: .6rem 0; }
+    ul, ol { margin-top: .4rem; }
+    li { margin-bottom: .35rem; }
+    code { padding: .1em .3em; background: #f3f4f6; border-radius: 3px; }
+    pre { overflow-x: auto; padding: 1rem; background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; }
+    .meta { color: var(--muted); }
+    .card { margin: 1rem 0; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+    .pending { border-left: 4px solid var(--warn); }
+    .status { border-left: 4px solid var(--ok); }
+  </style>
+</head>
+<body>
+<h1>Full Workflow Implementation Record</h1>
+<p class="meta">Thermal Acclimation in Ecosystem Respiration &mdash; implementation plan and execution notes</p>
+
+<h2>Acceptance Gate</h2>
+<div class="card status">
+  <p>Plan prepared on 2026-08-24.</p>
+  <p>The user accepted the plan on 2026-08-24; implementation and verification may proceed.</p>
+</div>
+
+<h2>Initial Findings</h2>
+<ul>
+  <li>The legacy FLUXNET-based <code>01_02a</code> workflow was deleted after active-code dependency checks found no remaining callers.</li>
+  <li><code>01_02c_filter_high_quality_night_respiration_ICOS.R</code> and <code>01_02d_filter_high_quality_night_respiration_TERN.R</code> already provide source-specific normalized-data workflows and write <code>growing_season_feature_ICOS.csv</code> and <code>growing_season_feature_TERN.csv</code>.</li>
+  <li><code>01_01</code> now dispatches only AmeriFlux_BASE, normalized ICOS, and normalized TERN inputs.</li>
+  <li><code>02_01a</code>, <code>02_01b</code>, and <code>04_02</code> still reference the old EuroFlux aggregate; all downstream feature loading must use ICOS, TERN, and AmeriFlux aggregates.</li>
+  <li><code>02_01a</code> now consumes a persisted cross-site prior artifact; <code>02_01b</code> remains a separate direct-model alternative.</li>
+  <li>The existing 01-step scripts support an optional comma-separated site list and <code>--overwrite</code>; that interface will be preserved for the refactor.</li>
+  <li>The worktree already contains untracked ICOS/TERN feature CSVs and a comparison figure; these pre-existing files will not be reverted or modified unless the implementation requires it.</li>
+</ul>
+
+<h2>Implementation Plan</h2>
+<ol>
+  <li>Update source dispatch and site selection so the supported branches are explicitly AmeriFlux, ICOS, and TERN, with validation that rejects legacy FLUXNET source values.</li>
+  <li>Replace downstream reads of <code>growing_season_feature_EuropFlux.csv</code> with a combined feature loader for <code>growing_season_feature_AmeriFlux.csv</code>, <code>growing_season_feature_ICOS.csv</code>, and <code>growing_season_feature_TERN.csv</code>.</li>
+  <li>Confirm that no active workflow depends on the legacy FLUXNET/EuroFlux step, delete it, and update active documentation and command references.</li>
+  <li>Run workflows <code>01_01</code> and the applicable source-specific <code>01_02</code> scripts for every site in <code>data/site_info.csv</code>, preserving the existing skip/overwrite behavior and recording any code or data issues encountered.</li>
+  <li>After the step-01 runs complete without errors, document the changes and required fixes in this file and create the first implementation commit.</li>
+  <li>Refactor the pooled cross-site prior calculation from the following TAS workflow into a standalone script that loops over windows, writes the required prior coefficients to disk, and has a clear command-line entry point.</li>
+  <li>Modify the immediately following site-specific TAS workflow to load those persisted priors, run all sites when no site argument is supplied, and run only the requested comma-separated sites when an argument is supplied, matching the 01-step interface.</li>
+  <li>Run the standalone multi-site prior script and verify its persisted output before attempting site-level TAS fits.</li>
+  <li>Select three representative sites covering the supported source branches and relevant edge cases, run the site-specific TAS step for those sites, and stop to fix any errors before scaling out.</li>
+  <li>Once the three-site validation succeeds, run the site-specific TAS step for all remaining sites, update this record with commands, results, and any fixes, then create the requested commit.</li>
+</ol>
+
+<h2>Expected Outputs</h2>
+<ul>
+  <li>Per-site soil-temperature prediction files under <code>data-raw/TS_RandomForest/</code> where required.</li>
+  <li>Per-site respiration files under <code>data-raw/RespirationData/</code>.</li>
+  <li>Source-specific growing-season feature aggregates for AmeriFlux, ICOS, and TERN, with no active EuroFlux aggregate dependency.</li>
+  <li>A persisted cross-site prior artifact and a separately runnable site-specific TAS workflow.</li>
+  <li>Updated documentation and commits made only after the stated verification gates pass.</li>
+</ul>
+
+<h2>Progress Notes</h2>
+<div class="card status">
+  <p>2026-08-24: Repository and agent documentation reviewed.</p>
+  <p>2026-08-24: Plan recorded and accepted; implementation started.</p>
+  <p>2026-08-24: Added combined ICOS/TERN/AmeriFlux feature loading, removed the deprecated EuroFlux workflow, and added source-specific temperature dispatch.</p>
+  <p>2026-08-24: Added <code>02_00_build_cross_site_prior.R</code> and refactored <code>02_01a</code> to load its persisted total-model priors and accept site selection.</p>
+  <p>2026-08-24: The prior workflow completed and wrote <code>data/cross_site_priors_total.rds</code> for 7 sites and 26 windows; one legacy site without source-specific features was skipped.</p>
+  <p>2026-08-24: Step 01 and the three-site TAS validation were attempted; temperature estimation and AmeriFlux processing skip or fail at missing local archives, ICOS/TERN normalized inputs are absent, and TAS stops at missing respiration inputs.</p>
+  <p>2026-08-24: Full data execution is blocked in this checkout because normalized raw input directories are absent.</p>
+</div>
+</body>
+</html>

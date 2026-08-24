@@ -17,11 +17,9 @@
 -   `01_01_estimate_soil_temperature_at_some_sites.R`:
     -   Estimates top soil (\<10 cm) temperature at sites with lots of missing soil temperature data.
     -   Exports 16 csv files containing predicted soil temperature for 16 sites with incomplete soil temperature measurements. csv files are saved as SITE_TS_rfp.csv, where SITE is the name of the site.
--   `01_02a_filter_high_quality_night_respiration_EuroFlux.R`:
-    -   Prepares data for fitting temperature-respiration curves for 46 EuroFlux sites.
-    -   Exports 46 csv files containing gap-filled subhourly meteorological and NEE time series (one file per site).
-    -   Exports 46 csv files containing measured high-quality subhourly nightlight NEE and corresponding meteorological data (one file per site).
-    -   Exports 1 csv file containing the start and end date of growing seasons at all EuroFlux sites.
+-   `01_02c_filter_high_quality_night_respiration_ICOS.R` and `01_02d_filter_high_quality_night_respiration_TERN.R`:
+    -   Prepare source-specific normalized ICOS and TERN data for fitting temperature-respiration curves.
+    -   Export per-site respiration files and source-specific growing-season feature tables.
 -   `01_02b_filter_high_quality_night_respiration_AmeriFlux`:
     -   Prepares data for fitting temperature-respiration curves for 71 AmeriFlux sites.
     -   Exports 71 csv files containing gap-filled subhourly meteorological and NEE time series (one file per site).
@@ -31,6 +29,7 @@
 2.  Calculate Thermal Response Strength (TAS) for All Sites
 
 -   `02_01a_estimate_total_TAS_use_moving_window.R`:
+    -   Run `02_00_build_cross_site_prior.R` first to persist the total-model priors across available sites.
     -   Estimates *total* thermal response strength in ecosystem respiration using moving window methods.
     -   Exports 2 csv files (outcome_siteyear_temp.csv and outcome_temp.csv) containing estimated *total* thermal response strength (TAS) for all sites.
 -   `02_01b_estimate_direct_TAS_use_moving_window.R`:
@@ -67,7 +66,7 @@
 
 1.  Download all following raw data required for this project (All data have been uploaded on Zenodo with DOI: 10.5281/zenodo.18095996; please use data from the most recent release to match script updates).
 
--   raw eddy covariance data from FLUXNET2015, FLUXNET2020, FLUXNET07202025, and ICOS (Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1)
+-   raw eddy covariance data from AmeriFlux_BASE, ICOS (Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1), and TERN normalized downloads
 
 -   ERA5-Land daily soil water content data in 1990-2024 for all sites
 

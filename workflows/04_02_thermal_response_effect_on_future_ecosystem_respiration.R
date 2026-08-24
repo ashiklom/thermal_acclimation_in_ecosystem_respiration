@@ -14,9 +14,8 @@ dir_rawdata <- 'data-raw'
 options(na.action = "na.omit")
 #
 # read data used for this module
-feature_gs <- read.csv(file.path('data', 'growing_season_feature_EuropFlux.csv'))
-feature_gs_AmeriFlux <- read.csv(file.path('data', 'growing_season_feature_AmeriFlux.csv'))
-feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
+source(file.path('workflows', 'load_growing_season_features.R'))
+feature_gs <- load_growing_season_features()
 #
 acclimation <- read.csv(file.path("data", "acclimation_data.csv"))
 #

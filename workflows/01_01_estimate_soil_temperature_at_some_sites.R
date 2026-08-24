@@ -79,12 +79,11 @@ site_info <- read.csv(file.path('data', 'site_info.csv'))
 
 files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
 #
-files_FLUXNET2015  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-files_FLUXNET2020  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-files_ICOS_after2020 <- list.files(path=file.path(dir_rawdata, 'SiteData', 'ICOS_after2020'), pattern = ".csv$", full.names = TRUE)
-#
-files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern="FLUXMET_HH.*\\.csv$", full.names = T)
-files_ICOS2025 <- list.files(file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
+files_ICOS <- list.files(
+  file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"),
+  pattern = "_ICOS_L2_FLUXNET_HH\\.csv$",
+  full.names = TRUE
+)
 files_TERN <- list.files(file.path(dir_rawdata, "SiteData", "TERN", "unzip"), pattern="_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE)
 
 # 
@@ -100,7 +99,7 @@ process_site <- function(name_site, overwrite = FALSE) {
   }
 
   # TERN already supplies a measured top-soil temperature in the normalized
-  # FLUXNET-style file, so retain it under the output schema used downstream.
+  # Normalized TERN file, so retain it under the output schema used downstream.
   tern_file <- files_TERN[grepl(paste0('/', name_site, '_TERN_'), files_TERN)]
   if (length(tern_file) == 1) {
     a <- read.csv(tern_file, stringsAsFactors = FALSE)
@@ -115,8 +114,29 @@ process_site <- function(name_site, overwrite = FALSE) {
     return(invisible(NULL))
   }
   
-  if (site_info$source[id] %in% c("AmeriFlux_BASE", "AmeriFlux_FLUXNET")) {
-    a <- amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+  icos_file <- files_ICOS[grepl(paste0('/', name_site, '_ICOS_L2_FLUXNET_HH\\.csv$'), files_ICOS)]
+  if (length(icos_file) == 1) {
+    a <- read.csv(icos_file, stringsAsFactors = FALSE)
+    a[a == -9999] <- NA
+    required <- c('TIMESTAMP_START', 'TA_F_MDS', 'TS_F_MDS_1')
+    if (!all(required %in% names(a))) {
+      stop(name_site, ' ICOS file is missing required temperature columns')
+    }
+    timestamp <- ymd_hm(as.character(a$TIMESTAMP_START), quiet = TRUE, tz = 'UTC')
+    data <- data.frame(
+      TIMESTAMP = timestamp + 15 * 60,
+      YEAR = year(timestamp),
+      DOY = yday(timestamp),
+      HOUR = hour(timestamp),
+      MINUTE = minute(timestamp),
+      TS = a$TS_F_MDS_1,
+      TA = a$TA_F_MDS
+    )
+    if ('NETRAD' %in% names(a)) data$NETRAD <- a$NETRAD
+  } else if (site_info$source[id] == "AmeriFlux_BASE") {
+    input_files <- files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)]
+    if (length(input_files) != 1) stop(name_site, ' requires one AmeriFlux_BASE archive; found ', length(input_files))
+    a <- amf_read_base(input_files, parse_timestamp=TRUE, unzip = T)
     data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = a$YEAR, DOY = a$DOY, HOUR = a$HOUR, MINUTE = a$MINUTE, 
                        TS = a[, trimws(site_info$TS[id])], TA = a[, trimws(site_info$TA[id])])
     if (name_site %in% c('US-Los', "US-Ced")) {
@@ -127,51 +147,7 @@ process_site <- function(name_site, overwrite = FALSE) {
       data$NETRAD <- a$NETRAD_2_1_1
     } 
   } else {
-    data_source <- site_info$source[id]
-    data_source <- unlist(strsplit(data_source, "_"))
-    for (isource in 1:length(data_source)) {
-      if (data_source[isource] == "FLUXNET2015") {
-        files <- files_FLUXNET2015
-      } else if (data_source[isource] == "FLUXNET2020") {
-        files <- files_FLUXNET2020
-      } else if (data_source[isource] == "ICOS2020") {
-        files <- files_ICOS_after2020
-      } else if (data_source[isource] == "FLUXNET2025") {
-        files <- files_FLUXNET2025
-      } else if (data_source[isource] == "ICOS2025") {
-        files <- files_ICOS2025
-      }
-      file  <- files[grepl(name_site, files)]
-      a_tmp <- read.csv(file)
-      if (isource == 1) {
-        a <- a_tmp
-      } else {
-        # need to check if they can connect correctly, or use bind_rows. 
-        irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
-        if (is.numeric(irow_start) && length(irow_start) == 0) {
-          irow_start = 1
-        }
-        a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
-      }
-    }
-    rm(a_tmp)
-    # -9999 means missing information.
-    a[a==-9999] <- NA    
-
-    dt <- ymd_hm(a$TIMESTAMP_START[2]) - ymd_hm(a$TIMESTAMP_START[1])
-    a$TIMESTAMP  <- ymd_hm(a$TIMESTAMP_START) + dt / 2
-    a$DOY <- yday(a$TIMESTAMP)
-    data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = year(a$TIMESTAMP), DOY = a$DOY, 
-                       HOUR = hour(a$TIMESTAMP), MINUTE = minute(a$TIMESTAMP), TS = a$TS_F_MDS_1, TA = a$TA_F_MDS, NETRAD=a$NETRAD)
-    if (name_site == 'DE-Hte') {
-      # too few data in TS_F_MDS_1, so use TS_F_MDS_2
-      data$TS <- a$TS_F_MDS_2
-    } else if (name_site == 'FR-Bil') {
-      # abnormal Soil temperature data before 2021
-      data$TS[data$YEAR < 2021] <- NA
-    } else if (name_site == "FR-Pue") {
-      data$TS[data$YEAR < 2016] <- NA
-    }
+    stop(name_site, ' has no AmeriFlux, ICOS, or TERN input file')
   }
 
   print(id)
@@ -219,12 +195,14 @@ process_site <- function(name_site, overwrite = FALSE) {
   write.csv(data, file=output_file, row.names = F)
 }
 
-candidate_sites <- unique(c(site_info$site_ID[id_estimate_TS],
+candidate_sites <- unique(c(site_info$site_ID[site_info$source == 'AmeriFlux_BASE'],
+                            site_info$site_ID[id_estimate_TS],
+                            sub('_ICOS_L2_FLUXNET_HH\\.csv$', '', basename(files_ICOS)),
                             sub('_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$', '', basename(files_TERN))))
 sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ',')))
 unknown_sites <- setdiff(sites, candidate_sites)
 if (length(unknown_sites) > 0) {
-  stop('Sites are not eligible for temperature estimation: ', paste(unknown_sites, collapse = ', '))
+  stop('Sites are not eligible for AmeriFlux, ICOS, or TERN temperature estimation: ', paste(unknown_sites, collapse = ', '))
 }
 for (name_site in sites) {
   process_site(name_site, overwrite)

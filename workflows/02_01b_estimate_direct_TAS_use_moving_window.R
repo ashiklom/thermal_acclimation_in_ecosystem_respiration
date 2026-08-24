@@ -19,9 +19,8 @@ dir_rawdata <- 'data-raw'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
-feature_gs <- read.csv(file.path('data', 'growing_season_feature_EuropFlux.csv'))
-feature_gs_AmeriFlux <- read.csv(file.path('data', 'growing_season_feature_AmeriFlux.csv'))
-feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
+source(file.path('workflows', 'load_growing_season_features.R'))
+feature_gs <- load_growing_season_features()
 
 swc_ERA5 <- read.csv(file.path(dir_rawdata, "ERA5_daily_swc_1990_2024_allsites.csv"))
 swc_ERA5$date <- as.Date(swc_ERA5$date)

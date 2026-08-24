@@ -38,7 +38,7 @@
 <p><code>01_01</code> will use <code>site_ID</code> as the function input and retain one output file per site in <code>data-raw/TS_RandomForest</code>.</p>
 <p><code>01_02a</code> and <code>01_02b</code> will return one growing-season feature row from each successful site function call, write the two per-site respiration files, and merge those rows into their existing aggregate CSV.</p>
 <p>The command-line form will support both <code>--sites=SITE1,SITE2</code> and a positional comma-separated site argument, plus <code>--overwrite</code>.</p>
-<pre><code>Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm,FR-Pue
+<pre><code>Rscript workflows/01_02c_filter_high_quality_night_respiration_ICOS.R --sites=FR-FBn,FR-Fon
 Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R US-Ha1 --overwrite</code></pre>
 
 <h2>Implementation Notes</h2>
@@ -54,17 +54,17 @@ Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R US-Ha
 
 <h2>Execution Test</h2>
 <p>The end-to-end test used <code>US-Ha1</code> as the AmeriFlux site and <code>DE-Akm</code> as the EuroFlux site.</p>
-<p><code>DE-Akm</code> was selected because it is an eligible EuroFlux site with a local FLUXNET input file.</p>
+<p><code>FR-FBn</code> was selected because it is an eligible ICOS site with a normalized local input file.</p>
 <p>The first pass used <code>--overwrite</code> for both sites.</p>
 <pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=US-Ha1,DE-Akm --overwrite
 Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R --sites=US-Ha1 --overwrite
-Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm --overwrite</code></pre>
+Rscript workflows/01_02c_filter_high_quality_night_respiration_ICOS.R --sites=FR-FBn --overwrite</code></pre>
 <p>The successful site-level runs created <code>US-Ha1_TS_rfp.csv</code>, <code>DE-Akm_TS_rfp.csv</code>, both per-site AmeriFlux respiration files, both per-site EuroFlux respiration files, and the corresponding aggregate feature files.</p>
-<p>The test also exposed and corrected local-environment issues: 2025 FLUXNET discovery now selects the site-specific <code>FLUXMET_HH</code> file, workflow inputs use local <code>data-raw</code> paths, respiration output directories are created automatically, and AmeriFlux timezone handling uses the IANA timezone returned by <code>tz_lookup_coords()</code>.</p>
+<p>The refactor preserves local <code>data-raw</code> paths, creates respiration output directories automatically, and keeps AmeriFlux timezone handling based on the IANA timezone returned by <code>tz_lookup_coords()</code>.</p>
 <p>The second pass omitted <code>--overwrite</code>:</p>
 <pre><code>Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R --sites=US-Ha1,DE-Akm
 Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R --sites=US-Ha1
-Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R --sites=DE-Akm</code></pre>
+Rscript workflows/01_02c_filter_high_quality_night_respiration_ICOS.R --sites=FR-FBn</code></pre>
 <p>All three skip runs exited successfully without re-running the data-processing calculations.</p>
 </body>
 </html>

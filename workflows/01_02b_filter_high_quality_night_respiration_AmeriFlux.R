@@ -47,9 +47,9 @@ process_site <- function(name_site) {
 
   print(id)
   data_source <- site_info$source[id]
-  # This script only works for FLUXNET products
+  # This script only processes the AmeriFlux_BASE source.
   if (!data_source %in% c("AmeriFlux_BASE")) {
-    next
+    return(NULL)
   }
   
   name_site <- site_info$site_ID[id]

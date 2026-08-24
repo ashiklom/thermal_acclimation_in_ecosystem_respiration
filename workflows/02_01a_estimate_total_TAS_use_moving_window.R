@@ -19,9 +19,24 @@ dir_rawdata <- 'data-raw'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
-feature_gs <- read.csv(file.path('data', 'growing_season_feature_EuropFlux.csv'))
-feature_gs_AmeriFlux <- read.csv(file.path('data', 'growing_season_feature_AmeriFlux.csv'))
-feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
+source(file.path('workflows', 'load_growing_season_features.R'))
+feature_gs <- load_growing_season_features()
+
+args <- commandArgs(trailingOnly = TRUE)
+site_arg <- args[grepl('^--sites=', args)]
+positional_sites <- args[!grepl('^--', args)]
+if (length(site_arg) > 1 || length(positional_sites) > 1) stop('Provide at most one comma-separated site list.')
+requested_sites <- if (length(site_arg) == 1) trimws(unlist(strsplit(sub('^--sites=', '', site_arg), ','))) else if (length(positional_sites) == 1) trimws(unlist(strsplit(positional_sites, ','))) else NULL
+prior_arg <- args[grepl('^--priors=', args)]
+prior_path <- if (length(prior_arg)) sub('^--priors=', '', prior_arg[1]) else file.path('data', 'cross_site_priors_total.rds')
+if (!file.exists(prior_path)) stop('Cross-site prior file not found: ', prior_path)
+cross_site_priors <- readRDS(prior_path)
+if (!identical(cross_site_priors$model, 'total')) stop('Prior file is not for the total model: ', prior_path)
+prior_for_window <- function(iwindow, fallback) {
+  entry <- cross_site_priors$priors[[iwindow]]
+  if (is.null(entry)) return(fallback)
+  Reduce(`+`, entry$priors)
+}
 
 # outcome data frame
 outcome <- data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(), 
@@ -38,19 +53,22 @@ site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "
                    "US-IB2", "US-Jo2", "US-KL2", "US-Kon", "US-LL1", "US-MBP", "US-Myb", "US-NC4", "US-Tw1", "US-ICt",
                    "BE-Dor", "CA-TP4", "UK-AMo", "RU-Fyo", "ZA-Kru", "IT-Tor")
 
-for (id in 1:nrow(site_info)) {
+site_ids <- if (is.null(requested_sites)) site_info$site_ID else requested_sites
+unknown_sites <- setdiff(site_ids, site_info$site_ID)
+if (length(unknown_sites) > 0) stop('Unknown sites: ', paste(unknown_sites, collapse = ', '))
+for (name_site in site_ids) {
   # id = 25
+  id <- match(name_site, site_info$site_ID)
   print(id)
-  name_site <- site_info$site_ID[id]
   print(name_site)
   
   #-------------------------------------------DATA PREPARATION--------------------------
   # read data
   path <- file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv'))
-  if (file.exists(path)) {
-    a_measure_night_complete <- read.csv(path)
-    ac <- read.csv(file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')))
-  }
+  ac_path <- file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv'))
+  if (!file.exists(path) || !file.exists(ac_path)) stop('Missing respiration inputs for ', name_site, ': ', path, ' and ', ac_path)
+  a_measure_night_complete <- read.csv(path)
+  ac <- read.csv(ac_path)
   if (site_info$SWC_use[id] == 'YES') {
     a_measure_night_complete <- a_measure_night_complete %>% filter(!is.na(SWC))
   }  
@@ -164,25 +182,8 @@ for (id in 1:nrow(site_info)) {
     # skip a window if no enough data; this is for sites ('US-ICt', 'US-ICh', 'US-ICs', 'FI-Sod') with a period of the whole day is daytime. 
     if (nrow(data) < 100) { next }
     
-    # try gsl_nls first because it is fast, and then update priors of brm models based on mod_nls
-    # this can give abnormal initial values. 
-    mod_nls <- try(gsl_nls(fn=as.formula(frmu_nls), data=data, start=stprm))
-    if (!inherits(mod_nls, "try-error")) {
-      priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2), ", 1.0)")
-      priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01), ", 0.1)")
-      priors$prior[priors$nlpar == 'C0'] <- paste0("normal(", min(exp(coefficients(mod_nls)["C0_ln"]), 10), ", 5)")
-    }
-    
-    # call the brm model to estimate parameters; this step takes much longer time.
-    mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
-                      prior = priors, data = data, iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
-                      control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
-    # print(summary(mod0), digits = 3)
-    
-    # use this result as prior of each year
-    priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", brms::fixef(mod0)["alpha_Intercept", "Estimate"], ", 1.0)")
-    priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", brms::fixef(mod0)["beta_Intercept", "Estimate"], ", 0.1)")
-    priors$prior[priors$nlpar == 'C0'] <- paste0("normal(", brms::fixef(mod0)["C0_Intercept", "Estimate"], ", 5)")
+    # Use the persisted fit across sites as the prior for each year-specific fit.
+    priors <- prior_for_window(iwindow, priors)
     
     # get reference temperature, SWC, and NEEday of each window
     TSref <- mean(ac$TS[between(ac$DOY, window_start, window_end)], na.rm=T)
