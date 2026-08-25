@@ -33,6 +33,7 @@
 ######################
 *.pdf
 /graphs/
+/figures/
 .DS_Store
 scripts/.DS_Store
 /data_old/
