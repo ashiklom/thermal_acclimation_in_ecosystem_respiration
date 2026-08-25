@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Documentation Index</title>
+  <style>
+    :root {
+      --bg: #fdfdfd;
+      --fg: #1a1a1a;
+      --accent: #2563eb;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --card-bg: #f9fafb;
+      --code-bg: #f3f4f6;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.7;
+      color: var(--fg);
+      background: var(--bg);
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.35rem; margin-top: 2.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.25rem; }
+    p { margin-bottom: 0.75rem; }
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      background: var(--code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    .meta { color: var(--muted); font-size: 0.9em; margin-bottom: 2rem; }
+    .file-list { list-style: none; margin: 1rem 0; }
+    .file-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      background: var(--card-bg);
+    }
+    .file-item h3 { font-size: 1.05rem; margin-bottom: 0.25rem; }
+    .file-item h3 a { color: var(--accent); text-decoration: none; }
+    .file-item h3 a:hover { text-decoration: underline; }
+    .file-item p { margin-bottom: 0.35rem; font-size: 0.95em; }
+    .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15em 0.5em;
+      border-radius: 3px;
+      color: #fff;
+      margin-right: 0.4em;
+      vertical-align: middle;
+    }
+    .tag-current { background: var(--green); }
+    .tag-archive { background: var(--amber); }
+    .tag-outdated { background: var(--red); }
+    .tag-md { background: var(--muted); }
+    .summary { font-size: 0.9em; color: var(--muted); margin-top: 0.5rem; line-height: 1.5; }
+    .section-note {
+      background: #eff6ff;
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.95em;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Agent Documentation Index</h1>
+<p class="meta">Thermal Acclimation in Ecosystem Respiration &mdash; documentation map</p>
+
+<div class="section-note">
+  <strong>Note:</strong> The HTML files in this directory were generated during earlier phases of the project.
+  Some describe workflows and file layouts that have since been revised.
+  This index marks each file's current status.
+</div>
+
+<!-- ============================================================ -->
+<h2>Currently Useful</h2>
+<p>These documents describe the current state of the codebase and remain accurate.</p>
+
+<ul class="file-list">
+  <li class="file-item">
+    <h3><a href="full-workflow.html">Full Workflow Implementation Record</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Overall implementation plan and progress notes for the thermal acclimation pipeline.
+    Documents the completed refactor to source-specific workflows (AmeriFlux, ICOS, TERN),
+    the cross-site prior build, and the current state of execution readiness.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="data-cleanup.html">Data Directory Cleanup</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Records the data directory reorganization into <code>data-core</code>, <code>data-raw</code>, and <code>data-proc</code>.
+    Describes the proposed layout, the implemented revision, and which scripts were updated to use new paths.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="icos-sites.html">ICOS Sites: Download and Integration Status</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Documents the ICOS download scripts, L2 normalization, FLUXNET estimate-TS sites,
+    and how to run the integration workflows. Covers both <code>01_01</code> and <code>01_02c</code>.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="process-icos.html">ICOS Respiration Workflow</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Implementation record for the ICOS-only Workflow 01 path (<code>01_02c</code>).
+    Covers input/output, processing steps, downloader changes, verification, and a five-site branch test.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="dl-process-tern.html">TERN Download and Processing Workflow</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Documents the TERN download, normalization, site mapping, respiration processing (<code>01_02d</code>),
+    soil temperature handling, growing-season diagnostics, and visualization.
+    Note: contains an unclosed <code>&lt;pre&gt;</code> tag around line 98.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="cmw-ambiguities.html">US-CMW Soil Water Content Ambiguity</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Analysis of the ambiguous SWC field mapping for US-CMW.
+    Documents the audit, evidence, figures, and the provisional recommendation to use <code>SWC_1_6_1</code>.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="refactor-01.html">Workflow 01 Refactor</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Historical record of the <code>01_01</code>, <code>01_02a</code>, and <code>01_02b</code> refactor
+    that added per-site execution, skip behavior, and overwrite support.
+    The referenced scripts <code>01_02a</code> was later deleted and replaced by <code>01_02c</code>/<code>01_02d</code>,
+    but the refactor pattern and CLI interface remain the same.</p>
+  </li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>Archive &mdash; Partially Outdated</h2>
+<p>These documents were accurate when written but reference workflows and file layouts that have since changed.
+They remain useful as historical context or for information that hasn't changed.</p>
+
+<ul class="file-list">
+  <li class="file-item">
+    <h3><a href="workflow-description.html">Workflow Description</a></h3>
+    <span class="tag tag-outdated">Outdated</span>
+    <p>Comprehensive description of the full pipeline (Steps 01&ndash;04).
+    <strong>Outdated aspects:</strong> References the deleted <code>01_02a</code> (EuroFlux) workflow as a live script
+    and lists <code>growing_season_feature_EuropFlux.csv</code> as a current output.
+    The current architecture uses <code>01_02c</code> (ICOS), <code>01_02d</code> (TERN), and <code>01_02b</code> (AmeriFlux)
+    with source-specific feature aggregates.
+    Steps 02&ndash;04 descriptions remain accurate.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="workflow-improvements.html">Workflow Improvements</a></h3>
+    <span class="tag tag-outdated">Outdated</span>
+    <p>Tiered improvement recommendations for the pipeline.
+    <strong>Outdated aspects:</strong> Many item references cite the deleted <code>01_02a</code> script
+    (e.g., line numbers, function extraction targets, merge suggestions).
+    The improvement recommendations themselves are still valid for the remaining scripts
+    (<code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>), but file-name references need updating.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="icos-data.html">ICOS Level-2 Data Downloader</a></h3>
+    <span class="tag tag-outdated">Outdated</span>
+    <p>Detailed documentation of the ICOS downloader (<code>93-download-icos.py</code>).
+    <strong>Outdated aspects:</strong> References the deleted <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>
+    in the workflow compatibility section.
+    The downloader documentation itself (columns, API, authentication) remains accurate.</p>
+  </li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>Markdown Task Notes</h2>
+<p>Short-form markdown files used for task briefs and ad-hoc notes.</p>
+
+<ul class="file-list">
+  <li class="file-item">
+    <h3><a href="cleanup.md">cleanup.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Task brief for the data directory cleanup. Superseded by <a href="data-cleanup.html">data-cleanup.html</a>.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="dl-ameriflux.md">dl-ameriflux.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Notes on downloading AmeriFlux data.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="dl-icos.md">dl-icos.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Notes on downloading ICOS data.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="dl-process-tern.md">dl-process-tern.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Brief TERN task notes. Superseded by <a href="dl-process-tern.html">dl-process-tern.html</a>.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="process-icos.md">process-icos.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Brief ICOS processing notes. Superseded by <a href="process-icos.html">process-icos.html</a>.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="refactor-01.md">refactor-01.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Brief Workflow 01 refactor notes. Superseded by <a href="refactor-01.html">refactor-01.html</a>.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="run-workflow.md">run-workflow.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Quick command reference for running workflow steps 01 through the prior build.
+    References <a href="full-workflow.html">full-workflow.html</a> for details.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="cmw-ambiguities.md">cmw-ambiguities.md</a></h3>
+    <span class="tag tag-md">Markdown</span>
+    <p>Brief US-CMW SWC ambiguity notes. Superseded by <a href="cmw-ambiguities.html">cmw-ambiguities.html</a>.</p>
+  </li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>Known Issues</h2>
+<ul>
+  <li><code>dl-process-tern.html</code> line 98: unclosed <code>&lt;pre&gt;&lt;code&gt;</code> tag
+  (missing <code>&lt;/code&gt;&lt;/pre&gt;</code> before line 100).</li>
+  <li><code>workflow-description.html</code>: references deleted <code>01_02a</code> and
+  <code>growing_season_feature_EuropFlux.csv</code> as current.</li>
+  <li><code>icos-data.html</code>: references deleted <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>.</li>
+  <li><code>workflow-improvements.html</code>: many item references cite deleted <code>01_02a</code>
+  (line numbers, file targets, merge suggestions).</li>
+</ul>
+
+</body>
+</html>
