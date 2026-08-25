@@ -29,15 +29,16 @@ requested_sites <- if (length(site_arg) == 1) {
 
 ####################Attention: change this directory based on your own directory of raw data
 dir_rawdata <- 'data-raw'
+dir_proc <- 'data-proc/respiration/Ameriflux'
 ####################End Attention
 
-files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
+files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "Ameriflux"), pattern="^AMF_.*_BASE.*\\.zip$", full.names = TRUE, recursive = TRUE)
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 
 process_site <- function(name_site) {
   id <- match(name_site, site_info$site_ID)
-  output_dir <- file.path(dir_rawdata, 'RespirationData')
+  output_dir <- file.path(dir_proc, name_site)
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   output_files <- file.path(output_dir, paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
   if (!overwrite && all(file.exists(output_files))) {
@@ -181,7 +182,7 @@ process_site <- function(name_site) {
   
   # soil temperature TS
   if (site_info$estimate_Ts[id] == 'YES') {
-    df_TS <- read.csv(file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')))
+    df_TS <- read.csv(file=file.path('data-proc', 'soil-temperature', 'AmeriFlux_BASE', name_site, paste0(name_site, '_TS_rfp.csv')))
     df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
     df_TS <- left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
     ac$TS <- df_TS$TS_pred
@@ -506,13 +507,13 @@ process_site <- function(name_site) {
   }
 
   # save the ac and a_measure_night_complete data:
-  write.csv(ac, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
-  write.csv(a_measure_night_complete, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
+  write.csv(ac, file=file.path(output_dir, paste0(name_site, '_ac.csv')), row.names = F)
+  write.csv(a_measure_night_complete, file=file.path(output_dir, paste0(name_site, '_nightNEE.csv')), row.names = F)
 
   data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
 }
 
-feature_file <- file.path('data', 'growing_season_feature_AmeriFlux.csv')
+feature_file <- file.path('data-proc', 'features', 'growing_season_feature_AmeriFlux.csv')
 feature_gs <- if (file.exists(feature_file)) read.csv(feature_file) else {
   data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())
 }
@@ -528,7 +529,7 @@ if (overwrite) {
 }
 
 for (name_site in sites) {
-  output_files <- file.path(dir_rawdata, 'RespirationData', paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
+  output_files <- file.path(dir_proc, name_site, paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
   already_aggregated <- name_site %in% feature_gs$site_ID
   if (!overwrite && (all(file.exists(output_files)) || already_aggregated)) {
     message('Skipping ', name_site, ': already processed.')

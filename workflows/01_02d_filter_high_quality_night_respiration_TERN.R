@@ -13,8 +13,9 @@ if (length(site_arg) > 1 || length(positional_sites) > 1) stop("Provide at most 
 requested_sites <- if (length(site_arg) == 1) sub("^--sites=", "", site_arg) else if (length(positional_sites) == 1) positional_sites else NULL
 
 dir_rawdata <- "data-raw"
-tern_dir <- file.path(dir_rawdata, "SiteData", "TERN", "unzip")
-files_TERN <- list.files(tern_dir, pattern = "_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE)
+dir_proc <- "data-proc/respiration/TERN"
+tern_dir <- file.path(dir_rawdata, "TERN")
+files_TERN <- list.files(tern_dir, pattern = "_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE, recursive = TRUE)
 if (length(files_TERN) == 0) stop("No normalized TERN files found in ", tern_dir)
 
 parse_removed_years <- function(value) {
@@ -31,7 +32,7 @@ parse_removed_years <- function(value) {
 process_site <- function(name_site) {
   input_file <- files_TERN[grepl(paste0("/", name_site, "_TERN_"), files_TERN)]
   if (length(input_file) != 1) stop("Expected one normalized TERN file for ", name_site, ", found ", length(input_file), ".")
-  output_dir <- file.path(dir_rawdata, "RespirationData")
+  output_dir <- file.path(dir_proc, name_site)
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   output_files <- file.path(output_dir, paste0(name_site, c("_ac.csv", "_nightNEE.csv")))
   if (!overwrite && all(file.exists(output_files))) return(NULL)
@@ -77,7 +78,7 @@ candidate_sites <- sub("_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", "", basename(files_T
 sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ",", fixed = TRUE)))
 unknown_sites <- setdiff(sites, candidate_sites)
 if (length(unknown_sites) > 0) stop("Sites are not downloaded: ", paste(unknown_sites, collapse = ", "))
-feature_file <- file.path("data", "growing_season_feature_TERN.csv")
+feature_file <- file.path("data-proc", "features", "growing_season_feature_TERN.csv")
 feature_gs <- if (file.exists(feature_file)) read.csv(feature_file) else data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())
 if (overwrite) feature_gs <- feature_gs[!feature_gs$site_ID %in% sites, , drop = FALSE]
 for (name_site in sites) if (overwrite || !name_site %in% feature_gs$site_ID) {

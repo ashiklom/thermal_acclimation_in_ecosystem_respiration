@@ -20,9 +20,7 @@ from icoscp_core.icos import meta
 LOGGER = logging.getLogger(__name__)
 STATION_URI = "http://meta.icos-cp.eu/resources/stations/ES_{site}"
 DATATYPE_URI = "http://meta.icos-cp.eu/resources/cpmeta/{datatype}"
-OUTPUT_DIR = Path(
-    "data-raw/SiteData/Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip"
-)
+OUTPUT_DIR = Path("data-raw/ICOS")
 
 
 def parse_args() -> argparse.Namespace:
@@ -173,7 +171,9 @@ def main() -> None:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for site in sites:
-        output = args.output_dir / f"{site}_ICOS_L2_FLUXNET_HH.csv"
+        site_dir = args.output_dir / site
+        site_dir.mkdir(parents=True, exist_ok=True)
+        output = site_dir / f"{site}_ICOS_L2_FLUXNET_HH.csv"
         if output.exists() and not args.overwrite:
             LOGGER.info("Skipping %s (already exists)", output)
             continue

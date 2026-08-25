@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Directory Cleanup</title>
+<style>
+body { max-width: 58rem; margin: 2rem auto; padding: 0 1rem; font: 1rem/1.5 system-ui, sans-serif; color: #222; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+pre { padding: 1rem; overflow-x: auto; background: #f4f4f4; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #bbb; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+th { background: #f4f4f4; }
+</style>
+</head>
+<body>
+<h1>Data Directory Cleanup</h1>
+<p>This document records the data organization and the implemented revision.</p>
+
+<h2>Constraints</h2>
+<ul>
+<li><code>data-raw</code> is only for raw input data downloaded by the download scripts.</li>
+<li><code>data-proc</code> is for workflow-generated and otherwise processed data.</li>
+<li><code>data-core</code> is for tracked data files required as inputs by the workflows, such as site metadata and site mappings.</li>
+<li><code>data-raw</code> and <code>data-proc</code> must not be under version control.</li>
+<li>Existing downloaded data must be moved rather than downloaded again.</li>
+</ul>
+
+<h2>Current Organization</h2>
+<h3>Tracked <code>data</code> directory</h3>
+<p>The repository currently has one tracked <code>data</code> directory containing both core inputs and workflow products.
+The tracked files include:</p>
+<table>
+<thead><tr><th>Category</th><th>Current files</th></tr></thead>
+<tbody>
+<tr>
+<td>Core metadata and mappings</td>
+<td><code>site_info.csv</code>, <code>tern_fluxnet_site_mapping.csv</code></td>
+</tr>
+<tr>
+<td>Source-specific feature products</td>
+<td><code>growing_season_feature_AmeriFlux.csv</code>, <code>growing_season_feature_EuropFlux.csv</code>, <code>growing_season_feature_ICOS.csv</code>, <code>growing_season_feature_TERN.csv</code></td>
+</tr>
+<tr>
+<td>Thermal-response and driver products</td>
+<td><code>outcome_temp.csv</code>, <code>outcome_siteyear_temp.csv</code>, <code>outcome_temp_water_gpp.csv</code>, <code>outcome_siteyear_temp_water_gpp.csv</code>, <code>acclimation_data.csv</code>, <code>partial_plot.csv</code>, <code>varImp_plot.csv</code></td>
+</tr>
+<tr>
+<td>Simulation and projection products</td>
+<td><code>simulation_identifiability_replications.csv</code>, <code>simulation_identifiability_summary.csv</code>, <code>Tmin_month_ssp245_wc.csv</code>, <code>acclimation_data_future_ssp245.csv</code>, <code>cross_site_priors_total.rds</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>site_info.csv</code> and <code>tern_fluxnet_site_mapping.csv</code> are core inputs.
+The generated products have been moved to <code>data-proc-original</code> as a tracked historical snapshot and to ignored <code>data-proc</code> locations for future runs.</p>
+
+<h3>Current <code>data-raw</code> directory</h3>
+<p><code>data-raw</code> is already listed in <code>.gitignore</code>.
+It occupies approximately 9.2 GB and currently contains several different classes of files:</p>
+<ul>
+<li>AmeriFlux BASE-BADM archives directly at the root, named like <code>AMF_US-CMW_BASE-BADM_3-5.zip</code>.</li>
+<li>A root-level FLUXNET Shuttle snapshot and download log.</li>
+<li>Source/site directories for AmeriFlux, ICOS, TERN, and isolated FLUXNET Shuttle archives.</li>
+<li>Normalized ICOS and TERN CSV inputs under source/site paths.</li>
+<li>Processed respiration files under <code>RespirationData/</code>, including paired <code>_ac.csv</code> and <code>_nightNEE.csv</code> files.</li>
+<li>Predicted soil-temperature files under <code>TS_RandomForest/</code>.</li>
+</ul>
+<p>The last two categories are workflow outputs, not raw download inputs, and should not remain in <code>data-raw</code>.</p>
+
+<h3>Scripts coupled to the current layout</h3>
+<table>
+<thead><tr><th>Scripts</th><th>Current coupling</th></tr></thead>
+<tbody>
+<tr>
+<td>Download scripts</td>
+<td><code>91-download-ameriflux.R</code>, <code>93-download-icos.py</code>, and <code>94-download-tern.py</code> write to source/site paths; <code>92-download-fluxnet.sh</code> alone uses <code>data-raw/FLUXNET</code>.</td>
+</tr>
+<tr>
+<td>Raw-data preparation</td>
+<td><code>01_01_estimate_soil_temperature_at_some_sites.R</code> reads provider inputs and writes <code>TS_RandomForest</code>; <code>01_02b</code>, <code>01_02c</code>, and <code>01_02d</code> read source inputs and write <code>RespirationData</code>.</td>
+</tr>
+<tr>
+<td>Downstream workflows</td>
+<td><code>02_00</code>, <code>02_01a</code>, <code>02_01b</code>, <code>03_01</code>, and <code>04_02</code> read <code>RespirationData</code> and/or products currently in <code>data</code>.</td>
+</tr>
+<tr>
+<td>Auxiliary scripts and demos</td>
+<td><code>scripts/audit-cmw-swc-options.R</code>, <code>scripts/plot-growing-season-comparison.R</code>, and the AmeriFlux demo script contain old raw-data paths.</td>
+</tr>
+</tbody>
+</table>
+
+<h2>Proposed Organization</h2>
+<pre><code>data-core/
+  site_info.csv
+  tern_fluxnet_site_mapping.csv
+
+data-raw/
+  Ameriflux/
+    &lt;site&gt;/
+      &lt;downloaded AmeriFlux archive(s)&gt;
+  ICOS/
+    &lt;site&gt;/
+      &lt;downloaded or normalized ICOS input(s)&gt;
+  TERN/
+    &lt;site&gt;/
+      &lt;downloaded or normalized TERN input(s)&gt;
+  FLUXNET/
+    &lt;site&gt;/
+      &lt;FLUXNET Shuttle archives and extracted files&gt;
+
+data-proc/
+  soil-temperature/
+    &lt;site-specific workflow outputs&gt;
+  respiration/
+    &lt;source&gt;/
+      &lt;site&gt;/
+        &lt;site-specific respiration outputs&gt;
+  features/
+    &lt;source-specific growing-season tables&gt;
+  analysis/
+    &lt;cross-site priors, TAS, driver, simulation, and projection outputs&gt;</code></pre>
+
+<h3><code>data-core</code></h3>
+<p>Create a new tracked directory for stable prerequisites.
+Move <code>site_info.csv</code> and <code>tern_fluxnet_site_mapping.csv</code> there and update every workflow that reads them.
+These files are configuration-like scientific inputs, not generated results.</p>
+
+<h3><code>data-raw</code></h3>
+<p>Use source and site directories for downloaded inputs, with no processed outputs in this tree.
+The download scripts should default to these locations and should detect existing files at their new destinations before making a network request.
+Non-site download metadata such as the FLUXNET Shuttle snapshot can remain under a clearly named source-level metadata location if it is required to reproduce a download, but it is still raw input rather than a workflow product.</p>
+
+<h3><code>data-proc</code></h3>
+<p>Write every workflow output here, including per-site respiration files, predicted soil temperatures, growing-season feature tables, priors, model results, simulations, and future projections.
+Per-site outputs should retain source/site identity so files from different providers cannot collide.</p>
+
+<h2>Implemented Revision</h2>
+<ol>
+<li>Extend <code>.gitignore</code> to ignore <code>/data-raw/</code> and <code>/data-proc/</code>, while leaving <code>data-core</code> and <code>data-proc-original</code> trackable.</li>
+<li>Create <code>data-core</code>, move only the core metadata files into it, and remove those files from their old tracked locations.</li>
+<li>Create the new raw and processed directory trees.</li>
+<li>Move existing raw downloads into source/site directories without re-downloading them.</li>
+<li>Move existing workflow outputs into tracked <code>data-proc-original</code> and place future generated outputs under ignored <code>data-proc</code>.</li>
+<li>Update download scripts, workflow scripts, auxiliary scripts, demo paths, and documentation to use the new locations.</li>
+<li>Run static path searches and workflow-level validation without network downloads, then report any provider/site mapping ambiguities before resolving them.</li>
+</ol>
+
+<h2>Retained Classification</h2>
+<ul>
+<li>FLUXNET Shuttle archives and extracted files are retained only under <code>data-raw/FLUXNET/&lt;site&gt;</code>; current processing workflows do not read that tree.</li>
+<li>Unmapped TERN files for Warra, Tumbarumba, AdelaideRiver, AliceSpringsMulga, and AlpinePeatland were removed; only the mapped FLUXNET-coded AU-Tum input remains.</li>
+<li>The obsolete FLUXNET snapshot and <code>fluxnet-shuttle-run.log</code> were removed.</li>
+</ul>
+</body>
+</html>

@@ -1,4 +1,4 @@
-load_growing_season_features <- function(data_dir = "data") {
+load_growing_season_features <- function(data_dir = "data-proc/features") {
   feature_files <- file.path(
     data_dir,
     c(

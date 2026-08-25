@@ -38,8 +38,8 @@ option_list <- list(
   make_option(
     c("-f", "--site_info"),
     type = "character",
-    default = "data/site_info.csv",
-    help = "Path to site_info.csv file [default: data/site_info.csv]"
+    default = "data-core/site_info.csv",
+    help = "Path to site_info.csv file [default: data-core/site_info.csv]"
   ),
   make_option(
     c("-o", "--overwrite"),
@@ -68,8 +68,8 @@ option_list <- list(
   make_option(
     c("-d", "--out_dir"),
     type = "character",
-    default = "data-raw",
-    help = "Output directory for downloaded data [default: data-raw]"
+    default = "data-raw/Ameriflux",
+    help = "Output directory for downloaded data [default: data-raw/Ameriflux]"
   ),
   make_option(
     c("-p", "--data_policy"),
@@ -127,7 +127,8 @@ if (!dir.exists(opt$out_dir)) {
 # Check which sites already exist (unless overwrite)
 sites_to_download <- ameriflux_sites$site_ID
 if (!opt$overwrite) {
-  existing_files <- list.files(opt$out_dir, pattern = "\\.zip$", full.names = FALSE)
+  existing_files <- list.files(opt$out_dir, pattern = "\\.zip$", full.names = TRUE, recursive = TRUE)
+  existing_files <- basename(existing_files)
   existing_sites <- gsub("AMF_(.*)_BASE.*", "\\1", existing_files)
   already_present <- intersect(sites_to_download, existing_sites)
   if (length(already_present) > 0) {
@@ -160,12 +161,16 @@ downloaded_files <- amf_download_base(
   verbose = TRUE
 )
 
-# Move files from temp subdirectory to main output dir if needed
+# Move downloaded files into site-specific directories.
 downloaded_basenames <- basename(downloaded_files)
-target_paths <- file.path(opt$out_dir, downloaded_basenames)
+downloaded_sites <- sub("^AMF_([^_]+)_BASE.*", "\\1", downloaded_basenames)
+target_paths <- file.path(opt$out_dir, downloaded_sites, downloaded_basenames)
+dir.create(unique(dirname(target_paths)), recursive = TRUE, showWarnings = FALSE)
 files_needing_move <- downloaded_files[downloaded_files != target_paths]
 if (length(files_needing_move) > 0) {
-  file.copy(files_needing_move, target_paths[files_needing_move != target_paths])
+  for (i in which(downloaded_files != target_paths)) {
+    file.copy(downloaded_files[i], target_paths[i], overwrite = TRUE)
+  }
 }
 
 message(sprintf("Successfully downloaded %d files to %s", length(downloaded_files), opt$out_dir))

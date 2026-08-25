@@ -4,9 +4,9 @@ library(amerifluxr)
 library(dplyr)
 
 dir.create("figures", showWarnings = FALSE)
-dir.create("data", showWarnings = FALSE)
+dir.create("data-proc/analysis", recursive = TRUE, showWarnings = FALSE)
 
-archive <- file.path("data-raw", "AMF_US-CMW_BASE-BADM_3-5.zip")
+archive <- file.path("data-raw", "Ameriflux", "US-CMW", "AMF_US-CMW_BASE-BADM_3-5.zip")
 if (!file.exists(archive)) {
   stop("Missing US-CMW archive: ", archive)
 }
@@ -48,8 +48,8 @@ summary <- bind_rows(lapply(c("sensor_1", "sensor_2", "mean_of_sensors"), functi
   )
 }))
 
-write.csv(summary, "data/cmw_swc_option_audit.csv", row.names = FALSE)
-write.csv(swc, "data/cmw_swc_option_timeseries.csv", row.names = FALSE)
+write.csv(summary, "data-proc/analysis/cmw_swc_option_audit.csv", row.names = FALSE)
+write.csv(swc, "data-proc/analysis/cmw_swc_option_timeseries.csv", row.names = FALSE)
 
 cat("US-CMW SWC option audit\n")
 print(summary)

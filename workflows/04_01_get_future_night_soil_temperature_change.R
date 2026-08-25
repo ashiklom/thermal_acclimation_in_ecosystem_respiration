@@ -15,7 +15,7 @@ rm(list=ls())
 dir_rawdata <- 'data-raw'
 ####################End Attention
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 xy <- data.frame(x=site_info$LONG, y=site_info$LAT)
 
 #----------------Step 1: get monthly temperature of the current period
@@ -72,6 +72,7 @@ for (ssp in ssps) {
     Tmin_month[,i+1] <- as.vector(tapply(tmp[,i], rep(1:nrow(xy), times=5), mean, na.rm=T))
   }
   colnames(Tmin_month)[2:13] <- paste0('Tmin', 1:12)
-  write.csv(Tmin_month, file=file.path('data', paste0('Tmin_month_', ssp, '_wc.csv')), row.names=FALSE)
+  dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+  write.csv(Tmin_month, file=file.path('data-proc', 'analysis', paste0('Tmin_month_', ssp, '_wc.csv')), row.names=FALSE)
   #
 }

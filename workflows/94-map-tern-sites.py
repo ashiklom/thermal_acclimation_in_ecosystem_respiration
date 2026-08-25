@@ -15,8 +15,8 @@ import pandas as pd
 import terndata.flux as flux
 
 
-DEFAULT_SITE_INFO = Path("data/site_info.csv")
-DEFAULT_OUTPUT = Path("data/tern_fluxnet_site_mapping.csv")
+DEFAULT_SITE_INFO = Path("data-core/site_info.csv")
+DEFAULT_OUTPUT = Path("data-core/tern_fluxnet_site_mapping.csv")
 
 
 def parse_args() -> argparse.Namespace:

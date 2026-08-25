@@ -8,7 +8,7 @@ shelf(dplyr, ggplot2, corrplot, MuMIn, fBasics, car, lme4, vip, randomForest, ca
 rm(list=ls())
 
 #
-acclimation <- read.csv(file.path('data', 'acclimation_data.csv'))
+acclimation <- read.csv(file.path('data-proc', 'analysis', 'acclimation_data.csv'))
 
 # acclimation <- acclimation %>% filter(warm_rate < 0.2)
 
@@ -410,5 +410,6 @@ plot(partial$x[205:255], partial$y[205:255])
 
 partial_output <- rbind(partial_output, data.frame(TRS_type = 'TAS_app', partial))
 
-write.csv(partial_output, file = file.path('data', 'partial_plot.csv'), row.names = F)
-write.csv(varImp_output, file = file.path('data', 'varImp_plot.csv'), row.names = F)
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+write.csv(partial_output, file = file.path('data-proc', 'analysis', 'partial_plot.csv'), row.names = F)
+write.csv(varImp_output, file = file.path('data-proc', 'analysis', 'varImp_plot.csv'), row.names = F)

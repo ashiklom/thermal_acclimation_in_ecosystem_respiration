@@ -15,10 +15,10 @@ rm(list=ls())
 
 set.seed(123)
 ####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- 'data-raw'
+dir_rawdata <- 'data-proc/respiration'
 ####################End Attention
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 source(file.path('workflows', 'load_growing_season_features.R'))
 feature_gs <- load_growing_season_features()
 
@@ -56,10 +56,11 @@ for (id in 1:nrow(site_info)) {
   
   #-------------------------------------------DATA PREPARATION--------------------------
   # read data
-  path <- file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv'))
+  path <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_nightNEE\\.csv$'), recursive = TRUE, full.names = TRUE)
   if (file.exists(path)) {
     a_measure_night_complete <- read.csv(path)
-    ac <- read.csv(file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')))
+    ac_path <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_ac\\.csv$'), recursive = TRUE, full.names = TRUE)
+    ac <- read.csv(ac_path)
   }
   if (site_info$SWC_use[id] == 'YES') {
     a_measure_night_complete <- a_measure_night_complete %>% filter(!is.na(SWC))
@@ -357,5 +358,6 @@ for (id in 1:nrow(site_info)) {
 }
 # end of each site
 
-write.csv(outcome, file = file.path('data', 'outcome_temp_water_gpp.csv'), row.names = F)
-write.csv(outcome_siteyear, file = file.path('data', 'outcome_siteyear_temp_water_gpp.csv'), row.names = F)
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+write.csv(outcome, file = file.path('data-proc/analysis', 'outcome_temp_water_gpp.csv'), row.names = F)
+write.csv(outcome_siteyear, file = file.path('data-proc/analysis', 'outcome_siteyear_temp_water_gpp.csv'), row.names = F)

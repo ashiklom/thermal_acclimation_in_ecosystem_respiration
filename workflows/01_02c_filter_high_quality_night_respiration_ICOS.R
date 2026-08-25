@@ -21,13 +21,10 @@ requested_sites <- if (length(site_arg) == 1) {
 }
 
 dir_rawdata <- "data-raw"
-icos_dir <- file.path(
-  dir_rawdata, "SiteData",
-  "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1",
-  "unzip"
-)
-site_info <- read.csv(file.path("data", "site_info.csv"), stringsAsFactors = FALSE)
-files_ICOS <- list.files(icos_dir, pattern = "_ICOS_L2_FLUXNET_HH\\.csv$", full.names = TRUE)
+dir_proc <- "data-proc/respiration/ICOS"
+icos_dir <- file.path(dir_rawdata, "ICOS")
+site_info <- read.csv(file.path("data-core", "site_info.csv"), stringsAsFactors = FALSE)
+files_ICOS <- list.files(icos_dir, pattern = "_ICOS_L2_FLUXNET_HH\\.csv$", full.names = TRUE, recursive = TRUE)
 
 parse_removed_years <- function(value) {
   if (is.na(value) || !nzchar(trimws(value))) return(numeric())
@@ -49,7 +46,7 @@ process_site <- function(name_site) {
     stop("Expected one normalized ICOS file for ", name_site, ", found ", length(input_file), ".")
   }
 
-  output_dir <- file.path(dir_rawdata, "RespirationData")
+  output_dir <- file.path(dir_proc, name_site)
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   output_files <- file.path(output_dir, paste0(name_site, c("_ac.csv", "_nightNEE.csv")))
   if (!overwrite && all(file.exists(output_files))) {
@@ -159,7 +156,7 @@ sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strspl
 unknown_sites <- setdiff(sites, candidate_sites)
 if (length(unknown_sites) > 0) stop("Sites are not configured for ICOS2025 processing: ", paste(unknown_sites, collapse = ", "))
 
-feature_file <- file.path("data", "growing_season_feature_ICOS.csv")
+feature_file <- file.path("data-proc", "features", "growing_season_feature_ICOS.csv")
 feature_gs <- if (file.exists(feature_file)) read.csv(feature_file) else {
   data.frame(site_ID = character(), gStart = double(), gEnd = double(), tStart = double(), tEnd = double(), nyear = integer())
 }

@@ -8,7 +8,7 @@ shelf(dplyr, ggplot2, caret, performance, zoo, bayesplot, brms, gslnls, lubridat
 rm(list=ls())
 
 ####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- 'data-raw'
+dir_rawdata <- 'data-proc/respiration'
 ####################End Attention
 
 options(na.action = "na.omit")
@@ -17,9 +17,9 @@ options(na.action = "na.omit")
 source(file.path('workflows', 'load_growing_season_features.R'))
 feature_gs <- load_growing_season_features()
 #
-acclimation <- read.csv(file.path("data", "acclimation_data.csv"))
+acclimation <- read.csv(file.path("data-proc", "analysis", "acclimation_data.csv"))
 #
-Tmin_month <- read.csv(file.path('data', 'Tmin_month_ssp245_wc.csv'))
+Tmin_month <- read.csv(file.path('data-proc', 'analysis', 'Tmin_month_ssp245_wc.csv'))
 acclimation     <- acclimation %>% left_join(Tmin_month, by='site_ID')
 
 # add 6 column about respiration
@@ -40,20 +40,21 @@ param <- alpha+beta+C0 ~ 1
 priors <- priors_temp
 
 #
-files  <- list.files(path = file.path(dir_rawdata, "RespirationData"), pattern = '_ac.csv$', full.names = FALSE)
+files  <- list.files(path = dir_rawdata, pattern = '_ac.csv$', full.names = TRUE, recursive = TRUE)
 # air and soil temperature patterns
 for (i in 1:length(files)) {
   ###
   # i = 74
-  name_site <- substring(files[i], 1, 6)
+  name_site <- sub('_ac\\.csv$', '', basename(files[i]))
   print(paste0(i, name_site))
   #
   iacclimation <- which(acclimation$site_ID==name_site)
   #
-  ac <- read.csv(file.path(dir_rawdata, "RespirationData", files[i]))
+  ac <- read.csv(files[i])
   #
   # use only the years with qualified data
-  a_measure_night_complete <- read.csv(file.path(dir_rawdata, "RespirationData", paste0(name_site, "_nightNEE.csv")))
+  night_file <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_nightNEE\\.csv$'), full.names = TRUE, recursive = TRUE)
+  a_measure_night_complete <- read.csv(night_file)
   good_years <- unique(a_measure_night_complete$YEAR)
   # print(good_years)
   
@@ -180,4 +181,5 @@ for (i in 1:length(files)) {
 }
 #
 
-write.csv(acclimation, file=file.path('data', 'acclimation_data_future_ssp245.csv'), row.names = F)
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+write.csv(acclimation, file=file.path('data-proc', 'analysis', 'acclimation_data_future_ssp245.csv'), row.names = F)

@@ -10,11 +10,15 @@ positional_sites <- args[!grepl('^--', args)]
 if (length(site_arg) > 1 || length(positional_sites) > 1) stop('Provide at most one comma-separated site list.')
 requested_sites <- if (length(site_arg) == 1) trimws(unlist(strsplit(sub('^--sites=', '', site_arg), ','))) else if (length(positional_sites) == 1) trimws(unlist(strsplit(positional_sites, ','))) else NULL
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 source(file.path('workflows', 'load_growing_season_features.R'))
 feature_gs <- load_growing_season_features()
-respiration_dir <- file.path('data-raw', 'RespirationData')
-available_sites <- site_info$site_ID[file.exists(file.path(respiration_dir, paste0(site_info$site_ID, '_nightNEE.csv')))]
+respiration_dir <- file.path('data-proc', 'respiration')
+night_files <- list.files(respiration_dir, pattern = '_nightNEE\\.csv$', full.names = TRUE, recursive = TRUE)
+night_file_for_site <- function(name_site) {
+  night_files[basename(night_files) == paste0(name_site, '_nightNEE.csv')]
+}
+available_sites <- site_info$site_ID[vapply(site_info$site_ID, function(site) length(night_file_for_site(site)) == 1, logical(1))]
 sites <- if (is.null(requested_sites)) available_sites else requested_sites
 unknown_sites <- setdiff(sites, available_sites)
 if (length(unknown_sites) > 0) stop('Missing respiration input for: ', paste(unknown_sites, collapse = ', '))
@@ -45,7 +49,7 @@ max_windows <- max(pmax(1, ceiling((site_rows$gEnd - site_rows$gStart + 1) / win
 prior_rows <- vector('list', max_windows)
 for (iwindow in seq_len(max_windows)) {
   pooled <- lapply(sites, function(name_site) {
-    x <- read.csv(file.path(respiration_dir, paste0(name_site, '_nightNEE.csv')))
+    x <- read.csv(night_file_for_site(name_site))
     info <- site_rows[match(name_site, site_rows$site_ID), ]
     start <- info$gStart + window_size * (iwindow - 1)
     end <- min(info$gStart + window_size * iwindow, info$gEnd)
@@ -66,5 +70,5 @@ for (iwindow in seq_len(max_windows)) {
   prior_rows[[iwindow]] <- list(window = iwindow, nobs = nrow(pooled), priors = priors)
 }
 
-dir.create('data', showWarnings = FALSE)
-saveRDS(list(model = 'total', window_size = window_size, sites = sites, priors = prior_rows), file.path('data', 'cross_site_priors_total.rds'))
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+saveRDS(list(model = 'total', window_size = window_size, sites = sites, priors = prior_rows), file.path('data-proc/analysis', 'cross_site_priors_total.rds'))

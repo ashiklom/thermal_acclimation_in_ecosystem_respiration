@@ -45,6 +45,7 @@ scripts/.DS_Store
 !.pixi/config.toml
 
 /data-raw/
+/data-proc/
 _creds.toml
 
 # don't gitignore agent documentation, even though it's HTML

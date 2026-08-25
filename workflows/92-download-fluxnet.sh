@@ -8,8 +8,8 @@
 set -euo pipefail
 
 # Defaults
-SNAPSHOT_FILE="data-raw/fluxnet_shuttle_snapshot_20260806T143241.csv"
-OUTPUT_DIR="data-raw/SiteData"
+SNAPSHOT_FILE=""
+OUTPUT_DIR="data-raw/FLUXNET"
 OVERWRITE=false
 SITES=()
 
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -s, --sites SITE1 SITE2  Space-separated list of site IDs to download"
             echo "  -f, --snapshot FILE      Path to snapshot CSV file (default: fluxnet_shuttle_snapshot_*.csv)"
             echo "  -o, --overwrite          Overwrite existing files"
-            echo "  -d, --output-dir DIR     Output directory (default: data-raw/SiteData)"
+            echo "  -d, --output-dir DIR     Output directory (default: data-raw/FLUXNET)"
             echo "  -h, --help               Show this help message"
             exit 0
             ;;
@@ -55,7 +55,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check snapshot file exists
+# Use the current snapshot unless one is supplied explicitly.
+if [[ -z "$SNAPSHOT_FILE" ]]; then
+    SNAPSHOT_FILE=$(find data-raw -maxdepth 1 -name 'fluxnet_shuttle_snapshot_*.csv' -print -quit)
+fi
 if [[ ! -f "$SNAPSHOT_FILE" ]]; then
     echo "Error: Snapshot file not found: $SNAPSHOT_FILE"
     echo "Run 'pixi run fluxnet-shuttle listall' to create one"
@@ -77,17 +80,17 @@ fi
 echo "Downloading FLUXNET data..."
 "${CMD[@]}"
 
-# Unzip all FLUXNET files into FLUXNET07202025/unzip/
-UNZIP_DIR="$OUTPUT_DIR/FLUXNET07202025/unzip"
-mkdir -p "$UNZIP_DIR"
-
-echo "Extracting FLUXNET data to $UNZIP_DIR..."
+# Unzip each archive into its site-specific FLUXNET directory.
+echo "Extracting FLUXNET data into site-specific directories..."
 for zipfile in "$OUTPUT_DIR"/ICOS_*_FLUXNET_*.zip "$OUTPUT_DIR"/EUF_*_FLUXNET_*.zip; do
     if [[ -f "$zipfile" ]]; then
         echo "  Extracting $(basename "$zipfile")..."
-        unzip -o -j "$zipfile" "*.csv" -d "$UNZIP_DIR" 2>/dev/null || true
+        site=$(basename "$zipfile" | sed -E 's/^(ICOS|EUF)_([^_]+)_.*/\2/')
+        unzip_dir="$OUTPUT_DIR/$site"
+        mkdir -p "$unzip_dir"
+        unzip -o -j "$zipfile" "*.csv" -d "$unzip_dir" 2>/dev/null || true
     fi
 done
 
 echo "Done. Extracted files:"
-ls -la "$UNZIP_DIR"/*.csv 2>/dev/null | head -20
+find "$OUTPUT_DIR" -mindepth 2 -maxdepth 2 -name '*.csv' -print

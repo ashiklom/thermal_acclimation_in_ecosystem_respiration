@@ -9,12 +9,12 @@ shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo, sf)
 rm(list=ls())
 
 ####################Attention: If you only download this folder, you need to change this directory to the location where you place this folder
-dir_rawdata <- 'data-raw/'
+dir_rawdata <- 'data-raw/Ameriflux/'
 ####################End Attention
 
-files_AmeriFlux_BASE <- list.files(dir_rawdata, pattern=".zip$", full.names = F)
+files_AmeriFlux_BASE <- list.files(dir_rawdata, pattern=".zip$", full.names = TRUE, recursive = TRUE)
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 
 feature_gs <- data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())  # growing season feature
 
@@ -27,7 +27,7 @@ for (file in files_AmeriFlux_BASE) {
   id = which(site_info$site_ID == name_site)
   
   # read data
-  a <- amf_read_base(file.path(dir_rawdata, files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)]), parse_timestamp=TRUE, unzip = T)
+  a <- amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
   a[a==-9999] <- NA
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year. 
@@ -153,7 +153,7 @@ for (file in files_AmeriFlux_BASE) {
   
   # soil temperature TS
   if (site_info$estimate_Ts[id] == 'YES') {
-    df_TS <- read.csv(file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')))
+    df_TS <- read.csv(file=file.path('data-proc', 'soil-temperature', 'Ameriflux', name_site, paste0(name_site, '_TS_rfp.csv')))
     df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
     df_TS <- left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
     ac$TS <- df_TS$TS_pred

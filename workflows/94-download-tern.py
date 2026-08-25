@@ -17,9 +17,9 @@ import terndata.flux as flux
 
 
 LOGGER = logging.getLogger(__name__)
-DEFAULT_OUTPUT = Path("data-raw/SiteData/TERN/unzip")
-DEFAULT_SITE_INFO = Path("data/site_info.csv")
-DEFAULT_MAPPING = Path("data/tern_fluxnet_site_mapping.csv")
+DEFAULT_OUTPUT = Path("data-raw/TERN")
+DEFAULT_SITE_INFO = Path("data-core/site_info.csv")
+DEFAULT_MAPPING = Path("data-core/tern_fluxnet_site_mapping.csv")
 VARIABLES = [
     "Fco2", "Fco2_QCFlag", "Ta", "Ta_QCFlag", "Ts", "Ts_QCFlag",
     "Sws", "Sws_QCFlag", "Fsd", "Fsd_QCFlag", "Fn", "Fn_QCFlag",
@@ -107,7 +107,9 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for code in sites(args.sites, args.site_info):
         fluxnet_code, tern_site = resolve_site(code, args.mapping)
-        output = args.output_dir / f"{fluxnet_code}_TERN_{args.processing_level}_FLUXNET_HH.csv"
+        site_dir = args.output_dir / fluxnet_code
+        site_dir.mkdir(parents=True, exist_ok=True)
+        output = site_dir / f"{fluxnet_code}_TERN_{args.processing_level}_FLUXNET_HH.csv"
         if output.exists() and not args.overwrite:
             LOGGER.info("Skipping %s (already exists)", output)
             continue

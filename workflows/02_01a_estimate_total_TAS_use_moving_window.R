@@ -15,10 +15,10 @@ rm(list=ls())
 
 set.seed(123)
 ####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- 'data-raw'
+dir_rawdata <- 'data-proc/respiration'
 ####################End Attention
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 source(file.path('workflows', 'load_growing_season_features.R'))
 feature_gs <- load_growing_season_features()
 
@@ -28,7 +28,7 @@ positional_sites <- args[!grepl('^--', args)]
 if (length(site_arg) > 1 || length(positional_sites) > 1) stop('Provide at most one comma-separated site list.')
 requested_sites <- if (length(site_arg) == 1) trimws(unlist(strsplit(sub('^--sites=', '', site_arg), ','))) else if (length(positional_sites) == 1) trimws(unlist(strsplit(positional_sites, ','))) else NULL
 prior_arg <- args[grepl('^--priors=', args)]
-prior_path <- if (length(prior_arg)) sub('^--priors=', '', prior_arg[1]) else file.path('data', 'cross_site_priors_total.rds')
+prior_path <- if (length(prior_arg)) sub('^--priors=', '', prior_arg[1]) else file.path('data-proc/analysis', 'cross_site_priors_total.rds')
 if (!file.exists(prior_path)) stop('Cross-site prior file not found: ', prior_path)
 cross_site_priors <- readRDS(prior_path)
 if (!identical(cross_site_priors$model, 'total')) stop('Prior file is not for the total model: ', prior_path)
@@ -64,8 +64,8 @@ for (name_site in site_ids) {
   
   #-------------------------------------------DATA PREPARATION--------------------------
   # read data
-  path <- file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv'))
-  ac_path <- file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv'))
+  path <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_nightNEE\\.csv$'), recursive = TRUE, full.names = TRUE)
+  ac_path <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_ac\\.csv$'), recursive = TRUE, full.names = TRUE)
   if (!file.exists(path) || !file.exists(ac_path)) stop('Missing respiration inputs for ', name_site, ': ', path, ' and ', ac_path)
   a_measure_night_complete <- read.csv(path)
   ac <- read.csv(ac_path)
@@ -318,5 +318,6 @@ for (name_site in site_ids) {
 }
 
 # end of each site
-write.csv(outcome, file = file.path('data', 'outcome_temp.csv'), row.names = F)
-write.csv(outcome_siteyear, file = file.path('data', 'outcome_siteyear_temp.csv'), row.names = F)
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+write.csv(outcome, file = file.path('data-proc/analysis', 'outcome_temp.csv'), row.names = F)
+write.csv(outcome_siteyear, file = file.path('data-proc/analysis', 'outcome_siteyear_temp.csv'), row.names = F)

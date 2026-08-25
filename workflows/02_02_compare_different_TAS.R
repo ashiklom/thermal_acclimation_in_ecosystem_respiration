@@ -8,9 +8,9 @@ library(librarian)
 shelf(dplyr, ggplot2, tidyr)
 rm(list=ls())
 
-outcome_temp <- read.csv(file.path('data', 'outcome_temp.csv'))
+outcome_temp <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp.csv'))
 
-outcome_temp_water_gpp <- read.csv(file.path('data', 'outcome_temp_water_gpp.csv'))
+outcome_temp_water_gpp <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp_water_gpp.csv'))
 
 outcome <- data.frame(site_ID = outcome_temp$site_ID, TAS_tot = outcome_temp$TAS, TAS_totp = outcome_temp$TASp)
 
@@ -30,7 +30,7 @@ outcome %>% tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to =
   theme_bw()
   
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 if (!"IGBP" %in% names(outcome)) {
   outcome <- outcome %>% left_join(site_info[, c('site_ID', 'IGBP', 'Climate_class')], by = 'site_ID')
 }
@@ -135,4 +135,3 @@ outcome %>% tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to =
   ggplot(aes(x = IGBP, y = TAS_value, col = TAS_type)) + 
   geom_boxplot() +
   theme_bw()
-

@@ -15,7 +15,7 @@ rm(list=ls())
 dir_rawdata <- 'data-raw'
 ####################End Attention
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 
 #--------------------------------------------SOIL DATA-------------------------------------
 # get measured soil carbon data from AmeriFlux BIF data
@@ -91,16 +91,17 @@ mblm_slope_test <- function(x, y, R_boot = 1000, R_perm = 1000, seed = 123) {
 #------------------
 #
 # Read ac data
-files <- list.files(file.path(dir_rawdata, 'RespirationData'), pattern = '_ac.csv$', full.names = TRUE)
+files <- list.files(file.path('data-proc', 'respiration'), pattern = '_ac.csv$', full.names = TRUE, recursive = TRUE)
 for (i in 1:length(files)) {
   # i = 67
-  name_site <- substring(files[i], nchar(files[i])-12, nchar(files[i])-7)
+  name_site <- sub('_ac\\.csv$', '', basename(files[i]))
   print(paste0(i, name_site))
   stat.climate[i, 1] <- name_site        # the last value
   ac <- read.csv(files[i])
   
   # use only the years with qualified data
-  a_measure_night_complete <- read.csv(file.path(dir_rawdata, 'RespirationData', paste0(name_site, '_nightNEE.csv')))
+  night_file <- list.files(file.path('data-proc', 'respiration'), pattern = paste0('^', name_site, '_nightNEE\\.csv$'), full.names = TRUE, recursive = TRUE)
+  a_measure_night_complete <- read.csv(night_file)
   good_years <- unique(a_measure_night_complete$YEAR)
   
   # I have to gap fill TA, TS, and NEE, if needed.
@@ -276,9 +277,9 @@ corrplot(cor(data.spectral.tower[, 2:9]),
 # LAI, GPP are strongly related to NEE_day; try to use this. 
 
 #--------------------------------combine soil, climate, spectral, and thermal response strength data together-------------
-data.TAS_tot <- read.csv(file.path('data', 'outcome_temp.csv'))
+data.TAS_tot <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp.csv'))
 data.TAS_tot <- data.TAS_tot %>% rename("TAS_tot" = "TAS", "TAS_totp" = "TASp")
-data.TAS <- read.csv(file.path('data', 'outcome_temp_water_gpp.csv'))
+data.TAS <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp_water_gpp.csv'))
 
 acclimation <- site_info[, 1:7] %>% left_join(stat.climate[, c(1:8, 18:19)], by = "site_ID") %>% 
   left_join(data.spectral[, c("ID", "EVI", "NDVI", "LAI", "GPP")], by=c("site_ID" = "ID")) %>% 
@@ -288,4 +289,5 @@ acclimation <- site_info[, 1:7] %>% left_join(stat.climate[, c(1:8, 18:19)], by 
 
 #--------------------------------
 # output the data used for identify drivers of thermal acclimation
-write.csv(acclimation, file=file.path('data', 'acclimation_data.csv'), row.names = F)
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+write.csv(acclimation, file=file.path('data-proc', 'analysis', 'acclimation_data.csv'), row.names = F)

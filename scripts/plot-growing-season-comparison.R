@@ -20,16 +20,10 @@ sites <- if (length(sites_arg) == 1) {
 if (length(sites) != 3) stop("Exactly three sites are required.")
 
 project_dir <- normalizePath(".", mustWork = TRUE)
-tern_dir <- file.path(project_dir, "data-raw", "SiteData", "TERN", "unzip")
-icos_dir <- file.path(
-  project_dir,
-  "data-raw",
-  "SiteData",
-  "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1",
-  "unzip"
-)
-feature_tern <- read_csv(file.path(project_dir, "data", "growing_season_feature_TERN.csv"), show_col_types = FALSE)
-feature_icos <- read_csv(file.path(project_dir, "data", "growing_season_feature_ICOS.csv"), show_col_types = FALSE)
+tern_dir <- file.path(project_dir, "data-raw", "TERN")
+icos_dir <- file.path(project_dir, "data-raw", "ICOS")
+feature_tern <- read_csv(file.path(project_dir, "data-proc", "features", "growing_season_feature_TERN.csv"), show_col_types = FALSE)
+feature_icos <- read_csv(file.path(project_dir, "data-proc", "features", "growing_season_feature_ICOS.csv"), show_col_types = FALSE)
 
 find_input <- function(site) {
   pattern <- if (site == "AU-Tum") {
@@ -38,7 +32,7 @@ find_input <- function(site) {
     paste0("^", site, "_ICOS_L2_FLUXNET_HH\\.csv$")
   }
   directory <- if (site == "AU-Tum") tern_dir else icos_dir
-  files <- list.files(directory, pattern = pattern, full.names = TRUE)
+  files <- list.files(directory, pattern = pattern, full.names = TRUE, recursive = TRUE)
   if (length(files) != 1) {
     stop("Expected one normalized input for ", site, "; found ", length(files), ".")
   }

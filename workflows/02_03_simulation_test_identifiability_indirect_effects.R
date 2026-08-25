@@ -18,7 +18,6 @@ rm(list = ls())
 
 set.seed(20260423)
 
-dir.create("data", showWarnings = FALSE)
 dir.create("figures", showWarnings = FALSE)
 
 simulate_scenario <- function(
@@ -219,8 +218,9 @@ summary_results <- do.call(
 summary_results$scenario <- rep(names(split(replicate_results, replicate_results$scenario)), each = 4)
 summary_results <- summary_results[, c("scenario", "component", "target", "truth", "mean_est", "sd_est", "bias", "rmse", "coverage")]
 
-write.csv(replicate_results, file = "data/simulation_identifiability_replications.csv", row.names = FALSE)
-write.csv(summary_results, file = "data/simulation_identifiability_summary.csv", row.names = FALSE)
+dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+write.csv(replicate_results, file = "data-proc/analysis/simulation_identifiability_replications.csv", row.names = FALSE)
+write.csv(summary_results, file = "data-proc/analysis/simulation_identifiability_summary.csv", row.names = FALSE)
 
 plot_panel <- function(df, title_text, apparent_note = FALSE) {
   vals <- list(df$total_est, df$direct_est, df$apparent_est)
@@ -290,8 +290,8 @@ mtext(
 par(op)
 dev.off()
 
-cat("\nSaved replicate-level results to data/simulation_identifiability_replications.csv\n")
-cat("Saved summary results to data/simulation_identifiability_summary.csv\n")
+cat("\nSaved replicate-level results to data-proc/analysis/simulation_identifiability_replications.csv\n")
+cat("Saved summary results to data-proc/analysis/simulation_identifiability_summary.csv\n")
 cat("Saved figure to figures/tas_identifiability_simulation.png\n\n")
 
 print(summary_results)

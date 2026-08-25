@@ -14,6 +14,7 @@ shelf(randomForest, caret, amerifluxr, lubridate, tidyverse, ranger)
 rm(list=ls())
 
 dir_rawdata <- 'data-raw'
+dir_proc <- 'data-proc/soil-temperature'
 
 args <- commandArgs(trailingOnly = TRUE)
 overwrite <- '--overwrite' %in% args
@@ -75,16 +76,17 @@ predict_soil_temp <- function(data, use_NETRAD) {
 }
 
 #-------------Predict soil temperature for 9 Ameriflux sites using the function above
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 
-files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
+files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "Ameriflux"), pattern="^AMF_.*_BASE.*\\.zip$", full.names = TRUE, recursive = TRUE)
 #
 files_ICOS <- list.files(
-  file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"),
+  file.path(dir_rawdata, "ICOS"),
   pattern = "_ICOS_L2_FLUXNET_HH\\.csv$",
-  full.names = TRUE
+  full.names = TRUE,
+  recursive = TRUE
 )
-files_TERN <- list.files(file.path(dir_rawdata, "SiteData", "TERN", "unzip"), pattern="_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE)
+files_TERN <- list.files(file.path(dir_rawdata, "TERN"), pattern="_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE, recursive = TRUE)
 
 # 
 id_estimate_TS <- which(site_info$estimate_Ts == 'YES')
@@ -92,7 +94,14 @@ id_estimate_TS <- which(site_info$estimate_Ts == 'YES')
 
 process_site <- function(name_site, overwrite = FALSE) {
   id <- match(name_site, site_info$site_ID)
-  output_file <- file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv'))
+  output_source <- if (name_site %in% sub('_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$', '', basename(files_TERN))) {
+    'TERN'
+  } else if (name_site %in% sub('_ICOS_L2_FLUXNET_HH\\.csv$', '', basename(files_ICOS))) {
+    'ICOS'
+  } else {
+    'Ameriflux'
+  }
+  output_file <- file.path(dir_proc, output_source, name_site, paste0(name_site, '_TS_rfp.csv'))
   if (!overwrite && file.exists(output_file)) {
     message('Skipping ', name_site, ': output already exists.')
     return(invisible(NULL))
@@ -210,7 +219,7 @@ for (name_site in sites) {
 
 # all R2 should be higher than 0.83. 
 # check TS prediction quality
-# data <- read.csv(file.path('data-raw', 'TS_RandomForest', 'US-Ho2_TS_rfp.csv'))
+# data <- read.csv(file.path('data-proc', 'soil-temperature', 'Ameriflux', 'US-Ho2', 'US-Ho2_TS_rfp.csv'))
 # plot(ymd_hms(data$TIMESTAMP[140000:170000]), data$TS_pred[140000:170000])
 # data %>% group_by(year(TIMESTAMP)) %>% summarise(TS=mean(TS_pred, na.rm=T))
 #
