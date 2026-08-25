@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>US-CMW SWC Ambiguity</title>
+  <style>
+    :root { --bg: #fdfdfd; --fg: #1a1a1a; --accent: #2563eb; --muted: #6b7280; --border: #e5e7eb; --card: #f9fafb; --warn: #92400e; --ok: #166534; }
+    * { box-sizing: border-box; }
+    body { max-width: 920px; margin: 0 auto; padding: 2rem 1.5rem 4rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; color: var(--fg); background: var(--bg); }
+    h1 { font-size: 1.8rem; }
+    h2 { margin-top: 2rem; border-bottom: 2px solid var(--accent); padding-bottom: .25rem; }
+    h3 { margin-top: 1.25rem; color: var(--accent); }
+    p { margin: .6rem 0; }
+    li { margin-bottom: .4rem; }
+    code { padding: .1em .3em; background: #f3f4f6; border-radius: 3px; }
+    pre { overflow-x: auto; padding: 1rem; background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; }
+    .meta { color: var(--muted); }
+    .card { margin: 1rem 0; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+    .pending { border-left: 4px solid var(--warn); }
+    .status { border-left: 4px solid var(--ok); }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+    th { background: var(--card); }
+    img { max-width: 100%; border: 1px solid var(--border); margin: .5rem 0 1rem; }
+  </style>
+</head>
+<body>
+<h1>US-CMW Soil Water Content Ambiguity</h1>
+<p class="meta">Analysis record, reproducible audit, and approval-gated implementation plan</p>
+
+<h2>Issue</h2>
+<p>The AmeriFlux metadata row for <code>US-CMW</code> currently says to use <code>SWC_PI_F_1_1_A</code>.</p>
+<p>The active AmeriFlux workflow reads the configured field literally at <code>01_02b_filter_high_quality_night_respiration_AmeriFlux.R:218-233</code>, interpolates short gaps, and later requires non-missing SWC when preparing the measured nighttime data for the water-mediated model.</p>
+<p>That mapping is ambiguous for two independent reasons.</p>
+<ol>
+  <li><code>SWC_PI_F_1_1_A</code> is not present in the local current US-CMW archive.</li>
+  <li>The archive contains two plausible raw fields, <code>SWC_1_6_1</code> and <code>SWC_1_7_1</code>, but their values differ materially.</li>
+</ol>
+<p>The old field name therefore cannot be treated as a harmless alias, and the two current fields cannot be averaged or substituted without deciding what sensor level and definition the analysis requires.</p>
+
+<div class="card pending">
+  <p><strong>Depth note:</strong> The general AmeriFlux naming convention indicates that <code>SWC_1_6_1</code> and <code>SWC_1_7_1</code> share horizontal profile index 1 and replicate index 1, while their vertical/depth ranks differ (6 versus 7).</p>
+  <p>This suggests that they are measurements at different depths in one soil profile rather than redundant sensors at one depth.</p>
+  <p>The actual US-CMW depths, instrument setup, and any site-specific naming exceptions could not be confirmed from the locally bundled BADM workbook or public site materials.</p>
+</div>
+
+<h2>Evidence</h2>
+<p>The analysis used <code>data-raw/AMF_US-CMW_BASE-BADM_3-5.zip</code>, read with <code>amerifluxr::amf_read_base()</code>.</p>
+<p>The archive contains the 2001&ndash;2021 half-hourly flux file and a BADM workbook, but the workbook has no SWC variable-definition rows that resolve the two field names.</p>
+<p>The audit excludes the existing pre-2001 records because the production workflow truncates US-CMW to <code>YEAR &gt; 2000</code>.</p>
+<table>
+  <tr><th>Option</th><th>Present records</th><th>Fraction present</th><th>Median</th><th>Mean</th><th>Range</th></tr>
+  <tr><td><code>SWC_1_6_1</code></td><td>343,832</td><td>93.39%</td><td>6.54</td><td>6.96</td><td>-1.10 to 22.55</td></tr>
+  <tr><td><code>SWC_1_7_1</code></td><td>343,832</td><td>93.39%</td><td>5.75</td><td>6.16</td><td>0.15 to 28.76</td></tr>
+  <tr><td>Row mean of both</td><td>343,833</td><td>93.39%</td><td>6.44</td><td>6.56</td><td>-0.47 to 23.17</td></tr>
+</table>
+<p>Among 343,831 rows where both fields are present, their correlation is 0.593, the mean value of <code>SWC_1_6_1 - SWC_1_7_1</code> is 0.798, and the fields have different ranges.</p>
+<p>The matching missingness indicates that the difference is not primarily a coverage problem; it is a difference in measurements or processing definitions.</p>
+
+<h2>Figures</h2>
+<p>The scripts are <code>scripts/audit-cmw-swc-options.R</code> and <code>scripts/plot-cmw-swc-options.R</code>.</p>
+<pre><code>Rscript scripts/audit-cmw-swc-options.R
+Rscript scripts/plot-cmw-swc-options.R</code></pre>
+<p>The audit tables are written to <code>data/cmw_swc_option_audit.csv</code> and <code>data/cmw_swc_option_timeseries.csv</code>.</p>
+<p><a href="../figures/cmw-swc-options-overview.png"><img src="../figures/cmw-swc-options-overview.png" alt="US-CMW SWC option time series"></a></p>
+<p><a href="../figures/cmw-swc-options-scatter.png"><img src="../figures/cmw-swc-options-scatter.png" alt="Scatter plot comparing US-CMW SWC fields"></a></p>
+<p><a href="../figures/cmw-swc-options-annual.png"><img src="../figures/cmw-swc-options-annual.png" alt="Annual means for US-CMW SWC options"></a></p>
+
+<h2>How Other Code Handles SWC</h2>
+<ul>
+  <li>AmeriFlux sites generally select one explicit sensor-level field in <code>data/site_info.csv</code>; there is no general cross-sensor averaging rule.</li>
+  <li><code>US-NR1</code> selects a measured SWC field and fills only its missing values from <code>SWC_PI_1</code>.</li>
+  <li><code>US-ChR</code> explicitly uses a deeper SWC field because the first layer is documented as abnormal.</li>
+  <li>Some sites with <code>SWC_use = NO</code> omit measured SWC and <code>02_01b</code> joins daily ERA5-Land soil water content instead.</li>
+  <li>ICOS data use the normalized aggregate field <code>SWC_F_MDS_1</code>; that is a different source convention and should not determine the AmeriFlux sensor choice.</li>
+  <li><code>FR-Pue</code> is a separate exception that reads PI-provided SWC files and applies a documented unit conversion.</li>
+</ul>
+
+<h2>Recommendation</h2>
+<div class="card status">
+  <p>Do not retain the stale <code>SWC_PI_F_1_1_A</code> mapping and do not silently average the two fields.</p>
+  <p>Use <code>SWC_1_6_1</code> for US-CMW for now because its lower vertical index is the shallower candidate.</p>
+  <p>Treat this as a provisional choice until authoritative documentation confirms the actual depths, units, instrument setup, and whether either field is PI gap-filled.</p>
+</div>
+<p>If later documentation contradicts the naming-based depth interpretation, revisit the mapping and consider a sensitivity analysis for <code>SWC_1_6_1</code> and <code>SWC_1_7_1</code>.</p>
+<p>A row-wise mean is available as an exploratory option, but I do not recommend it as the default because it creates a new aggregate variable, obscures the sensor-depth meaning, and is not how the other AmeriFlux sites are currently handled.</p>
+
+<h2>Implementation Plan</h2>
+<div class="card pending">
+  <ol>
+    <li>Confirm the definitions and actual depths of <code>SWC_1_6_1</code> and <code>SWC_1_7_1</code> using authoritative US-CMW source documentation.</li>
+    <li>Record the provisional selection of <code>SWC_1_6_1</code>, the unresolved depth evidence, and the rationale in the project metadata and relevant workflow documentation.</li>
+    <li>Keep the demonstration metadata unchanged unless it is explicitly intended to remain synchronized with the active site metadata.</li>
+    <li>Add a focused validation that fails clearly when the configured SWC field is absent from the archive, rather than allowing a stale mapping to fail later.</li>
+    <li>Run the AmeriFlux workflow for US-CMW with overwrite enabled and inspect coverage, missingness, and the resulting nighttime SWC records.</li>
+    <li>Rerun the water-mediated downstream model for US-CMW and compare its results with the prior output where that comparison is meaningful.</li>
+    <li>Run syntax checks and review the generated aggregate outputs for duplicate or stale US-CMW rows.</li>
+    <li>Document the final decision and verification results here.</li>
+  </ol>
+</div>
+<p><strong>Current status:</strong> The analysis, audit scripts, and figures are complete. The active metadata now maps US-CMW to the provisional shallower candidate <code>SWC_1_6_1</code>; no workflow code has been changed.</p>
+<p><strong>Follow-up:</strong> Verify the actual sensor depths and setup from BADM, the AmeriFlux Variable Info tool, or the site PI, then revise the mapping if needed.</p>
+</body>
+</html>
