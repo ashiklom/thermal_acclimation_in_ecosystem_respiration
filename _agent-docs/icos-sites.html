@@ -67,6 +67,37 @@
 <p>Without a site argument, the scripts process all eligible sites. Existing per-site outputs and aggregate feature rows are skipped unless <code>--overwrite</code> is supplied.</p>
   <p>The two respiration outputs are written to <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code>; growing-season features are written to the source-specific ICOS, TERN, or AmeriFlux CSV.</p>
 
+<h2>FLUXNET-Only Sites (Not in ICOS)</h2>
+
+<p>19 sites in <code>site_info.csv</code> belong to regional flux networks that contribute to FLUXNET synthesis
+but are not ICOS Ecosystem Tower sites. The ICOS downloader cannot access them;
+the FLUXNET Shuttle (<code>92-download-fluxnet.sh</code>) must be used instead.</p>
+
+<table>
+  <tr><th>Site</th><th>Country</th><th>Source</th><th>Network</th><th>estimate_Ts</th></tr>
+  <tr><td>CH-Lae</td><td>Switzerland</td><td>FLUXNET2025</td><td>Swiss FluxNet, CarboEurope IP</td><td>NO</td></tr>
+  <tr><td>CH-Aws</td><td>Switzerland</td><td>FLUXNET2025</td><td>Swiss FluxNet</td><td>NO</td></tr>
+  <tr><td>CH-Fru</td><td>Switzerland</td><td>FLUXNET2025</td><td>Swiss FluxNet, CarboExtreme, GHG-Europe</td><td>NO</td></tr>
+  <tr><td>CZ-RAJ</td><td>Czech Republic</td><td>FLUXNET2025</td><td>CzechGlobe</td><td>YES</td></tr>
+  <tr><td>CZ-Stn</td><td>Czech Republic</td><td>FLUXNET2025</td><td>CzechGlobe</td><td>NO</td></tr>
+  <tr><td>DE-Gri</td><td>Germany</td><td>FLUXNET2020_FLUXNET2025</td><td>CarboEuropeIP</td><td>NO</td></tr>
+  <tr><td>DE-Hai</td><td>Germany</td><td>FLUXNET2025</td><td>CarboEuropeIP</td><td>NO</td></tr>
+  <tr><td>DE-Obe</td><td>Germany</td><td>FLUXNET2025</td><td>CarboEuropeIP</td><td>NO</td></tr>
+  <tr><td>DE-Akm</td><td>Germany</td><td>FLUXNET2025</td><td>CarboEuropeIP, Carbomont, GHG-Europe</td><td>YES</td></tr>
+  <tr><td>DE-Hte</td><td>Germany</td><td>FLUXNET2025</td><td>German FluxNet</td><td>YES</td></tr>
+  <tr><td>DE-RuC</td><td>Germany</td><td>FLUXNET2025</td><td>German FluxNet</td><td>NO</td></tr>
+  <tr><td>DE-SfS</td><td>Germany</td><td>FLUXNET2025</td><td>German FluxNet</td><td>NO</td></tr>
+  <tr><td>ES-LJu</td><td>Spain</td><td>FLUXNET2025</td><td>Spanish FluxNet</td><td>NO</td></tr>
+  <tr><td>FI-Sod</td><td>Finland</td><td>FLUXNET2015</td><td>Finnish FluxNet</td><td>NO</td></tr>
+  <tr><td>FR-Pue</td><td>France</td><td>FLUXNET2025</td><td>French FluxNet</td><td>YES</td></tr>
+  <tr><td>IL-Yat</td><td>Israel</td><td>FLUXNET2025</td><td>Israel FluxNet</td><td>NO</td></tr>
+  <tr><td>IT-SRo</td><td>Italy</td><td>FLUXNET2015</td><td>Italian FluxNet</td><td>NO</td></tr>
+  <tr><td>RU-Fyo</td><td>Russia</td><td>FLUXNET2025</td><td>Russian FluxNet</td><td>NO</td></tr>
+  <tr><td>ZA-Kru</td><td>South Africa</td><td>FLUXNET2015</td><td>South African FluxNet</td><td>NO</td></tr>
+</table>
+
+<p>These 19 sites are not processed by the current pipelines and are silently skipped during workflow execution.</p>
+
 <h2>Known Limitations</h2>
 <ul>
   <li><code>icoscp</code> selects the first object returned for each datatype; the API ordering should be checked if multiple product versions are available.</li>

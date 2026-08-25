@@ -43,6 +43,65 @@
   <li>The worktree already contains untracked ICOS/TERN feature CSVs and a comparison figure; these pre-existing files will not be reverted or modified unless the implementation requires it.</li>
 </ul>
 
+<h2>Data Source Inventory (2026-08-25)</h2>
+
+<p><code>data-core/site_info.csv</code> contains 118 sites across six source categories.
+Three pipelines (AmeriFlux, ICOS, TERN) cover 98 sites; 19 FLUXNET-only sites still need downloading.</p>
+
+<h3>Raw Data Status</h3>
+<table>
+  <tr><th>Source</th><th>Sites in site_info</th><th>Raw data present</th><th>Missing</th></tr>
+  <tr><td>AmeriFlux_BASE</td><td>71</td><td>71</td><td>0</td></tr>
+  <tr><td>ICOS (normalized L2)</td><td>26</td><td>26</td><td>0</td></tr>
+  <tr><td>TERN</td><td>1 (AU-Tum)</td><td>1</td><td>0</td></tr>
+  <tr><td>FLUXNET2025_ICOS2025</td><td>14</td><td>14 (via ICOS)</td><td>0</td></tr>
+  <tr><td>FLUXNET2015</td><td>5</td><td>0</td><td>5</td></tr>
+  <tr><td>FLUXNET2025</td><td>13</td><td>0</td><td>13</td></tr>
+  <tr><td>FLUXNET2020_FLUXNET2025</td><td>1</td><td>0</td><td>1</td></tr>
+</table>
+
+<h3>FLUXNET-Only Sites (19 sites needing download)</h3>
+<p>These sites belong to regional flux networks (Swiss FluxNet, CarboEuropeIP, CzechGlobe, etc.)
+that contribute to FLUXNET synthesis but are not ICOS Ecosystem Tower sites.
+The ICOS downloader (<code>93-download-icos.py</code>) cannot access them;
+the FLUXNET Shuttle (<code>92-download-fluxnet.sh</code>) is the correct tool.</p>
+<table>
+  <tr><th>Site</th><th>Country</th><th>Source</th><th>Network</th><th>estimate_Ts</th></tr>
+  <tr><td>CH-Lae</td><td>Switzerland</td><td>FLUXNET2025</td><td>Swiss FluxNet, CarboEurope IP</td><td>NO</td></tr>
+  <tr><td>CH-Aws</td><td>Switzerland</td><td>FLUXNET2025</td><td>Swiss FluxNet</td><td>NO</td></tr>
+  <tr><td>CH-Fru</td><td>Switzerland</td><td>FLUXNET2025</td><td>Swiss FluxNet, CarboExtreme, GHG-Europe</td><td>NO</td></tr>
+  <tr><td>CZ-RAJ</td><td>Czech Republic</td><td>FLUXNET2025</td><td>CzechGlobe</td><td>YES</td></tr>
+  <tr><td>CZ-Stn</td><td>Czech Republic</td><td>FLUXNET2025</td><td>CzechGlobe</td><td>NO</td></tr>
+  <tr><td>DE-Gri</td><td>Germany</td><td>FLUXNET2020_FLUXNET2025</td><td>CarboEuropeIP</td><td>NO</td></tr>
+  <tr><td>DE-Hai</td><td>Germany</td><td>FLUXNET2025</td><td>CarboEuropeIP</td><td>NO</td></tr>
+  <tr><td>DE-Obe</td><td>Germany</td><td>FLUXNET2025</td><td>CarboEuropeIP</td><td>NO</td></tr>
+  <tr><td>DE-Akm</td><td>Germany</td><td>FLUXNET2025</td><td>CarboEuropeIP, Carbomont, GHG-Europe</td><td>YES</td></tr>
+  <tr><td>DE-Hte</td><td>Germany</td><td>FLUXNET2025</td><td>German FluxNet</td><td>YES</td></tr>
+  <tr><td>DE-RuC</td><td>Germany</td><td>FLUXNET2025</td><td>German FluxNet</td><td>NO</td></tr>
+  <tr><td>DE-SfS</td><td>Germany</td><td>FLUXNET2025</td><td>German FluxNet</td><td>NO</td></tr>
+  <tr><td>ES-LJu</td><td>Spain</td><td>FLUXNET2025</td><td>Spanish FluxNet</td><td>NO</td></tr>
+  <tr><td>FI-Sod</td><td>Finland</td><td>FLUXNET2015</td><td>Finnish FluxNet</td><td>NO</td></tr>
+  <tr><td>FR-Pue</td><td>France</td><td>FLUXNET2025</td><td>French FluxNet</td><td>YES</td></tr>
+  <tr><td>IL-Yat</td><td>Israel</td><td>FLUXNET2025</td><td>Israel FluxNet</td><td>NO</td></tr>
+  <tr><td>IT-SRo</td><td>Italy</td><td>FLUXNET2015</td><td>Italian FluxNet</td><td>NO</td></tr>
+  <tr><td>RU-Fyo</td><td>Russia</td><td>FLUXNET2025</td><td>Russian FluxNet</td><td>NO</td></tr>
+  <tr><td>ZA-Kru</td><td>South Africa</td><td>FLUXNET2015</td><td>South African FluxNet</td><td>NO</td></tr>
+</table>
+
+<p>Of these 19 sites, 4 have <code>estimate_Ts=YES</code> (CZ-RAJ, DE-Akm, DE-Hte, FR-Pue),
+meaning they require soil temperature estimation in step 01_01 after download.</p>
+
+<h3>Processed Data Status</h3>
+<table>
+  <tr><th>Artifact</th><th>Status</th></tr>
+  <tr><td>growing_season_feature_ICOS.csv</td><td>26 sites complete</td></tr>
+  <tr><td>growing_season_feature_TERN.csv</td><td>1 site (AU-Tum) complete</td></tr>
+  <tr><td>growing_season_feature_AmeriFlux.csv</td><td>Not yet generated (requires 01_02b)</td></tr>
+  <tr><td>Per-site soil-temperature predictions</td><td>9 AmeriFlux, 5 ICOS, 1 TERN</td></tr>
+  <tr><td>Per-site respiration files</td><td>1 (US-Ha1 AmeriFlux only)</td></tr>
+  <tr><td>cross_site_priors_total.rds</td><td>Not yet generated (requires all features)</td></tr>
+</table>
+
 <h2>Implementation Plan</h2>
 <ol>
   <li>Update source dispatch and site selection so the supported branches are explicitly AmeriFlux, ICOS, and TERN, with validation that rejects legacy FLUXNET source values.</li>

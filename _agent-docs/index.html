@@ -145,6 +145,30 @@
     The referenced scripts <code>01_02a</code> was later deleted and replaced by <code>01_02c</code>/<code>01_02d</code>,
     but the refactor pattern and CLI interface remain the same.</p>
   </li>
+
+  <li class="file-item">
+    <h3><a href="workflow-description.html">Workflow Description</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Comprehensive description of the full pipeline (Steps 01&ndash;04).
+    Updated to reflect the current three-source architecture (<code>01_02b</code> AmeriFlux, <code>01_02c</code> ICOS, <code>01_02d</code> TERN)
+    and the <code>data-proc/</code> directory layout. Historical context about the legacy <code>01_02a</code> (EuroFlux) workflow is preserved.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="workflow-improvements.html">Workflow Improvements</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Tiered improvement recommendations for the pipeline.
+    Updated to reference the current scripts (<code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>).
+    Historical context about the legacy <code>01_02a</code> is preserved in the document.</p>
+  </li>
+
+  <li class="file-item">
+    <h3><a href="icos-data.html">ICOS Level-2 Data Downloader</a></h3>
+    <span class="tag tag-current">Current</span>
+    <p>Detailed documentation of the ICOS downloader (<code>93-download-icos.py</code>).
+    Updated to reference <code>01_02c</code> and the <code>data-raw/ICOS/</code> directory layout.
+    The downloader documentation (columns, API, authentication) remains accurate.</p>
+  </li>
 </ul>
 
 <!-- ============================================================ -->
@@ -153,35 +177,6 @@
 They remain useful as historical context or for information that hasn't changed.</p>
 
 <ul class="file-list">
-  <li class="file-item">
-    <h3><a href="workflow-description.html">Workflow Description</a></h3>
-    <span class="tag tag-outdated">Outdated</span>
-    <p>Comprehensive description of the full pipeline (Steps 01&ndash;04).
-    <strong>Outdated aspects:</strong> References the deleted <code>01_02a</code> (EuroFlux) workflow as a live script
-    and lists <code>growing_season_feature_EuropFlux.csv</code> as a current output.
-    The current architecture uses <code>01_02c</code> (ICOS), <code>01_02d</code> (TERN), and <code>01_02b</code> (AmeriFlux)
-    with source-specific feature aggregates.
-    Steps 02&ndash;04 descriptions remain accurate.</p>
-  </li>
-
-  <li class="file-item">
-    <h3><a href="workflow-improvements.html">Workflow Improvements</a></h3>
-    <span class="tag tag-outdated">Outdated</span>
-    <p>Tiered improvement recommendations for the pipeline.
-    <strong>Outdated aspects:</strong> Many item references cite the deleted <code>01_02a</code> script
-    (e.g., line numbers, function extraction targets, merge suggestions).
-    The improvement recommendations themselves are still valid for the remaining scripts
-    (<code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>), but file-name references need updating.</p>
-  </li>
-
-  <li class="file-item">
-    <h3><a href="icos-data.html">ICOS Level-2 Data Downloader</a></h3>
-    <span class="tag tag-outdated">Outdated</span>
-    <p>Detailed documentation of the ICOS downloader (<code>93-download-icos.py</code>).
-    <strong>Outdated aspects:</strong> References the deleted <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>
-    in the workflow compatibility section.
-    The downloader documentation itself (columns, API, authentication) remains accurate.</p>
-  </li>
 </ul>
 
 <!-- ============================================================ -->
@@ -244,11 +239,6 @@ They remain useful as historical context or for information that hasn't changed.
 <ul>
   <li><code>dl-process-tern.html</code> line 98: unclosed <code>&lt;pre&gt;&lt;code&gt;</code> tag
   (missing <code>&lt;/code&gt;&lt;/pre&gt;</code> before line 100).</li>
-  <li><code>workflow-description.html</code>: references deleted <code>01_02a</code> and
-  <code>growing_season_feature_EuropFlux.csv</code> as current.</li>
-  <li><code>icos-data.html</code>: references deleted <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>.</li>
-  <li><code>workflow-improvements.html</code>: many item references cite deleted <code>01_02a</code>
-  (line numbers, file targets, merge suggestions).</li>
 </ul>
 
 </body>

@@ -106,6 +106,13 @@
   <span class="tier-tag">Completed</span>
   <p><strong>Recent baseline changes:</strong> Workflow 01 now supports per-site execution, skip behavior, aggregate-row replacement during overwrite runs, and explicit site validation.</p>
   <p>The major R workflows now use the repository-relative <code>data-raw</code> input path instead of machine-specific absolute paths.</p>
+  <p><strong>Data reorganization (Aug 2026):</strong> The legacy <code>01_02a</code> script (EuroFlux/FLUXNET) was deleted.
+    ICOS and TERN data were reorganized into source-specific directories (<code>data-raw/{ICOS,TERN}/</code>),
+    and the processing was split into <code>01_02c</code> (ICOS-only) and <code>01_02d</code> (TERN-only).
+    The directory structure moved from <code>data-raw/SiteData/</code> to <code>data-raw/{Ameriflux,ICOS,TERN}/</code>
+    and from <code>data-raw/RespirationData/</code> to <code>data-proc/respiration/{source}/{site}/</code>.
+    References to <code>01_02a</code> in the recommendations below are historical; many improvements
+    still apply to the current <code>01_02b</code>, <code>01_02c</code>, and <code>01_02d</code> scripts.</p>
 </div>
 
 <nav class="toc">
@@ -146,7 +153,7 @@
     </p>
     <div class="item-files">
       <code>01_01</code> lines 188&ndash;190,
-      <code>01_02a</code> lines 170&ndash;177,
+      <code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code> (commented-out debug code),
       <code>03_01</code> lines 217&ndash;230
     </div>
   </div>
@@ -223,7 +230,7 @@
     <table>
       <tr><th>File</th><th>Value</th><th>Meaning</th></tr>
       <tr><td><code>01_01</code></td><td><code>60000</code></td><td>Max RF training samples</td></tr>
-      <tr><td><code>01_02a/b</code></td><td><code>14</code></td><td>Gap threshold (days)</td></tr>
+      <tr><td><code>01_02b/c/d</code></td><td><code>14</code></td><td>Gap threshold (days)</td></tr>
       <tr><td><code>02_01a/b</code></td><td><code>14</code></td><td>Window size (days)</td></tr>
       <tr><td><code>02_01a/b</code></td><td><code>100</code>, <code>60</code></td><td>Min observation thresholds</td></tr>
       <tr><td><code>02_01a/b</code></td><td><code>24</code></td><td>Max window extension (days)</td></tr>
@@ -275,33 +282,34 @@
     <div class="item-title">Extract data-source file lookup into a function</div>
     <p>
       The pattern of splitting <code>data_source</code> by <code>_</code> and dispatching to
-      the correct file list appears ~4 times across <code>01_01</code>, <code>01_02a</code>,
-      and <code>01_02b</code>.
+      the correct file list appears in <code>01_01</code>.
+      The source-specific scripts (<code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>) no longer need this
+      since each handles one source exclusively.
     </p>
     <pre><code>get_data_files <- function(data_source, file_lists) {
   parts <- strsplit(data_source, "_")[[1]]
   Reduce(union, lapply(parts, function(p) file_lists[[p]]))
 }</code></pre>
-    <div class="item-files"><code>01_01</code>, <code>01_02a</code>, <code>01_02b</code></div>
+    <div class="item-files"><code>01_01</code></div>
   </div>
 
   <div class="item">
     <div class="item-title">Extract growing-season gap detection into a function</div>
     <p>
       The ~20-line block that identifies growing-season gaps and computes per-year completeness
-      is copy-pasted between <code>01_02a</code> and <code>01_02b</code>.
+      is duplicated across <code>01_02b</code>, <code>01_02c</code>, and <code>01_02d</code>.
     </p>
     <pre><code>detect_growing_season_gaps <- function(ac, growing_season_dates, gap_threshold) {
   # ... shared logic ...
 }</code></pre>
-    <div class="item-files"><code>01_02a</code> lines 220&ndash;249, <code>01_02b</code> lines 395&ndash;425</div>
+    <div class="item-files"><code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code></div>
   </div>
 
   <div class="item">
     <div class="item-title">Extract years-to-remove parsing into a function</div>
     <p>
       The string-parsing logic that converts <code>"2005,2008:2010"</code> into a numeric vector
-      is duplicated between <code>01_02a</code> and <code>01_02b</code>.
+      is duplicated between <code>01_02b</code>, <code>01_02c</code>, and <code>01_02d</code>.
     </p>
     <pre><code>parse_years_to_remove <- function(year_str) {
   parts <- strsplit(year_str, ",")[[1]]
@@ -314,7 +322,7 @@
     }
   }))
 }</code></pre>
-    <div class="item-files"><code>01_02a</code> lines 264&ndash;277, <code>01_02b</code> lines 440&ndash;453</div>
+    <div class="item-files"><code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code></div>
   </div>
 
   <div class="item">
@@ -373,17 +381,17 @@
       causing <code>read.csv("")</code> to fail with a confusing error.
       Check length and skip with a warning.
     </p>
-    <div class="item-files"><code>01_01</code>, <code>01_02a</code>, <code>01_02b</code>, <code>02_01a</code>, <code>02_01b</code></div>
+    <div class="item-files"><code>01_01</code>, <code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>, <code>02_01a</code>, <code>02_01b</code></div>
   </div>
 
   <div class="item">
     <div class="item-title">Add bounds checking on computed indices</div>
     <p>
       <code>01_01</code> line 114 computes <code>irow_start</code> without bounds checking;
-      <code>01_02a</code> line 187 indexes <code>tmp$DOY[7]</code> assuming at least 7 elements exist.
+      the source-specific scripts (<code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>) may have similar issues with row indexing.
       Add guards: <code>if (nrow(tmp) &lt; 7) next</code>.
     </p>
-    <div class="item-files"><code>01_01</code>, <code>01_02a</code></div>
+    <div class="item-files"><code>01_01</code>, <code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code></div>
   </div>
 
   <div class="item">
@@ -414,7 +422,7 @@
       <code>site_info$SWC_use</code>, <code>site_info$years2remove</code> exist.
       Add <code>stopifnot()</code> or check with <code>%in%</code> before use.
     </p>
-    <div class="item-files"><code>01_02a</code>, <code>01_02b</code>, <code>02_01a</code>, <code>02_01b</code></div>
+    <div class="item-files"><code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>, <code>02_01a</code>, <code>02_01b</code></div>
   </div>
 
   <div class="item">
@@ -458,12 +466,15 @@
   </div>
 
   <div class="item">
-    <div class="item-title">Merge <code>01_02a</code> and <code>01_02b</code> into a single parameterized script</div>
+    <div class="item-title">Merge <code>01_02b</code>, <code>01_02c</code>, and <code>01_02d</code> into a single parameterized script</div>
     <p>
-      Same situation: ~80% identical code with the difference being which ancillary variables to retain.
-      Parameterize by <code>retain_extra_vars = TRUE/FALSE</code>.
+      Same situation: ~80% identical code with the difference being which source to process and
+      which ancillary variables to retain.
+      Parameterize by source type and <code>retain_extra_vars = TRUE/FALSE</code>.
+      The legacy <code>01_02a</code> and <code>01_02b</code> pair was partially resolved by splitting into
+      source-specific scripts, but the underlying duplication remains across all three current scripts.
     </p>
-    <div class="item-files"><code>01_02a</code>, <code>01_02b</code></div>
+    <div class="item-files"><code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code></div>
   </div>
 
   <div class="item">
@@ -475,7 +486,7 @@
       with <code>data.frame(matrix(NA, nrow = n_sites * n_windows, ncol = ...))</code>.
     </p>
     <div class="item-files">
-      <code>01_02a</code> line 235,
+      <code>01_02b</code>, <code>01_02c</code>, <code>01_02d</code>,
       <code>02_01a</code> lines 258, 298,
       <code>02_01b</code> (similar pattern)
     </div>
@@ -616,7 +627,13 @@ list(
     <td>Trivial; each site trains its own RF on its own data</td>
   </tr>
   <tr>
-    <td><code>01_02a</code></td>
+    <td><code>01_02c</code></td>
+    <td style="color: var(--green); font-weight: 600;">Yes</td>
+    <td>None</td>
+    <td>Trivial gather of <code>feature_gs</code> at end (one row per site)</td>
+  </tr>
+  <tr>
+    <td><code>01_02d</code></td>
     <td style="color: var(--green); font-weight: 600;">Yes</td>
     <td>None</td>
     <td>Trivial gather of <code>feature_gs</code> at end (one row per site)</td>

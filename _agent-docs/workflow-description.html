@@ -89,7 +89,7 @@
 
 <p>
   This pipeline estimates how ecosystem respiration (ER) acclimates to temperature changes and projects future ER under climate warming.
-  It processes FLUXNET/AmeriFlux eddy covariance data through four sequential stages: data preparation, thermal acclimation estimation,
+  It processes eddy covariance data from AmeriFlux, ICOS, and TERN through four sequential stages: data preparation, thermal acclimation estimation,
   driver identification, and future prediction.
 </p>
 
@@ -98,8 +98,9 @@
 <div class="flow-diagram">
 Step 01: Data Preparation
   |-- 01_01: Estimate missing soil temperatures via Random Forest
-  |-- 01_02a: Quality-control nighttime NEE (EuroFlux/ICOS sources)
-  '-- 01_02b: Quality-control nighttime NEE (AmeriFlux sources)
+  |-- 01_02b: Quality-control nighttime NEE (AmeriFlux sources)
+  |-- 01_02c: Quality-control nighttime NEE (ICOS sources)
+  '-- 01_02d: Quality-control nighttime NEE (TERN sources)
            |
            v
 Step 02: Thermal Acclimation Estimation
@@ -120,14 +121,15 @@ Step 04: Future Projections
 </div>
 
 <!-- ============================================================ -->
-<h2>Data Sources &amp; the Two-Pipeline Architecture</h2>
+<h2>Data Sources &amp; the Three-Pipeline Architecture</h2>
 
 <p>
-  The pipeline processes eddy covariance data from multiple international flux tower networks.
+  The pipeline processes eddy covariance data from three flux tower networks:
+  AmeriFlux, ICOS, and TERN.
   Each source provides data in different formats, with different column naming conventions and
   quality control standards.
-  The scripts handle these differences through a dispatch mechanism keyed on the
-  <code>source</code> column in <code>data/site_info.csv</code>.
+  The scripts handle these differences through source-specific processing pipelines.
+  Site metadata is stored in <code>data-core/site_info.csv</code>.
 </p>
 
 <h3>Supported Data Sources</h3>
@@ -142,66 +144,63 @@ Step 04: Future Projections
   </tr>
   <tr>
     <td><code>AmeriFlux_BASE</code></td>
-    <td><code>data-raw/SiteData/AmeriFlux_BASE/</code></td>
-    <td><code>.zip</code></td>
+    <td><code>data-raw/Ameriflux/</code></td>
+    <td><code>AMF_*_BASE_*.zip</code></td>
     <td>Site-specific (see below)</td>
-    <td>Read via <code>amerifluxr::amf_read_base()</code>; raw FC, requires u* filtering</td>
+    <td>Read via <code>amerifluxr::amf_read_base()</code>; raw FC, requires u* filtering. Processed by <code>01_02b</code>.</td>
   </tr>
   <tr>
-    <td><code>FLUXNET2015</code></td>
-    <td><code>data-raw/SiteData/FLUXNET2015/unzip/</code></td>
-    <td><code>_FLUXNET2015_FULLSET_(HH|HR)_</code></td>
-    <td>Standardized (<code>TS_F_MDS_1</code>, etc.)</td>
-    <td>Half-hourly or hourly; pre-processed u* and gap-filling</td>
+    <td><code>ICOS</code></td>
+    <td><code>data-raw/ICOS/</code></td>
+    <td><code>{site}_ICOS_L2_FLUXNET_HH.csv</code></td>
+    <td>Normalized (<code>TA_F_MDS</code>, <code>TS_F_MDS_1</code>, etc.)</td>
+    <td>Normalized by <code>93-download-icos.py</code> from ICOS ETC L2 products. Processed by <code>01_02c</code>.</td>
   </tr>
   <tr>
-    <td><code>FLUXNET2020</code></td>
-    <td><code>data-raw/SiteData/FLUXNET2020/unzip/</code></td>
-    <td><code>_FLUXNET2015_FULLSET_(HH|HR)_</code></td>
-    <td>Standardized (same as 2015)</td>
-    <td>Retains FLUXNET2015 file naming convention despite being 2020 release</td>
-  </tr>
-  <tr>
-    <td><code>FLUXNET2025</code></td>
-    <td><code>data-raw/SiteData/FLUXNET07202025/unzip/</code></td>
-    <td><code>.csv</code></td>
-    <td>Standardized (same convention)</td>
-    <td>Most recent FLUXNET release; used for European sites</td>
-  </tr>
-  <tr>
-    <td><code>ICOS2020</code></td>
-    <td><code>data-raw/SiteData/ICOS_after2020/</code></td>
-    <td><code>.csv</code></td>
-    <td>Standardized</td>
-    <td>Used only in 01_01 (soil temp estimation), not in main QC pipeline</td>
-  </tr>
-  <tr>
-    <td><code>ICOS2025</code></td>
-    <td><code>data-raw/SiteData/Ecosystem final quality...release 2025-1/unzip/</code></td>
-    <td><code>.csv</code></td>
-    <td>Standardized</td>
-    <td>Normalized by <code>93-download-icos.py</code>; paired with FLUXNET2025 only when configured in <code>site_info</code></td>
+    <td><code>TERN</code></td>
+    <td><code>data-raw/TERN/</code></td>
+    <td><code>{site}_TERN_L3_FLUXNET_HH.csv</code></td>
+    <td>Normalized (same convention as ICOS)</td>
+    <td>Normalized by <code>94-download-tern.py</code> from TERN API. Processed by <code>01_02d</code>.</td>
   </tr>
 </table>
+
+<p class="meta">
+  Historical note: the pipeline originally supported FLUXNET2015, FLUXNET2020, FLUXNET2025, ICOS2020, and ICOS2025 as separate source keys with a compound dispatch mechanism.
+  The legacy <code>01_02a</code> workflow processed EuroFlux/ICOS sources using FLUXNET-era file layouts.
+  That workflow has been deleted and replaced by <code>01_02c</code> (ICOS-only) and <code>01_02d</code> (TERN-only),
+  which consume normalized files under the current <code>data-raw/{ICOS,TERN}/</code> directories.
+</p>
+
+<h3>FLUXNET-Only Sites (19 sites not yet downloaded)</h3>
+
+<p>
+  19 sites in <code>site_info.csv</code> belong to regional flux networks (Swiss FluxNet, CarboEuropeIP, CzechGlobe, etc.)
+  that contribute to FLUXNET synthesis but are not ICOS Ecosystem Tower sites.
+  These sites are listed with <code>source</code> values like <code>FLUXNET2025</code> or <code>FLUXNET2015</code>
+  and do not have data in <code>data-raw/ICOS/</code> or <code>data-raw/TERN/</code>.
+  They must be downloaded via the FLUXNET Shuttle (<code>92-download-fluxnet.sh</code>)
+  and are not processed by the current <code>01_02b</code>/<code>01_02c</code>/<code>01_02d</code> pipelines.
+</p>
+
+<p>Sites: CH-Lae, CH-Aws, CH-Fru, CZ-RAJ, CZ-Stn, DE-Gri, DE-Hai, DE-Obe, DE-Akm, DE-Hte, DE-RuC, DE-SfS, ES-LJu, FI-Sod, FR-Pue, IL-Yat, IT-SRo, RU-Fyo, ZA-Kru.</p>
 
 <h3>Source Dispatch Mechanism</h3>
 
 <p>
-  The <code>source</code> field in <code>site_info.csv</code> can be a single source
-  (e.g., <code>AmeriFlux_BASE</code>) or a compound value with sources joined by underscores
-  (e.g., <code>FLUXNET2025_ICOS2025</code>).
-  The dispatch logic splits on <code>_</code> and iterates over components to locate the
-  correct file list:
+  <code>01_01</code> dispatches to the correct input file list based on the <code>source</code> field
+  in <code>site_info.csv</code> and the presence of normalized ICOS or TERN files.
+  The source-specific <code>01_02b</code>, <code>01_02c</code>, and <code>01_02d</code> scripts each
+  handle one source exclusively and do not share dispatch logic.
 </p>
 
-<pre><code># Typical dispatch pattern (01_01, 01_02a)
-data_source <- unlist(strsplit(site_info$source[id], "_"))
-for (isource in seq_along(data_source)) {
-  if (data_source[isource] == "FLUXNET2015")  files <- files_FLUXNET2015
-  else if (data_source[isource] == "FLUXNET2020")  files <- files_FLUXNET2020
-  else if (data_source[isource] == "ICOS2020")     files <- files_ICOS_after2020
-  else if (data_source[isource] == "FLUXNET2025")  files <- files_FLUXNET2025
-  else if (data_source[isource] == "ICOS2025")     files <- files_ICOS2025
+<pre><code># 01_01 dispatches to AmeriFlux, ICOS, or TERN input files
+if (site_info$source[id] == "AmeriFlux_BASE") {
+  input_files <- files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)]
+} else if (name_site %in% icos_sites) {
+  # ICOS: read normalized file from data-raw/ICOS/
+} else if (name_site %in% tern_sites) {
+  # TERN: read normalized file from data-raw/TERN/
 }</code></pre>
 
 <p>
@@ -209,44 +208,43 @@ for (isource in seq_along(data_source)) {
   and branch into a separate code path.
 </p>
 
-<h3>Multi-Source Concatenation</h3>
-
-<p>
-  Sites with compound source values (e.g., <code>FLUXNET2025_ICOS2025</code>) have their
-  data files read separately and concatenated chronologically.
-  Overlapping records are handled by matching on <code>TIMESTAMP_START</code>:
-</p>
-
-<pre><code># Concatenate ICOS data after FLUXNET2025 data
-irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
-a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])</code></pre>
-
-<h3>Two Parallel Pipelines: EuroFlux vs. AmeriFlux</h3>
+<h3>Three Source-Specific Pipelines</h3>
 
 <div class="note">
-  <strong>Key architectural detail:</strong> <code>01_02a</code> and <code>01_02b</code> are <em>not</em>
-  model-variant pairs &mdash; they are <strong>source-specific pipelines</strong> that happen to produce
-  the same output format. <code>01_02a</code> processes EuroFlux/ICOS sources; <code>01_02b</code>
-  processes AmeriFlux sources. They share no common processing code despite ~80% structural similarity.
+  <strong>Key architectural detail:</strong> the original pipeline used <code>01_02a</code> (EuroFlux/ICOS) and <code>01_02b</code> (AmeriFlux) as two source-specific pipelines.
+  After the data-directory reorganization, <code>01_02a</code> was deleted and replaced by
+  <code>01_02c</code> (ICOS-only) and <code>01_02d</code> (TERN-only).
+  The current Step 01 has <strong>three independent source-specific pipelines</strong>, each producing the same output schema.
 </div>
 
 <table>
   <tr>
     <th>Script</th>
-    <th>Sources Processed</th>
-    <th>Key Differences</th>
-  </tr>
-  <tr>
-    <td><code>01_02a</code></td>
-    <td>FLUXNET2015, FLUXNET2020, FLUXNET2025, ICOS2025</td>
-    <td>Standardized column names; QC flags from dataset; <code>NIGHT</code> column provided; no u* filtering needed (pre-processed)</td>
+    <th>Source</th>
+    <th>Key Characteristics</th>
   </tr>
   <tr>
     <td><code>01_02b</code></td>
     <td>AmeriFlux_BASE</td>
     <td>Site-specific column names via <code>site_info</code> config; computes nighttime via <code>suncalc</code>; performs REddyProc u* threshold estimation and NEE gap-filling; extensive site-specific sensor corrections</td>
   </tr>
+  <tr>
+    <td><code>01_02c</code></td>
+    <td>ICOS (normalized L2)</td>
+    <td>Standardized column names from <code>93-download-icos.py</code>; QC flags from dataset; <code>NIGHT</code> column provided; no u* filtering needed (pre-processed)</td>
+  </tr>
+  <tr>
+    <td><code>01_02d</code></td>
+    <td>TERN (normalized L3)</td>
+    <td>Standardized column names from <code>94-download-tern.py</code>; similar to ICOS pipeline; uses measured TERN soil temperature directly</td>
+  </tr>
 </table>
+
+<p class="meta">
+  Historical note: the original <code>01_02a</code> script handled FLUXNET2015/2020/2025 and ICOS2025 sources via compound source dispatch, concatenating data from multiple FLUXNET-era file layouts.
+  It was deleted once the ICOS-only (<code>01_02c</code>) and TERN-only (<code>01_02d</code>) pipelines were implemented and the legacy FLUXNET file layouts were no longer referenced by active workflows.
+  The multi-source concatenation logic (joining FLUXNET2025 and ICOS2025 periods for compound-source sites) is no longer needed because each pipeline now handles a single normalized data product.
+</p>
 
 <p>
   Steps 02&ndash;04 are <strong>source-agnostic</strong>: they read the standardized output files
@@ -256,7 +254,7 @@ a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])</code></pre>
 <h3>Column Name Conventions by Source</h3>
 
 <p>
-  FLUXNET and ICOS sources use a standardized naming scheme with suffixes that encode
+  ICOS and TERN sources use a standardized naming scheme with suffixes that encode
   processing method and quality:
 </p>
 
@@ -269,42 +267,42 @@ a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])</code></pre>
   <tr>
     <td><code>TA_F_MDS</code></td>
     <td>Air temperature, gap-filled by marginal distribution sampling</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>TS_F_MDS_1</code> / <code>TS_F_MDS_2</code></td>
     <td>Soil temperature at layer 1/2, gap-filled</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>NEE_VUT_REF</code></td>
     <td>Net ecosystem exchange, VUT method with reference u*</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>NEE_VUT_REF_QC</code></td>
     <td>Quality flag for NEE (0=measured, 1&ndash;2=good gap-fill, 3=poor)</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>SWC_F_MDS_1</code></td>
     <td>Soil water content, gap-filled</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>GPP_DT_VUT_REF</code></td>
     <td>Gross primary production, daytime VUT method</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>NIGHT</code></td>
     <td>Nighttime indicator (1=night, 0=day), computed from solar geometry</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
   <tr>
     <td><code>TIMESTAMP_START</code></td>
     <td>Measurement start time (<code>YYYYMMDDHHMM</code>)</td>
-    <td>FLUXNET/ICOS</td>
+    <td>ICOS/TERN</td>
   </tr>
 </table>
 
@@ -328,7 +326,7 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <table>
   <tr>
     <th>Step</th>
-    <th>FLUXNET/ICOS (01_02a)</th>
+    <th>ICOS/TERN (01_02c / 01_02d)</th>
     <th>AmeriFlux (01_02b)</th>
   </tr>
   <tr>
@@ -366,19 +364,26 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <h3>Site-Specific Corrections</h3>
 
 <p>
-  Both pipelines apply extensive per-site corrections for sensor issues, missing data,
+  Each pipeline applies per-site corrections for sensor issues, missing data,
   and site-specific quirks. These are hard-coded conditionals within the scripts.
 </p>
 
-<p><strong>FLUXNET/ICOS corrections (01_02a):</strong></p>
+<p><strong>ICOS corrections (01_02c):</strong></p>
 <ul>
-  <li><strong>CZ-Stn:</strong> Uses <code>TS_F_MDS_2</code> instead of <code>TS_F_MDS_1</code> (first soil layer incomplete)</li>
-  <li><strong>FR-Fon, CH-Dav, DE-Akm, DE-Hte, FR-Bil, FR-Pue, FR-FBn, CZ-RAJ:</strong> Reads predicted TS from Random Forest output generated by 01_01</li>
-  <li><strong>FI-Sod:</strong> Cross-calibrates soil temperature profiles using linear regression between measurement depths for the first 5 years</li>
-  <li><strong>GF-Guy:</strong> Uses air temperature as proxy for soil temperature (tropical site with no TS sensor)</li>
-  <li><strong>FR-Pue:</strong> Reads PI-provided SWC from separate CSV files (2003&ndash;2015, 2016&ndash;2020) with unit conversion (&times;100)</li>
-  <li><strong>CH-Dav:</strong> Enforces minimum TS &ge; 2&deg;C threshold</li>
-  <li><strong>ZA-Kru, FI-Sod, GF-Guy:</strong> Relaxed gap thresholds (gap_max=60 days, gap_total=0.7&ndash;0.8)</li>
+  <li><strong>FR-FBn:</strong> Reads predicted TS from Random Forest output generated by 01_01 when configured with <code>estimate_Ts=YES</code></li>
+  <li><strong>FR-Fon, CH-Dav, FR-Bil:</strong> Also reads predicted TS from 01_01 where configured</li>
+</ul>
+<p class="meta">
+  Historical note: the legacy <code>01_02a</code> (EuroFlux) script contained extensive site-specific corrections
+  for CZ-Stn, FI-Sod, GF-Guy, FR-Pue, CH-Dav, ZA-Kru, and others.
+  Most of these sites had FLUXNET-era source configurations that are no longer active.
+  The current <code>01_02c</code> (ICOS-only) pipeline is simpler because it consumes normalized ICOS L2 files
+  and applies fewer site-specific overrides.
+</p>
+
+<p><strong>TERN corrections (01_02d):</strong></p>
+<ul>
+  <li><strong>AU-Tum:</strong> Retains measured TERN soil temperature directly; no RF prediction or site-specific correction needed</li>
 </ul>
 
 <p><strong>AmeriFlux corrections (01_02b):</strong></p>
@@ -439,8 +444,8 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <div class="step-card">
   <h3>01_01 &mdash; Estimate Missing Soil Temperatures</h3>
   <p><strong>Runtime:</strong> ~5 minutes</p>
-  <p><strong>Input:</strong> FluxNet tower data (TA, TS, and NETRAD where available) from all sources</p>
-  <p><strong>Output:</strong> one file per processed site under <code>data-raw/TS_RandomForest/{site}_TS_rfp.csv</code></p>
+  <p><strong>Input:</strong> Tower data (TA, TS, and NETRAD where available) from AmeriFlux, ICOS, and TERN sources</p>
+  <p><strong>Output:</strong> one file per processed site under <code>data-proc/soil-temperature/{source}/{site}/{site}_TS_rfp.csv</code></p>
   <p>
     For sites where soil temperature (TS) measurements have gaps, this script trains a Random Forest model
     (<code>randomForest</code>, 500 trees) on paired TA&ndash;TS observations to predict missing TS values.
@@ -448,29 +453,49 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
     Results are validated against held-out data (R&sup2; reported per site).
   </p>
   <p>
-    <strong>Source handling:</strong> Dispatches to the correct file list based on the <code>source</code>
-    column. For multi-source sites, concatenates data chronologically.
+    For TERN and ICOS sites with measured soil temperature, the script retains the measured values directly
+    rather than training a prediction model.
     Site-specific NETRAD column mapping is handled inline (see table above).
-    The output is consumed by 01_02a for sites that need RF-predicted TS.
+    The output is consumed by 01_02b (AmeriFlux) and 01_02c (ICOS) for sites that need RF-predicted TS.
   </p>
 </div>
 
 <div class="step-card">
-  <h3>01_02a &mdash; Quality-Control Nightly NEE (EuroFlux / ICOS)</h3>
+  <h3>01_02b &mdash; Quality-Control Nightly NEE (AmeriFlux)</h3>
   <p><strong>Runtime:</strong> ~30 minutes</p>
-  <p><strong>Input:</strong> FLUXNET2015/2020/2025 and normalized ICOS2025 data, site metadata, and RF-predicted TS from 01_01 where configured</p>
-  <p><strong>Output:</strong> <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code> per site, plus <code>data/growing_season_feature_EuropFlux.csv</code></p>
+  <p><strong>Input:</strong> AmeriFlux BASE data, site metadata, and per-site TS predictions where configured</p>
+  <p><strong>Output:</strong> <code>data-proc/respiration/AmeriFlux/{site}/{site}_ac.csv</code> and <code>{site}_nightNEE.csv</code> per site, plus <code>data-proc/features/growing_season_feature_AmeriFlux.csv</code></p>
   <p>
-    Processes <strong>only EuroFlux/ICOS sources</strong>. Filters nighttime NEE observations
-    for use as ecosystem respiration (ER) proxies using the standardized FLUXNET column names.
+    Processes <strong>only AmeriFlux_BASE sources</strong>. Uses site-specific column names
+    from <code>site_info.csv</code> and performs additional pre-processing not needed for ICOS or TERN.
+  </p>
+  <ul>
+    <li>Reads data via <code>amerifluxr::amf_read_base()</code> (handles ZIP extraction and timestamp parsing)</li>
+    <li>Constructs NEE by summing component fluxes (e.g., <code>FC + SC_PI_F</code>)</li>
+    <li>Computes nighttime from sunrise/sunset via <code>suncalc</code> (no <code>NIGHT</code> column provided)</li>
+    <li>Performs u* threshold estimation via REddyProc (ICOS/TERN products already include this)</li>
+    <li>Applies extensive site-specific sensor corrections (US-Myb, US-Jo2, US-BZS, US-Ha2, US-Cwt, etc.)</li>
+    <li>Handles Arctic midnight-sun periods for US-ICt, US-ICh, US-ICs</li>
+    <li>Retains SWC, GPP, and ERA5 soil moisture for the temperature+water+GPP model variant</li>
+  </ul>
+</div>
+
+<div class="step-card">
+  <h3>01_02c &mdash; Quality-Control Nightly NEE (ICOS)</h3>
+  <p><strong>Runtime:</strong> ~5 minutes</p>
+  <p><strong>Input:</strong> Normalized ICOS L2 files from <code>93-download-icos.py</code>, site metadata, and RF-predicted TS from 01_01 where configured</p>
+  <p><strong>Output:</strong> <code>data-proc/respiration/ICOS/{site}/{site}_ac.csv</code> and <code>{site}_nightNEE.csv</code> per site, plus <code>data-proc/features/growing_season_feature_ICOS.csv</code></p>
+  <p class="meta">
+    Historical note: this script replaced the ICOS portion of the legacy <code>01_02a</code> (EuroFlux) workflow,
+    which handled FLUXNET2015/2020/2025 and ICOS2025 sources via compound source dispatch.
+    The current script consumes only normalized ICOS L2 files and does not read FLUXNET-era file layouts.
   </p>
   <p>Quality control pipeline:</p>
   <ul>
-    <li>Reads <code>TS_F_MDS_1</code>, <code>TA_F_MDS</code>, <code>NEE_VUT_REF</code> directly</li>
+    <li>Reads <code>TS_F_MDS_1</code>, <code>TA_F_MDS</code>, <code>NEE_VUT_REF</code> directly from normalized ICOS files</li>
     <li>Filters by <code>TS_F_MDS_1_QC %in% c(0, 1, 2)</code> (excludes poor gap-fills)</li>
     <li>Filters by <code>NEE_VUT_REF_QC == 0</code> (measured, not gap-filled)</li>
     <li>Uses the provided <code>NIGHT</code> column (no solar geometry computation needed)</li>
-    <li>Applies per-site TS substitutions (e.g., <code>TS_F_MDS_2</code> for CZ-Stn, RF predictions for 8 sites)</li>
     <li>Growing-season identification (handles southern-hemisphere date conventions)</li>
     <li>Gap detection: removes years with &gt;14-day continuous gaps in growing season</li>
     <li>Gap-fills TA and TS via hourly/climatological means</li>
@@ -480,24 +505,14 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 </div>
 
 <div class="step-card">
-  <h3>01_02b &mdash; Quality-Control Nightly NEE (AmeriFlux)</h3>
-  <p><strong>Runtime:</strong> ~30 minutes</p>
-  <p><strong>Input:</strong> AmeriFlux BASE data, site metadata, and per-site TS predictions where configured</p>
-  <p><strong>Output:</strong> <code>data-raw/RespirationData/{site}_ac.csv</code> and <code>data-raw/RespirationData/{site}_nightNEE.csv</code> per site, plus <code>data/growing_season_feature_AmeriFlux.csv</code></p>
+  <h3>01_02d &mdash; Quality-Control Nightly NEE (TERN)</h3>
+  <p><strong>Runtime:</strong> ~5 minutes</p>
+  <p><strong>Input:</strong> Normalized TERN L3 files from <code>94-download-tern.py</code>, site metadata</p>
+  <p><strong>Output:</strong> <code>data-proc/respiration/TERN/{site}/{site}_ac.csv</code> and <code>{site}_nightNEE.csv</code> per site, plus <code>data-proc/features/growing_season_feature_TERN.csv</code></p>
   <p>
-    Processes <strong>only AmeriFlux_BASE sources</strong>. Uses site-specific column names
-    from <code>site_info.csv</code> and performs additional pre-processing not needed for FLUXNET.
+    Processes <strong>only TERN sources</strong>. Similar to the ICOS pipeline but uses TERN-normalized files.
+    TERN provides measured soil temperature directly, so no RF prediction is needed.
   </p>
-  <p>Key differences from 01_02a:</p>
-  <ul>
-    <li>Reads data via <code>amerifluxr::amf_read_base()</code> (handles ZIP extraction and timestamp parsing)</li>
-    <li>Constructs NEE by summing component fluxes (e.g., <code>FC + SC_PI_F</code>)</li>
-    <li>Computes nighttime from sunrise/sunset via <code>suncalc</code> (no <code>NIGHT</code> column provided)</li>
-    <li>Performs u* threshold estimation via REddyProc (FLUXNET products already include this)</li>
-    <li>Applies extensive site-specific sensor corrections (US-Myb, US-Jo2, US-BZS, US-Ha2, US-Cwt, etc.)</li>
-    <li>Handles Arctic midnight-sun periods for US-ICt, US-ICh, US-ICs</li>
-    <li>Retains SWC, GPP, and ERA5 soil moisture for the temperature+water+GPP model variant</li>
-  </ul>
 </div>
 
 <!-- ============================================================ -->
@@ -506,7 +521,7 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
 <div class="step-card">
   <h3>02_01a &mdash; Fit Temperature-Respiration Curves</h3>
   <p><strong>Runtime:</strong> ~2 days (Bayesian MCMC per site&times;window&times;year)</p>
-  <p><strong>Input:</strong> QC'd nighttime NEE from 01_02a and 01_02b, site metadata</p>
+  <p><strong>Input:</strong> QC'd nighttime NEE from 01_02b, 01_02c, and 01_02d, site metadata</p>
   <p><strong>Output:</strong> <code>data/outcome_temp.csv</code>, <code>data/outcome_siteyear_temp.csv</code></p>
   <p>
     Fits a quadratic temperature-response model to ER in 14-day moving windows across all available years:
@@ -526,8 +541,9 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
     removes windows with predominantly negative NEE (i.e., not ER-dominated).
   </p>
   <p><strong>Source handling:</strong> This step is fully source-agnostic. It reads the standardized
-    <code>_nightNEE.csv</code> files produced by 01_02a and 01_02b, which have identical column
-    names regardless of original data source.</p>
+    <code>_nightNEE.csv</code> files produced by 01_02b, 01_02c, and 01_02d, which have identical column
+    names regardless of original data source. Growing-season features are loaded via
+    <code>load_growing_season_features()</code>, which combines the three source-specific feature CSVs.</p>
 </div>
 
 <div class="step-card">
@@ -651,16 +667,24 @@ ac$TS <- a[, trimws(site_info$TS[id])]</code></pre>
     <th>Description</th>
   </tr>
   <tr>
-    <td><code>data-raw/TS_RandomForest/*.csv</code></td>
+    <td><code>data-core/site_info.csv</code></td>
+    <td>Site metadata including source, column mappings, and processing flags</td>
+  </tr>
+  <tr>
+    <td><code>data-proc/soil-temperature/{source}/{site}/*_TS_rfp.csv</code></td>
     <td>Per-site soil-temperature predictions from 01_01</td>
   </tr>
   <tr>
-    <td><code>data-raw/RespirationData/*_nightNEE.csv</code></td>
+    <td><code>data-proc/respiration/{source}/{site}/*_nightNEE.csv</code></td>
     <td>Quality-controlled nighttime NEE per site</td>
   </tr>
   <tr>
-    <td><code>data-raw/RespirationData/*_ac.csv</code></td>
+    <td><code>data-proc/respiration/{source}/{site}/*_ac.csv</code></td>
     <td>Gap-filled ancillary and respiration data per site</td>
+  </tr>
+  <tr>
+    <td><code>data-proc/features/growing_season_feature_{AmeriFlux,ICOS,TERN}.csv</code></td>
+    <td>Source-specific growing-season feature aggregates (loaded by <code>load_growing_season_features()</code>)</td>
   </tr>
   <tr>
     <td><code>data/outcome_temp.csv</code></td>

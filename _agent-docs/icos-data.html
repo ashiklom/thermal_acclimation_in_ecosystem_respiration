@@ -88,7 +88,7 @@
   <tr><td><code>-s, --sites SITE [SITE ...]</code></td><td>One or more ICOS ecosystem site IDs, such as <code>FR-FBn</code>.</td></tr>
   <tr><td><code>-f, --site-list PATH</code></td><td>Station metadata CSV used when <code>--sites</code> is omitted. Defaults to <code>~/Downloads/stations.csv</code>.</td></tr>
   <tr><td><code>-o, --overwrite</code></td><td>Replace an existing normalized CSV. Without this flag, existing files are skipped.</td></tr>
-  <tr><td><code>-d, --output-dir PATH</code></td><td>Output directory. Defaults to <code>data-raw/SiteData/Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip</code>.</td></tr>
+  <tr><td><code>-d, --output-dir PATH</code></td><td>Output directory. Defaults to <code>data-raw/ICOS</code>.</td></tr>
 </table>
 
 <h2>Authentication and API</h2>
@@ -121,7 +121,7 @@
 
 <p>For example:</p>
 
-<pre><code>data-raw/SiteData/Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip/FR-FBn_ICOS_L2_FLUXNET_HH.csv</code></pre>
+<pre><code>data-raw/ICOS/FR-FBn/FR-FBn_ICOS_L2_FLUXNET_HH.csv</code></pre>
 
 <p>
   The file is a merged and normalized product, not a byte-for-byte copy of an ICOS archive ZIP.
@@ -183,14 +183,14 @@
 
 <div class="note">
   <strong>FR-FBn workflow note:</strong>
-  <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code> has a site-specific branch that replaces <code>TS_F_MDS_1</code> with predictions from <code>data-raw/TS_RandomForest/FR-FBn_TS_rfp.csv</code> when that file is present.
+  <code>01_02c_filter_high_quality_night_respiration_ICOS.R</code> (formerly, <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>) has a site-specific branch that replaces <code>TS_F_MDS_1</code> with predictions from <code>data-proc/soil-temperature/ICOS/FR-FBn/FR-FBn_TS_rfp.csv</code> when that file is present.
   The downloaded CSV itself is compatible with the expected input schema and contains measured soil temperature, but the complete FR-FBn R workflow may still depend on that separate prediction file.
 </div>
 
 <h2>Workflow Compatibility</h2>
 
 <p>
-  The output directory is intentionally the directory searched as <code>files_ICOS2025</code> by workflows <code>01_01_estimate_soil_temperature_at_some_sites.R</code> and <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>.
+  The output directory is intentionally the directory searched as ICOS input files by workflows <code>01_01_estimate_soil_temperature_at_some_sites.R</code> and <code>01_02c_filter_high_quality_night_respiration_ICOS.R</code> (which replaced the legacy <code>01_02a_filter_high_quality_night_respiration_EuroFlux.R</code>).
 </p>
 
 <p>The normalized file supplies the fields used by those workflows:</p>
