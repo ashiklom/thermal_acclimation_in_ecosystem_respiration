@@ -21,6 +21,7 @@ LOGGER = logging.getLogger(__name__)
 STATION_URI = "http://meta.icos-cp.eu/resources/stations/ES_{site}"
 DATATYPE_URI = "http://meta.icos-cp.eu/resources/cpmeta/{datatype}"
 OUTPUT_DIR = Path("data-raw/ICOS")
+DEFAULT_SITE_INFO = Path("data-core/site_info.csv")
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,10 +36,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-f",
-        "--site-list",
+        "--site-info",
         type=Path,
-        default=Path("~/Downloads/stations.csv").expanduser(),
-        help="CSV containing ICOS station metadata (default: ~/Downloads/stations.csv).",
+        default=DEFAULT_SITE_INFO,
+        help=f"Site metadata CSV with a source column (default: {DEFAULT_SITE_INFO}).",
     )
     parser.add_argument(
         "-o",
@@ -56,16 +57,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def station_ids(site_list: Path, requested: list[str] | None) -> list[str]:
+def station_ids(site_info: Path, requested: list[str] | None) -> list[str]:
     if requested:
         return list(dict.fromkeys(requested))
 
-    if not site_list.is_file():
-        raise FileNotFoundError(f"Station list not found: {site_list}")
+    if not site_info.is_file():
+        raise FileNotFoundError(f"Site info not found: {site_info}")
 
-    stations = pd.read_csv(site_list, usecols=["Id"])
-    ids = stations["Id"].astype(str).str.extract(r"ES_([A-Z]{2}-[^,]+)$")[0]
-    return ids.dropna().drop_duplicates().tolist()
+    table = pd.read_csv(site_info, usecols=["site_ID", "source"])
+    return (
+        table.loc[table.source == "ICOS", "site_ID"].drop_duplicates().tolist()
+    )
 
 
 def get_product(
@@ -165,7 +167,7 @@ def normalize(site: str) -> pd.DataFrame:
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    sites = station_ids(args.site_list, args.sites)
+    sites = station_ids(args.site_info, args.sites)
     if not sites:
         raise RuntimeError("No ecosystem stations found")
 

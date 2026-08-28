@@ -42,8 +42,10 @@ def parse_args() -> argparse.Namespace:
 def sites(requested: list[str] | None, site_info: Path) -> list[str]:
     if requested:
         return list(dict.fromkeys(requested))
-    table = pd.read_csv(site_info, usecols=["site_ID"])
-    return table.loc[table.site_ID.str.startswith("AU-"), "site_ID"].drop_duplicates().tolist()
+    table = pd.read_csv(site_info, usecols=["site_ID", "source"])
+    return (
+        table.loc[table.source == "TERN", "site_ID"].drop_duplicates().tolist()
+    )
 
 
 def resolve_site(code: str, mapping: Path) -> tuple[str, str]:
