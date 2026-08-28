@@ -71,10 +71,36 @@ mkdir -p "$OUTPUT_DIR"
 # Build command
 CMD=(pixi run fluxnet-shuttle download --snapshot-file "$SNAPSHOT_FILE" --output-dir "$OUTPUT_DIR" --quiet)
 
-# Add sites if specified
-if [[ ${#SITES[@]} -gt 0 ]]; then
-    CMD+=(--sites "${SITES[@]}")
+# If sites are not specified, download all missing FLUXNET sites from site_info.csv
+if [[ ! ${#SITES[@]} -gt 0 ]]; then
+  PRESENT=()
+  while IFS= read -r line; do
+    site="$line"
+    present=$(find data-raw/FLUXNET -name "*_${site}_FLUXNET_*.zip")
+    if [[ -n $present && ! $overwrite ]]; then
+      PRESENT+=($site)
+    else
+      SITES+=($site)
+    fi
+  done < <(pixi run Rscript - <<'EOF'
+sites <- readr::read_csv("data-core/site_info.csv", col_select = c("site_ID", "source"), show_col_types = FALSE)
+fluxnet_sites <- sites |>
+  dplyr::filter(.data$source == "FLUXNET") |>
+  dplyr::arrange(.data$site_ID) |>
+  dplyr::pull(.data$site_ID)
+cat(fluxnet_sites, sep="\n")
+EOF
+)
+  echo "Skipping existing sites: ${PRESENT[*]}"
+  echo "Sites to download: ${SITES[*]}"
 fi
+
+if [[ ! "${#SITES[@]}" -gt 0 ]]; then
+  echo "No sites to download. Exiting."
+  exit 0
+fi
+
+CMD+=(--sites "${SITES[@]}")
 
 # Run download
 echo "Downloading FLUXNET data..."
