@@ -11,6 +11,34 @@ deps = {
   description = "Install additional R package dependencies."
 }
 
+download_ameriflux = {
+  description = "Download Ameriflux data",
+  depends-on = ["deps"],
+  cmd = ["Rscript", "workflows/91-download-ameriflux.R"]
+}
+download_fluxnet = {
+  description = "Download FLUXNET data",
+  cmd = ["./workflows/92-download-fluxnet.sh"]
+}
+download_icos = {
+  description = "Download ICOS data",
+  cmd = ["./workflows/93-download-icos.py"]
+}
+download_tern = {
+  description = "Download TERN data",
+  cmd = ["./workflows/94-download-tern.py"]
+}
+
+download_all = {
+  description = "Download all data",
+  depends-on = [
+    "download_ameriflux",
+    "download_fluxnet",
+    "download_icos",
+    "download_tern"
+  ]
+}
+
 [dependencies]
 r-mumin = ">=1.48.19,<2"
 r-vsurf = ">=1.2.1,<2"
@@ -42,10 +70,12 @@ r-zoo = ">=1.8_15,<2"
 r-librarian = ">=1.8.1,<2"
 r-remotes = ">=2.5.0,<3"
 r-cmdstanr = ">=0.9.0,<0.10"
-ipython = ">=9.16.1,<10"
-python = "3.13.*"
 r-languageserver = ">=0.3.18,<0.4"
 r-optparse = ">=1.8.2,<2"
+ipython = ">=9.16.1,<10"
+python = "3.13.*"
+uv = ">=0.12.7,<0.13"
+unzip = ">=6.0,<7"
 
 [pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }

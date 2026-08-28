@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Purpose: Download FLUXNET data using fluxnet-shuttle CLI
 # Usage:
 #   ./workflows/92-download-fluxnet.sh
@@ -55,14 +56,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use the current snapshot unless one is supplied explicitly.
-if [[ -z "$SNAPSHOT_FILE" ]]; then
-    SNAPSHOT_FILE=$(find data-raw -maxdepth 1 -name 'fluxnet_shuttle_snapshot_*.csv' -print -quit)
-fi
-if [[ ! -f "$SNAPSHOT_FILE" ]]; then
-    echo "Error: Snapshot file not found: $SNAPSHOT_FILE"
-    echo "Run 'pixi run fluxnet-shuttle listall' to create one"
+# Resolve the snapshot file.
+if [[ -n "$SNAPSHOT_FILE" ]]; then
+  if [[ ! -f "$SNAPSHOT_FILE" ]]; then
+    echo "Error: Snapshot file not found: $SNAPSHOT_FILE" >&2
     exit 1
+  fi
+else
+  SNAPSHOT_FILE=$(find data-raw -maxdepth 1 -name 'fluxnet_shuttle_snapshot_*.csv' | sort | tail -n1)
+  if [[ -z "$SNAPSHOT_FILE" ]]; then
+    echo "Warning: No fluxnet-shuttle snapshot found in data-raw." >&2
+    echo "Downloading one with 'fluxnet-shuttle listall'..." >&2
+    pixi run fluxnet-shuttle listall -o data-raw
+    SNAPSHOT_FILE=$(find data-raw -maxdepth 1 -name 'fluxnet_shuttle_snapshot_*.csv' | sort | tail -n1)
+    if [[ -z "$SNAPSHOT_FILE" ]]; then
+      echo "Error: Failed to create snapshot file with 'fluxnet-shuttle listall'." >&2
+      exit 1
+    fi
+  fi
 fi
 
 # Create output directory
@@ -77,7 +88,7 @@ if [[ ! ${#SITES[@]} -gt 0 ]]; then
   while IFS= read -r line; do
     site="$line"
     present=$(find data-raw/FLUXNET -name "*_${site}_FLUXNET_*.zip")
-    if [[ -n $present && ! $overwrite ]]; then
+    if [[ -n $present && ! $OVERWRITE ]]; then
       PRESENT+=($site)
     else
       SITES+=($site)
