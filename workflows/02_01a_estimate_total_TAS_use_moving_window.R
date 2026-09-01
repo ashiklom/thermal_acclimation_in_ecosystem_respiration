@@ -11,7 +11,10 @@
 
 library(librarian)
 shelf(dplyr, lubridate, gslnls, caret, performance, ggpubr, ggplot2, zoo, bayesplot, brms, nlme)
+library(optparse)
 rm(list=ls())
+
+
 
 set.seed(123)
 ####################Attention: change this directory based on your own directory of raw data
@@ -22,13 +25,18 @@ site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 source(file.path('workflows', 'load_growing_season_features.R'))
 feature_gs <- load_growing_season_features()
 
-args <- commandArgs(trailingOnly = TRUE)
-site_arg <- args[grepl('^--sites=', args)]
-positional_sites <- args[!grepl('^--', args)]
-if (length(site_arg) > 1 || length(positional_sites) > 1) stop('Provide at most one comma-separated site list.')
-requested_sites <- if (length(site_arg) == 1) trimws(unlist(strsplit(sub('^--sites=', '', site_arg), ','))) else if (length(positional_sites) == 1) trimws(unlist(strsplit(positional_sites, ','))) else NULL
-prior_arg <- args[grepl('^--priors=', args)]
-prior_path <- if (length(prior_arg)) sub('^--priors=', '', prior_arg[1]) else file.path('data-proc/analysis', 'cross_site_priors_total.rds')
+option_list <- list(
+  make_option("--sites", type = "character", default = NULL,
+              help = "Comma-separated list of site IDs to process"),
+  make_option("--priors", type = "character", default = NULL,
+              help = "Path to cross-site prior RDS file")
+)
+parser <- OptionParser(description = "Estimate thermal acclimation strength using moving window methods",
+                       option_list = option_list)
+parsed <- parse_args(parser, commandArgs(trailingOnly = TRUE))
+
+requested_sites <- if (!is.null(parsed$sites)) trimws(unlist(strsplit(parsed$sites, ","))) else NULL
+prior_path <- if (!is.null(parsed$priors)) parsed$priors else file.path('data-proc/analysis', 'cross_site_priors_total.rds')
 if (!file.exists(prior_path)) stop('Cross-site prior file not found: ', prior_path)
 cross_site_priors <- readRDS(prior_path)
 if (!identical(cross_site_priors$model, 'total')) stop('Prior file is not for the total model: ', prior_path)

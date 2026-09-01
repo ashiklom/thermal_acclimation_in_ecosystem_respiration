@@ -2,13 +2,18 @@
 
 library(librarian)
 shelf(dplyr, gslnls, brms)
+library(optparse)
 rm(list = ls())
 
-args <- commandArgs(trailingOnly = TRUE)
-site_arg <- args[grepl('^--sites=', args)]
-positional_sites <- args[!grepl('^--', args)]
-if (length(site_arg) > 1 || length(positional_sites) > 1) stop('Provide at most one comma-separated site list.')
-requested_sites <- if (length(site_arg) == 1) trimws(unlist(strsplit(sub('^--sites=', '', site_arg), ','))) else if (length(positional_sites) == 1) trimws(unlist(strsplit(positional_sites, ','))) else NULL
+option_list <- list(
+  make_option("--sites", type = "character", default = NULL,
+              help = "Comma-separated list of site IDs to include")
+)
+parser <- OptionParser(description = "Build cross-site priors for total ecosystem-respiration model",
+                       option_list = option_list)
+parsed <- parse_args(parser, commandArgs(trailingOnly = TRUE))
+
+requested_sites <- if (!is.null(parsed$sites)) trimws(unlist(strsplit(parsed$sites, ","))) else NULL
 
 site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 source(file.path('workflows', 'load_growing_season_features.R'))

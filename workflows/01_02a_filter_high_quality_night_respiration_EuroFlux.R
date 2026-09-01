@@ -2,46 +2,43 @@
 # Output of this script: two .csv files. One for filtered night NEE, and the other for gap-filled whole time-series.
 # Author: Junna Wang
 #  It will take ~ 30 mins to finish running this script. 
+#
+# Input: half-hourly FLUXMET files downloaded by workflows/92-download-fluxnet.sh (fluxnet-shuttle),
+# located at data-raw/FLUXNET/{site}/{EUF|ICOS}_{site}_FLUXNET_FLUXMET_HH_*.csv
 
 # Special attention: 
-# site FR-Pue - soil water provided by PI
 # sites in southern hemisphere ('AU-Tum', 'ZA-Kru') have growing seasons spanning two years. 
 # we added 11 European sites in Aug. 2025
 
 library(librarian)
 shelf(dplyr, lubridate)
-rm(list=ls())
 
-args <- commandArgs(trailingOnly = TRUE)
-overwrite <- '--overwrite' %in% args
-site_arg <- args[grepl('^--sites=', args)]
-positional_sites <- args[!grepl('^--', args)]
-if (length(site_arg) > 1 || length(positional_sites) > 1) {
-  stop('Provide at most one comma-separated site list.')
-}
-requested_sites <- if (length(site_arg) == 1) {
-  sub('^--sites=', '', site_arg)
-} else if (length(positional_sites) == 1) {
-  positional_sites
-} else {
-  NULL
-}
+library(optparse)
+option_list <- list(
+  make_option("--sites", type = "character", default = NULL,
+              help = "Comma-separated list of site IDs to process"),
+  make_option("--overwrite", action = "store_true", default = FALSE,
+              help = "Overwrite existing output files")
+)
+parser <- OptionParser(description = "Prepare EuroFlux data for temperature-respiration curve fitting",
+                       option_list = option_list)
+parsed <- parse_args(parser, commandArgs(trailingOnly = TRUE))
+
+overwrite <- parsed$overwrite
+requested_sites <- if (!is.null(parsed$sites)) trimws(unlist(strsplit(parsed$sites, ","))) else NULL
 
 ####################Attention: change this directory based on your own directory of raw data
 dir_rawdata <- 'data-raw'
+dir_proc <- 'data-proc/respiration/EuroFlux'
 ####################End Attention
 
-files_FLUXNET2015  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-files_FLUXNET2020  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-#
-files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern="FLUXMET_HH.*\\.csv$", full.names = T)
-files_ICOS2025 <- list.files(file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
+files_FLUXNET <- list.files(file.path(dir_rawdata, 'FLUXNET'), pattern = "^(EUF|ICOS)_[A-Za-z0-9-]+_FLUXNET_FLUXMET_HH_.*\\.csv$", full.names = TRUE, recursive = TRUE)
 
-site_info <- read.csv(file.path('data', 'site_info.csv'))
+site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 
 process_site <- function(name_site) {
   id <- match(name_site, site_info$site_ID)
-  output_dir <- file.path(dir_rawdata, 'RespirationData')
+  output_dir <- file.path(dir_proc, name_site)
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   output_files <- file.path(output_dir, paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
   if (!overwrite && all(file.exists(output_files))) {
@@ -50,41 +47,13 @@ process_site <- function(name_site) {
   }
 
   print(id)
-  data_source <- site_info$source[id]
-  # This script only works for FLUXNET products
-  if (data_source %in% c("AmeriFlux_BASE")) {
-    next
-  }
   
-  name_site <- site_info$site_ID[id]
-  print(name_site)
-  
-  # connecting multiple data sources
-  data_source <- unlist(strsplit(data_source, "_"))
-  for (isource in 1:length(data_source)) {
-    if (data_source[isource] == "FLUXNET2015") {
-      files <- files_FLUXNET2015
-    } else if (data_source[isource] == "FLUXNET2020") {
-      files <- files_FLUXNET2020
-    } else if (data_source[isource] == "FLUXNET2025") {
-      files <- files_FLUXNET2025
-    } else if (data_source[isource] == "ICOS2025") {
-      files <- files_ICOS2025
-    }
-    file  <- files[grepl(name_site, files)]
-    a_tmp <- read.csv(file)
-    if (isource == 1) {
-      a <- a_tmp
-    } else {
-      # need to check if they can connect correctly, or use bind_rows. 
-      irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
-      if (is.numeric(irow_start) && length(irow_start) == 0) {
-        irow_start = 1
-      }
-      a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
-    }
+  # fluxnet-shuttle provides one merged half-hourly FLUXMET file per site
+  input_file <- files_FLUXNET[grepl(paste0('/(EUF|ICOS)_', name_site, '_FLUXNET_FLUXMET_HH_'), files_FLUXNET)]
+  if (length(input_file) != 1) {
+    stop(name_site, ': expected one fluxnet-shuttle FLUXMET_HH file, found ', length(input_file), '.')
   }
-  rm(a_tmp)
+  a <- read.csv(input_file)
   # -9999 means missing information.
   a[a==-9999] <- NA
   
@@ -103,7 +72,11 @@ process_site <- function(name_site) {
     a$TS_F_MDS_1 <- a$TS_F_MDS_2  # use TS of second layer because the first layer is incomplete
     a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
   } else if (name_site %in% c("FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")) {
-    df_TS <- read.csv(file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')))
+    ts_rfp_file <- list.files(file.path('data-proc', 'soil-temperature'), pattern = paste0('^', name_site, '_TS_rfp\\.csv$'), full.names = TRUE, recursive = TRUE)
+    if (length(ts_rfp_file) != 1) {
+      stop(name_site, ': expected one predicted soil-temperature file from workflow 01_01, found ', length(ts_rfp_file), '.')
+    }
+    df_TS <- read.csv(file=ts_rfp_file)
     df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
     df_TS <- left_join(data.frame(TIMESTAMP=a$TIMESTAMP), df_TS, by = "TIMESTAMP")
     a$TS_F_MDS_1 <- df_TS$TS_pred
@@ -121,21 +94,6 @@ process_site <- function(name_site) {
     # use air temperature for this tropical site so that all tropical sites, we used bottom air temperature. 
     a$TS_F_MDS_1 <- a$TA_F_MDS
     a$TS_F_MDS_1_QC <- a$TA_F_MDS_QC
-  }
-  
-  # FLUXNET data do not include soil data for Site FR-Pue, but site PI provided the SWC data
-  if (name_site == 'FR-Pue') {
-    swc_2003_2015 <- read.table(file.path(dir_rawdata, "SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2003-2015.csv"), sep=';', header=T)
-    swc_2016_2020 <- read.table(file.path(dir_rawdata, "SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2016-2020.csv"), sep=';', header=T)
-    swc_2003_2020 <- bind_rows(swc_2003_2015, swc_2016_2020)
-    swc_2003_2020$TIMESTAMP_START <- dmy_hm(swc_2003_2020$date_time)
-    
-    a <- a %>% mutate(TIMESTAMP_START = ymd_hm(a$TIMESTAMP_START)) %>% 
-    left_join(swc_2003_2020[, c("TIMESTAMP_START", "SWC_Mean")], by="TIMESTAMP_START")
-    # times 100 to convert SWC into percentage
-    a$SWC_Mean <- a$SWC_Mean*100
-    a$SWC_F_MDS_1[!is.na(a$SWC_Mean)] <- a$SWC_Mean[!is.na(a$SWC_Mean)]
-    a$SWC_F_MDS_1_QC[!is.na(a$SWC_Mean)] <- 1
   }
   
   # Southern Hemisphere, so we need to change DOY values
@@ -327,17 +285,18 @@ process_site <- function(name_site) {
   ac <- ac %>% filter(between(YEAR, iStart, iEnd))
   
   # save the ac and a_measure_night_complete data:
-  write.csv(ac, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
-  write.csv(a_measure_night_complete, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
+  write.csv(ac, file=output_files[1], row.names = F)
+  write.csv(a_measure_night_complete, file=output_files[2], row.names = F)
   
   data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
 }
 
-feature_file <- file.path('data', 'growing_season_feature_EuropFlux.csv')
+feature_file <- file.path('data-proc', 'features', 'growing_season_feature_EuroFlux.csv')
 feature_gs <- if (file.exists(feature_file)) read.csv(feature_file) else {
   data.frame(site_ID=character(), gStart=double(), gEnd=double(), tStart=double(), tEnd=double(), nyear=integer())
 }
-candidate_sites <- site_info$site_ID[site_info$source != 'AmeriFlux_BASE']
+shuttle_sites <- sub("^(EUF|ICOS)_(.+)_FLUXNET_FLUXMET_HH_.*\\.csv$", "\\2", basename(files_FLUXNET))
+candidate_sites <- intersect(site_info$site_ID[site_info$source != 'AmeriFlux_BASE'], shuttle_sites)
 sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ',')))
 unknown_sites <- setdiff(sites, candidate_sites)
 if (length(unknown_sites) > 0) {
@@ -349,7 +308,8 @@ if (overwrite) {
 }
 
 for (name_site in sites) {
-  output_files <- file.path(dir_rawdata, 'RespirationData', paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
+  message("Processing site ", name_site)
+  output_files <- file.path(dir_proc, name_site, paste0(name_site, c('_ac.csv', '_nightNEE.csv')))
   already_aggregated <- name_site %in% feature_gs$site_ID
   if (!overwrite && (all(file.exists(output_files)) || already_aggregated)) {
     message('Skipping ', name_site, ': already processed.')

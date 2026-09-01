@@ -242,21 +242,19 @@ process_site <- function(name_site, overwrite = FALSE) {
 }
 
 if (!interactive()) {
-  args <- commandArgs(trailingOnly = TRUE)
-  overwrite <- '--overwrite' %in% args
-  site_arg <- args[grepl('^--sites=', args)]
-  positional_sites <- args[!grepl('^--', args)]
-  if (length(site_arg) > 1 || length(positional_sites) > 1) {
-    stop('Provide at most one comma-separated site list.')
-  }
+  library(optparse)
+  option_list <- list(
+    make_option("--sites", type = "character", default = NULL,
+                help = "Comma-separated list of site IDs to process"),
+    make_option("--overwrite", action = "store_true", default = FALSE,
+                help = "Overwrite existing output files")
+  )
+  parser <- OptionParser(description = "Estimate soil temperature at sites with missing TS data",
+                         option_list = option_list)
+  parsed <- parse_args(parser, commandArgs(trailingOnly = TRUE))
 
-  requested_sites <- if (length(site_arg) == 1) {
-    sub('^--sites=', '', site_arg)
-  } else if (length(positional_sites) == 1) {
-      positional_sites
-    } else {
-      NULL
-    }
+  overwrite <- parsed$overwrite
+  requested_sites <- if (!is.null(parsed$sites)) trimws(unlist(strsplit(parsed$sites, ","))) else NULL
 
   for (name_site in sites) {
     process_site(name_site, overwrite)

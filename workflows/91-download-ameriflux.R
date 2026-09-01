@@ -29,61 +29,26 @@ parse_toml <- function(path) {
 
 # Parse command line arguments
 option_list <- list(
-  make_option(
-    c("-s", "--sites"),
-    type = "character",
-    default = NULL,
-    help = "Comma-separated list of AmeriFlux site IDs to download (e.g., 'US-Kon,US-Ha1')"
-  ),
-  make_option(
-    c("-f", "--site_info"),
-    type = "character",
-    default = "data-core/site_info.csv",
-    help = "Path to site_info.csv file [default: data-core/site_info.csv]"
-  ),
-  make_option(
-    c("-o", "--overwrite"),
-    action = "store_true",
-    default = FALSE,
-    help = "Overwrite existing downloaded files [default: FALSE]"
-  ),
-  make_option(
-    c("-c", "--credentials"),
-    type = "character",
-    default = "./_creds.toml",
-    help = "Path to TOML file with user_id and user_email [default: ./_creds.toml]"
-  ),
-  make_option(
-    c("-u", "--user_id"),
-    type = "character",
-    default = NULL,
-    help = "AmeriFlux account user_id (overrides credentials file)"
-  ),
-  make_option(
-    c("-e", "--user_email"),
-    type = "character",
-    default = NULL,
-    help = "AmeriFlux account user_email (overrides credentials file)"
-  ),
-  make_option(
-    c("-d", "--out_dir"),
-    type = "character",
-    default = "data-raw/Ameriflux",
-    help = "Output directory for downloaded data [default: data-raw/Ameriflux]"
-  ),
-  make_option(
-    c("-p", "--data_policy"),
-    type = "character",
-    default = "CCBY4.0",
-    help = "AmeriFlux data policy: 'CCBY4.0' or 'LEGACY' [default: CCBY4.0]"
-  )
+  make_option(c("-s", "--sites"), type = "character", default = NULL,
+              help = "Comma-separated list of AmeriFlux site IDs to download (e.g., 'US-Kon,US-Ha1')"),
+  make_option(c("-f", "--site_info"), type = "character", default = "data-core/site_info.csv",
+              help = "Path to site_info.csv file [default: data-core/site_info.csv]"),
+  make_option(c("-o", "--overwrite"), action = "store_true", default = FALSE,
+              help = "Overwrite existing downloaded files [default: FALSE]"),
+  make_option(c("-c", "--credentials"), type = "character", default = "./_creds.toml",
+              help = "Path to TOML file with user_id and user_email [default: ./_creds.toml]"),
+  make_option(c("-u", "--user_id"), type = "character", default = NULL,
+              help = "AmeriFlux account user_id (overrides credentials file)"),
+  make_option(c("-e", "--user_email"), type = "character", default = NULL,
+              help = "AmeriFlux account user_email (overrides credentials file)"),
+  make_option(c("-d", "--out_dir"), type = "character", default = "data-raw/Ameriflux",
+              help = "Output directory for downloaded data [default: data-raw/Ameriflux]"),
+  make_option(c("-p", "--data_policy"), type = "character", default = "CCBY4.0",
+              help = "AmeriFlux data policy: 'CCBY4.0' or 'LEGACY' [default: CCBY4.0]")
 )
-
-opt_parser <- OptionParser(
-  option_list = option_list,
-  description = "Download AmeriFlux BASE-BADM data for specified sites"
-)
-opt <- parse_args(opt_parser)
+parser <- OptionParser(description = "Download AmeriFlux BASE-BADM data for specified sites",
+                       option_list = option_list)
+opt <- parse_args(parser, commandArgs(trailingOnly = TRUE))
 
 # Read credentials: CLI args override TOML file
 creds <- list()

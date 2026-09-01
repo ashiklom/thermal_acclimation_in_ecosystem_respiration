@@ -10,22 +10,21 @@
 
 library(librarian)
 shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo)
+library(optparse)
 rm(list=ls())
 
-args <- commandArgs(trailingOnly = TRUE)
-overwrite <- '--overwrite' %in% args
-site_arg <- args[grepl('^--sites=', args)]
-positional_sites <- args[!grepl('^--', args)]
-if (length(site_arg) > 1 || length(positional_sites) > 1) {
-  stop('Provide at most one comma-separated site list.')
-}
-requested_sites <- if (length(site_arg) == 1) {
-  sub('^--sites=', '', site_arg)
-} else if (length(positional_sites) == 1) {
-  positional_sites
-} else {
-  NULL
-}
+option_list <- list(
+  make_option("--sites", type = "character", default = NULL,
+              help = "Comma-separated list of site IDs to process"),
+  make_option("--overwrite", action = "store_true", default = FALSE,
+              help = "Overwrite existing output files")
+)
+parser <- OptionParser(description = "Prepare AmeriFlux data for temperature-respiration curve fitting",
+                       option_list = option_list)
+parsed <- parse_args(parser, commandArgs(trailingOnly = TRUE))
+
+overwrite <- parsed$overwrite
+requested_sites <- if (!is.null(parsed$sites)) trimws(unlist(strsplit(parsed$sites, ","))) else NULL
 
 ####################Attention: change this directory based on your own directory of raw data
 dir_rawdata <- 'data-raw'
