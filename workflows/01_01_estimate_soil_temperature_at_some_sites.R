@@ -17,25 +17,6 @@ DIR_RAWDATA <- 'data-raw'
 DIR_PROC <- 'data-proc/soil-temperature'
 RANDOM_SEED <- 222
 
-args <- commandArgs(trailingOnly = TRUE)
-overwrite <- '--overwrite' %in% args
-site_arg <- args[grepl('^--sites=', args)]
-positional_sites <- args[!grepl('^--', args)]
-
-if (length(site_arg) > 1 || length(positional_sites) > 1) {
-  stop('Provide at most one comma-separated site list.')
-}
-
-requested_sites <- if (length(site_arg) == 1) {
-  sub('^--sites=', '', site_arg)
-} else if (length(positional_sites) == 1) {
-  positional_sites
-} else {
-  NULL
-}
-
-# requested_sites <- c("US-Uaf", "AU-Tum", "BE-Bra", "DE-Hai")
-
 #--------A function to predict soil temperature
 # inputs: a data frame data with 2-3 columns (TS, TA, NETRAD), the last column is optional
 # output: the same data frame data, but with one added column TS_pred
@@ -81,46 +62,16 @@ predict_soil_temp <- function(data, use_NETRAD) {
 }
 
 #-------------Predict soil temperature for 9 Ameriflux sites using the function above
-all_site_info <- get_site_info()
-
-files_FLUXNET2015  <- list.files(path=file.path(DIR_RAWDATA, 'FLUXNET'), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE, recursive = TRUE)
-files_FLUXNET2020  <- list.files(path=file.path(DIR_RAWDATA, 'FLUXNET'), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE, recursive = TRUE)
-files_ICOS_after2020 <- list.files(
-  file.path(DIR_RAWDATA, "ICOS"),
-  pattern = "_ICOS_L2_FLUXNET_HH\\.csv$",
-  full.names = TRUE,
-  recursive = TRUE
-)
-#
-files_FLUXNET2025 <- list.files(file.path(DIR_RAWDATA, "FLUXNET"), pattern="FLUXMET_HH.*\\.csv$", full.names = T, recursive = TRUE)
-files_ICOS2025 <- list.files(
-  file.path(DIR_RAWDATA, "ICOS"),
-  pattern = "_ICOS_L2_FLUXNET_HH\\.csv$",
-  full.names = TRUE,
-  recursive = TRUE
-)
-files_ICOS <- list.files(
-  file.path(DIR_RAWDATA, "ICOS"),
-  pattern = "_ICOS_L2_FLUXNET_HH\\.csv$",
-  full.names = TRUE,
-  recursive = TRUE
-)
-files_TERN <- list.files(file.path(DIR_RAWDATA, "TERN"), pattern="_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$", full.names = TRUE, recursive = TRUE)
-
-# 
-id_estimate_TS <- which(all_site_info$estimate_Ts == 'YES')
-
-
 process_site <- function(name_site, overwrite = FALSE) {
-  # name_site <- "AU-Tum"   # TERN example
-  # name_site <- "BE-Bra"   # ICOS example
-  # name_site <- "US-Ced"   # Ameriflux example
-  # name_site <- "US-Uaf"
   site_info <- get_site_info(name_site)
   output_source <- site_info[["source"]]
   output_file <- file.path(DIR_PROC, name_site, paste0(name_site, '_TS_rfp.csv'))
   if (!overwrite && file.exists(output_file)) {
     message('Skipping ', name_site, ': output already exists.')
+    return(invisible(NULL))
+  }
+  if (!site_info[["estimate_Ts"]]) {
+    message('Skipping ', name_site, ': estimate_Ts is FALSE')
     return(invisible(NULL))
   }
 
@@ -202,34 +153,19 @@ process_site <- function(name_site, overwrite = FALSE) {
 
   } else if (output_source == "FLUXNET")  {
 
-    data_source <- site_info$source[id]
-    data_source <- unlist(strsplit(data_source, "_"))
-    for (isource in 1:length(data_source)) {
-      if (data_source[isource] == "FLUXNET2015") {
-        files <- files_FLUXNET2015
-      } else if (data_source[isource] == "FLUXNET2020") {
-        files <- files_FLUXNET2020
-      } else if (data_source[isource] == "ICOS2020") {
-        files <- files_ICOS_after2020
-      } else if (data_source[isource] == "FLUXNET2025") {
-        files <- files_FLUXNET2025
-      } else if (data_source[isource] == "ICOS2025") {
-        files <- files_ICOS2025
-      }
-      file  <- files[grepl(name_site, files)]
-      a_tmp <- read.csv(file)
-      if (isource == 1) {
-        a <- a_tmp
-      } else {
-        # need to check if they can connect correctly, or use bind_rows.
-        irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
-        if (is.numeric(irow_start) && length(irow_start) == 0) {
-          irow_start = 1
-        }
-        a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
-      }
-    }
-    rm(a_tmp)
+    file <- list.files(
+      file.path(DIR_RAWDATA, "FLUXNET", name_site),
+      pattern = "_FLUXMET_(HH|HR)_",
+      full.names = TRUE,
+      recursive = TRUE
+    )
+    stopifnot(
+      file.exists(file),
+      length(file) == 1
+    )
+
+    a <- read.csv(file)
+
     # -9999 means missing information.
     a[a==-9999] <- NA
 
@@ -237,7 +173,10 @@ process_site <- function(name_site, overwrite = FALSE) {
     a$TIMESTAMP  <- ymd_hm(a$TIMESTAMP_START) + dt / 2
     a$DOY <- yday(a$TIMESTAMP)
     data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = year(a$TIMESTAMP), DOY = a$DOY,
-                       HOUR = hour(a$TIMESTAMP), MINUTE = minute(a$TIMESTAMP), TS = a$TS_F_MDS_1, TA = a$TA_F_MDS, NETRAD=a$NETRAD)
+                       HOUR = hour(a$TIMESTAMP), MINUTE = minute(a$TIMESTAMP), TS = a$TS_F_MDS_1, TA = a$TA_F_MDS)
+    if ("NETRAD" %in% colnames(data)) {
+      data[["NETRAD"]] <- a[["NETRAD"]]
+    }
     if (name_site == 'DE-Hte') {
       # too few data in TS_F_MDS_1, so use TS_F_MDS_2
       data$TS <- a$TS_F_MDS_2
@@ -302,17 +241,27 @@ process_site <- function(name_site, overwrite = FALSE) {
   write.csv(data, file=output_file, row.names = F)
 }
 
-candidate_sites <- unique(c(all_site_info$site_ID[all_site_info$source == 'AmeriFlux_BASE'],
-                            all_site_info$site_ID[id_estimate_TS],
-                            sub('_ICOS_L2_FLUXNET_HH\\.csv$', '', basename(files_ICOS)),
-                            sub('_TERN_[A-Z0-9]+_FLUXNET_HH\\.csv$', '', basename(files_TERN))))
-sites <- if (is.null(requested_sites)) candidate_sites else trimws(unlist(strsplit(requested_sites, ',')))
-unknown_sites <- setdiff(sites, candidate_sites)
-if (length(unknown_sites) > 0) {
-  stop('Sites are not eligible for AmeriFlux, ICOS, TERN, or FLUXNET temperature estimation: ', paste(unknown_sites, collapse = ', '))
-}
-for (name_site in sites) {
-  process_site(name_site, overwrite)
+if (!interactive()) {
+  args <- commandArgs(trailingOnly = TRUE)
+  overwrite <- '--overwrite' %in% args
+  site_arg <- args[grepl('^--sites=', args)]
+  positional_sites <- args[!grepl('^--', args)]
+  if (length(site_arg) > 1 || length(positional_sites) > 1) {
+    stop('Provide at most one comma-separated site list.')
+  }
+
+  requested_sites <- if (length(site_arg) == 1) {
+    sub('^--sites=', '', site_arg)
+  } else if (length(positional_sites) == 1) {
+      positional_sites
+    } else {
+      NULL
+    }
+
+  for (name_site in sites) {
+    process_site(name_site, overwrite)
+  }
+
 }
 
 # all R2 should be higher than 0.83. 

@@ -19,9 +19,11 @@
 
 - `workflows/01_01_estimate_soil_temperature_at_some_sites.R`
     - [ ] Replace `read.csv` with `readr::read_csv` for robustness and performance
-    - [ ] Simplify FLUXNET path logic in `process_site`
+    - [X] Simplify FLUXNET path logic in `process_site`
     - [ ] Check if all TERN sites have soil temperature (for future downloads)
-    - [ ] Move site-specific column name logic out of code and into `site_info` --- look for `US-Ha2`
+    - [ ] Move site-specific column name logic out of code and into `site_info`
+        - US-Ha2 still has custom column names
+        - Site-specific logic for FLUXNET sites DE-Hte, FR-Bil, FR-Pue
     - [ ] Use new `summarize(..., .by)` syntax.
 
 ## 2026-08-28
@@ -45,4 +47,8 @@
 
 ## 2026-08-31
 
+- Tiny amount of cleanup of `workflows/01_01_estimate_soil_temperature_at_some_sites.R`
 
+## 2026-09-01
+
+- Removed dirty file path logic in 01-01. Now the structure is nice and clean. Good enough for now; can revisit other actions later.
