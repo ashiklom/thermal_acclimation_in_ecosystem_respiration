@@ -15,14 +15,16 @@ rm(list=ls())
 
 set.seed(123)
 ####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- 'data-proc/respiration'
+DIR_RESP <- 'data-proc/respiration'
+DIR_RAW <- "data-raw"
 ####################End Attention
 
 site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 source(file.path('workflows', 'load_growing_season_features.R'))
 feature_gs <- load_growing_season_features()
 
-swc_ERA5 <- read.csv(file.path(dir_rawdata, "ERA5_daily_swc_1990_2024_allsites.csv"))
+swc_ERA5 <- read.csv(file.path(DIR_RAW, "ERA5_daily_swc.csv")) |>
+  dplyr::rename("name" = "site", "date" = "time")
 swc_ERA5$date <- as.Date(swc_ERA5$date)
 swc_ERA5$YEAR <- year(swc_ERA5$date)
 swc_ERA5$MONTH <- month(swc_ERA5$date)
@@ -56,10 +58,10 @@ for (id in 1:nrow(site_info)) {
   
   #-------------------------------------------DATA PREPARATION--------------------------
   # read data
-  path <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_nightNEE\\.csv$'), recursive = TRUE, full.names = TRUE)
+  path <- list.files(DIR_RESP, pattern = paste0('^', name_site, '_nightNEE\\.csv$'), recursive = TRUE, full.names = TRUE)
   if (file.exists(path)) {
     a_measure_night_complete <- read.csv(path)
-    ac_path <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_ac\\.csv$'), recursive = TRUE, full.names = TRUE)
+    ac_path <- list.files(DIR_RESP, pattern = paste0('^', name_site, '_ac\\.csv$'), recursive = TRUE, full.names = TRUE)
     ac <- read.csv(ac_path)
   }
   if (site_info$SWC_use[id] == 'YES') {
