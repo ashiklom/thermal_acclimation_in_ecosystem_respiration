@@ -9,23 +9,7 @@
 library(amerifluxr)
 library(optparse)
 
-# Helper: parse simple TOML key = "value" lines
-parse_toml <- function(path) {
-  lines <- readLines(path, warn = FALSE)
-  lines <- grep("=", lines, value = TRUE)
-  lines <- gsub("#.*$", "", lines)
-  lines <- trimws(lines)
-  keep <- nchar(lines) > 0
-  lines <- lines[keep]
-  result <- list()
-  for (line in lines) {
-    m <- regmatches(line, regexec("^([a-zA-Z0-9_]+)\\s*=\\s*\"(.*)\"", line))[[1]]
-    if (length(m) == 3) {
-      result[[m[2]]] <- m[3]
-    }
-  }
-  result
-}
+source("R/utils.R")
 
 # Parse command line arguments
 option_list <- list(
