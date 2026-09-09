@@ -28,6 +28,14 @@ download_tern = {
   description = "Download TERN data",
   cmd = ["./workflows/94-download-tern.py"]
 }
+download_aanet = {
+  description = "Download AA-Net data",
+  cmd = ["Rscript", "workflows/96-download-aanet.R"]
+}
+download_era5 = {
+  description = "Download ERA5 SWC data",
+  cmd = ["./workflows/97-download-era5-swc.py"]
+}
 
 download_all = {
   description = "Download all data",
@@ -76,6 +84,7 @@ ipython = ">=9.16.1,<10"
 python = "3.13.*"
 uv = ">=0.12.7,<0.13"
 unzip = ">=6.0,<7"
+r-maps = ">=3.4.3,<4"
 
 [pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }

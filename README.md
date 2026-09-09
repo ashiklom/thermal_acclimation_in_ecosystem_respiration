@@ -10,6 +10,23 @@
 
 **4.** Predict how thermal responses will influence future warming-induced change in ER.
 
+## Prerequisites
+
+Downloading the data required for this analysis requires (free) accounts with the relevant data providers.
+These are configured via the `_creds.toml` file, which has the following structure:
+
+```toml
+user_id = "myusername"
+user_email = "my.name@email.com"
+cds_api_key = "12345-67-890ab"
+```
+
+The fields are as follows:
+
+- `user_id` --- the username associated with the Ameriflux data portal.
+- `user_email` --- the email associated with the Ameriflux data portal.
+- `cds_api_key` --- the API key associated with your Copernicus Data Store (CDS) account.
+
 ## Structure of R Scripts in *workflows*:
 
 1.  Data Preparation for the Estimates of Thermal Response Strength
