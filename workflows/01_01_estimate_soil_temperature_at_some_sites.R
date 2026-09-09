@@ -256,7 +256,14 @@ if (!interactive()) {
   overwrite <- parsed$overwrite
   requested_sites <- if (!is.null(parsed$sites)) trimws(unlist(strsplit(parsed$sites, ","))) else NULL
 
-  for (name_site in sites) {
+  if (is.null(requested_sites)) {
+    site_info <- get_site_info()
+    requested_sites <- site_info$site_ID[site_info$estimate_Ts == "YES"]
+    message("No sites specified, processing all estimate_Ts=YES sites: ",
+            paste(requested_sites, collapse = ", "))
+  }
+
+  for (name_site in requested_sites) {
     process_site(name_site, overwrite)
   }
 
