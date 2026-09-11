@@ -72,3 +72,39 @@
 
 - Created download ERA5 script. Using the ARCO Zarr makes this really fast and easy.
 - Added `_creds.toml` docs to README.
+- Figuring out the workflow. Start from the `brms` model and work backwards.
+- Two models: total TAS (simple) and direct TAS (more complicated)
+- total TAS:
+    - Formula: `frmu <- NEE ~ exp(alpha * TS + beta*TS^2) * C0`
+    - Parameters: `param <- alpha + beta + C0 ~ 1`
+    - Always call model as: `brms::bf(frmu, param, nl = TRUE)`
+    - Prior workflow (for each site):
+        - Start with default prior (note: _no cross-site dependence!_)
+        - Update first prior based on `gsl_nls` results
+- Working on refactor in `R/total_tas.R`
+
+## 2026-09-11
+
+I need to carefully revisit the data preparation steps (workflow step 1 -- 01-01 and 01-02). The resulting data must never have NA values for NEE, TS, or other values associated with the regression. While I'm at it, I can clean up some other stuff too.
+
+Soil temperature correction (workflow step 1) is used to set `a$TS_F_MDS_1`
+
+```r
+a$TS_F_MDS_1 <- df_TS$TS_pred
+a$TS_F_MDS_1_QC[is.na(a$TS_F_MDS_1_QC) | a$TS_F_MDS_1_QC == 3] <- 2
+```
+
+`gStart / gEnd` logic is strange. For one, the original code doesn't make sense (see inline TODO). Second, for a (southern hemisphere) site like `AU-Tum`, we are perpetually in the growing season according to 
+
+Southern hemisphere logic is hard. Let me start with conceptually simpler northern hemisphere site (ICOS, to keep the logic simpler without the Ameriflux ustar filtering).
+
+`NA` values can still slip through the cracks of the current implicit filters for ICOS and TERN data! This is because we don't explicitly check for `!is.na(NEE)` or `!is.na(TS)` --- rather, we rely on the QC flags being set. But there are situations where the QC flag for some of the data is 0 (good measured data) but the values are `NA`. So, we have to filter for `NA` for predictor and response variables explicitly.
+
+TERN and ICOS data pre-processing should be complete. Ameriflux still needs doing --- however, the existing helpers make it a lot easier. Also note the annotation of the ustar filtering in the existing code; that also makes it easy to see where the standard workflow picks up.
+
+Next:
+- Ameriflux pre-processing
+- FLUXNET pre-processing
+- Revisit growing season detection stuff, especially for southern hemisphere. See _agent-docs/better-growing-season.md for a potentially better implementation. The session is "find long gap years logic..." in the `thermal_acclimation-original` folder.
+- Run the pre-preprocessing for all the sites in targets
+- Do the model fits.

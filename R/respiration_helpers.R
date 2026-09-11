@@ -14,42 +14,41 @@ parse_removed_years <- function(value) {
 }
 
 add_timestamp_columns <- function(a, dt) {
-  a$TIMESTAMP <- ymd_hm(a$TIMESTAMP_START) + dt / 2
-  a$YEAR <- year(a$TIMESTAMP)
-  a$MONTH <- month(a$TIMESTAMP)
-  a$DAY <- day(a$TIMESTAMP)
-  a$DOY <- yday(a$TIMESTAMP)
-  a$HOUR <- hour(a$TIMESTAMP)
-  a$MINUTE <- minute(a$TIMESTAMP)
+  a$TIMESTAMP <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
+  a$YEAR <- lubridate::year(a$TIMESTAMP)
+  a$MONTH <- lubridate::month(a$TIMESTAMP)
+  a$DAY <- lubridate::day(a$TIMESTAMP)
+  a$DOY <- lubridate::yday(a$TIMESTAMP)
+  a$HOUR <- lubridate::hour(a$TIMESTAMP)
+  a$MINUTE <- lubridate::minute(a$TIMESTAMP)
   a
 }
 
-adjust_southern_hemisphere <- function(a, lat) {
+adjust_southern_hemisphere <- function(dat, lat) {
   if (lat < 0) {
-    a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
+    dat$DOY[dat$DOY < 183] <- dat$DOY[a$DOY < 183] + 366
   }
-  a
+  dat
 }
 
-adjust_south_hemisphere_measured <- function(measured, lat) {
-  if (lat < 0) {
-    measured$DOY[measured$DOY < 183] <- measured$DOY[measured$DOY < 183] + 366
-  }
-  measured
-}
 
 detect_growing_season <- function(nee_yearly, site_info, nee_col = "NEE", ts_col = "TS",
-                                  filter_fn = NULL, site_name = NULL) {
+                                  filter_fn = NULL) {
   if (is.null(filter_fn)) {
     filter_fn <- function(x) {
       x[[nee_col]] < max(min(x[[nee_col]], na.rm = TRUE) * 0.2, -0.8)
     }
   }
-  tmp <- nee_yearly |> filter(filter_fn(nee_yearly))
+  tmp <- nee_yearly |> dplyr::filter(filter_fn(nee_yearly))
   if (nrow(tmp) < 8) stop(site_name, " has too few seasonal points to estimate growing season.")
 
-  gStart <- as.integer(mean(tmp$DOY[7])) - 4
-  gEnd <- as.integer(mean(tmp$DOY[nrow(tmp) - 6])) + 4
+  # Original comment: 
+  # """
+  # I will use the mean of the first three values, and the mean of the last three values
+  # """
+  # TODO: What is this logic?
+  gStart <- tmp$DOY[[7]] - 4
+  gEnd <- tmp$DOY[[nrow(tmp) - 6]] + 4
 
   nonnegative_ts <- which(nee_yearly[[ts_col]] >= 0)
   if (length(nonnegative_ts) > 0) {
@@ -70,20 +69,20 @@ detect_growing_season <- function(nee_yearly, site_info, nee_col = "NEE", ts_col
 
 build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere) {
   if (southern_hemisphere) {
-    gStart_orig <- ifelse(gStart > 366, gStart - 366, gStart)
-    gEnd_orig <- ifelse(gEnd > 366, gEnd - 366, gEnd)
+    gStart_adj <- ifelse(gStart > 366, gStart - 366, gStart)
+    gEnd_adj <- ifelse(gEnd > 366, gEnd - 366, gEnd)
   } else {
-    gStart_orig <- gStart
-    gEnd_orig <- gEnd
+    gStart_adj <- gStart
+    gEnd_adj <- gEnd
   }
   data.frame(
     TIMESTAMP = c(
       as.POSIXct(
-        (gStart_orig - 1) * 86400 + as.numeric(dt / 2, units = "secs"),
+        (gStart_adj - 1) * 86400 + as.numeric(dt / 2, units = "secs"),
         origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC"
       ),
       as.POSIXct(
-        (gEnd_orig - 1) * 86400 + as.numeric(dt / 2, units = "secs"),
+        (gEnd_adj - 1) * 86400 + as.numeric(dt / 2, units = "secs"),
         origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC"
       )
     ),
@@ -91,55 +90,69 @@ build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere) 
   )
 }
 
-filter_good_years <- function(a_measure_night_complete, gStart, gEnd,
-                              gap_max_thresh, gap_total_thresh,
-                              southern_hemisphere, dt, site_name = NULL) {
-  yStart <- min(a_measure_night_complete$YEAR)
-  yEnd <- max(a_measure_night_complete$YEAR)
-  a_check_gaps <- a_measure_night_complete[, c("TIMESTAMP", "DOY")]
+get_good_years <- function(measured, gStart, gEnd, dt, name_site) {
+
+  site_info <- get_site_info(name_site)
+  southern_hemisphere <- site_info[["LAT"]] < 0
+
+  gap_thresh <- compute_gap_thresholds(gStart, gEnd, name_site)
+  gap_max_thresh <- gap_thresh$gap_max_thresh
+  gap_total_thresh <- gap_thresh$gap_total_thresh
+
+  yStart <- min(measured$YEAR)
+  yEnd <- max(measured$YEAR)
 
   a_gs_dates <- build_gs_dates(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere)
-  a_check_gaps <- a_check_gaps |>
-    rbind(a_gs_dates) |>
+  a_check_gaps <- measured |>
+    dplyr::select("TIMESTAMP", "DOY") |>
+    dplyr::bind_rows(a_gs_dates) |>
     unique() |>
-    arrange(TIMESTAMP)
+    dplyr::arrange(.data$TIMESTAMP)
 
   good_years <- a_check_gaps |>
-    mutate(growing_year = case_when(
-      DOY <= 366 ~ year(TIMESTAMP),
-      TRUE ~ year(TIMESTAMP) - 1
+    dplyr::mutate(growing_year = dplyr::case_when(
+      DOY <= 366 ~ lubridate::year(TIMESTAMP),
+      TRUE ~ lubridate::year(TIMESTAMP) - 1
     )) |>
-    arrange(growing_year, TIMESTAMP) |>
-    group_by(growing_year) |>
-    filter(DOY >= gStart & DOY <= gEnd) |>
-    mutate(lag_date = dplyr::lag(TIMESTAMP)) |>
-    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |>
-    mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
-    filter(!is.na(gap)) |>
-    summarise(
+    dplyr::arrange(growing_year, TIMESTAMP) |>
+    dplyr::group_by(growing_year) |>
+    dplyr::filter(DOY >= gStart & DOY <= gEnd) |>
+    dplyr::mutate(lag_date = dplyr::lag(TIMESTAMP)) |>
+    dplyr::mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |>
+    dplyr::mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
+    dplyr::filter(!is.na(gap)) |>
+    dplyr::summarise(
       gap_max = max(gap, na.rm = TRUE),
-      gap_total = sum(gap_large, na.rm = TRUE) / (gEnd - gStart + 1)
+      gap_total = sum(gap_large, na.rm = TRUE) / (gEnd - gStart + 1),
+      .groups = "drop_last"
     ) |>
-    filter(gap_max < gap_max_thresh & gap_total < gap_total_thresh) |>
-    distinct(growing_year) |>
-    pull()
+    dplyr::filter(gap_max < gap_max_thresh & gap_total < gap_total_thresh) |>
+    dplyr::distinct(growing_year) |>
+    dplyr::pull()
 
-  if (length(good_years) == 0 && !is.null(site_name)) {
-    stop(site_name, " has no complete growing years.")
+  year_str <- site_info[["year_removed"]]
+  if (!is.na(year_str)) {
+    year_parts <- strsplit(year_str, ",")[[1]]
+    years2remove <- unlist(lapply(year_parts, function(part) {
+      if (grepl(":", part)) {
+        rng <- as.numeric(strsplit(part, ":")[[1]])
+        seq(rng[1], rng[2])
+      } else {
+        as.numeric(part)
+      }
+    }))
+    if (length(years2remove) >= 1) {
+      good_years <- setdiff(good_years, years2remove)
+    }
   }
+
   good_years
 }
 
-compute_gap_thresholds <- function(gStart, gEnd, site_name, source) {
-  if (
-    source == "AmeriFlux_BASE" &&
-      site_name %in% c("US-ICt", "US-ICh", "US-ICs", "BR-Ma2", "BR-Sa1")
-  ) {
+compute_gap_thresholds <- function(gStart, gEnd, site_name) {
+  if (site_name %in% c("US-ICt", "US-ICh", "US-ICs", "BR-Ma2", "BR-Sa1")) {
     list(gap_max_thresh = 60, gap_total_thresh = 0.8)
-  } else if (
-    source %in% c("FLUXNET", "FLUXNET2015", "ICOS") &&
-      site_name %in% c("ZA-Kru", "FI-Sod", "GF-Guy")
-  ) {
+  } else if (site_name %in% c("ZA-Kru", "FI-Sod", "GF-Guy")) {
     list(gap_max_thresh = 60, gap_total_thresh = 0.7)
   } else {
     gap_max_thresh <- max(31, (gEnd - gStart + 1) * 0.225)

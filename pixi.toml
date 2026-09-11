@@ -11,6 +11,11 @@ deps = {
   description = "Install additional R package dependencies."
 }
 
+targets = {
+  cmd = ["Rscript", "-e", "'targets::tar_make()'"],
+  description = "Run targets::tar_make()"
+}
+
 download_ameriflux = {
   description = "Download Ameriflux data",
   depends-on = ["deps"],
@@ -59,7 +64,6 @@ r-dplyr = ">=1.2.1,<2"
 r-fbasics = ">=4052.98,<4053"
 r-ggplot2 = ">=4.0.3,<5"
 r-ggpubr = ">=1.0.0,<2"
-r-languageserver = ">=0.3.18,<0.4"
 r-librarian = ">=1.8.1,<2"
 r-lme4 = ">=2.0_6,<3"
 r-lubridate = ">=1.9.5,<2"
@@ -83,17 +87,27 @@ r-vip = ">=0.4.6,<0.5"
 r-vsurf = ">=1.2.1,<2"
 r-zoo = ">=1.8_15,<2"
 # Targets dependencies
-r-igraph = "*"
 r-base64url = "*"
+r-igraph = "*"
+# languageserver
+r-collections = "*"
+r-lintr = "*"
+r-roxygen2 = "*"
+r-styler = "*"
+r-xmlparsedata = "*"
 # Python dependencies
 ipython = ">=9.17.1,<10"
 python = ">=3.14.7,<3.15"
 uv = ">=0.12.12,<0.13"
 unzip = ">=6.0,<7"
+r-qs2 = ">=0.2.1,<0.3"
 
 [pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }
 
 # Issues with MacOS SDK 27.0
 [activation]
-env = { SDKROOT = "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" }
+env = {
+  SDKROOT = "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk",
+  KMP_DUPLICATE_LIB_OK = "TRUE"
+}
