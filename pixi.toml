@@ -48,43 +48,52 @@ download_all = {
 }
 
 [dependencies]
-r-mumin = ">=1.48.19,<2"
-r-vsurf = ">=1.2.1,<2"
 r-bayesplot = ">=1.15.0,<2"
 r-boot = ">=1.3_32,<2"
 r-brms = ">=2.23.0,<3"
 r-car = ">=3.1_5,<4"
 r-caret = ">=7.0_1,<8"
+r-cmdstanr = ">=0.9.0,<0.10"
 r-corrplot = ">=0.95,<0.96"
 r-dplyr = ">=1.2.1,<2"
 r-fbasics = ">=4052.98,<4053"
 r-ggplot2 = ">=4.0.3,<5"
 r-ggpubr = ">=1.0.0,<2"
+r-languageserver = ">=0.3.18,<0.4"
+r-librarian = ">=1.8.1,<2"
 r-lme4 = ">=2.0_6,<3"
 r-lubridate = ">=1.9.5,<2"
+r-maps = ">=3.4.3,<4"
 r-mblm = ">=0.12.1,<0.13"
+r-mumin = ">=1.48.19,<2"
 r-nlme = ">=3.1_170,<4"
-r-performance = ">=0.17.1,<0.18"
+r-optparse = ">=1.8.2,<2"
+r-performance = ">=0.18.2,<0.19"
 r-randomforest = ">=4.7_1.2,<5"
 r-ranger = ">=0.18.0,<0.19"
+r-remotes = ">=2.5.0,<3"
 r-rsample = ">=1.3.2,<2"
+r-s7 = ">=0.2.2,<0.3"
 r-sf = ">=1.1_2,<2"
 r-suncalc = ">=0.5.3,<0.6"
 r-terra = ">=1.9_34,<2"
 r-tidyr = ">=1.3.2,<2"
 r-tidyverse = ">=2.0.0,<3"
 r-vip = ">=0.4.6,<0.5"
+r-vsurf = ">=1.2.1,<2"
 r-zoo = ">=1.8_15,<2"
-r-librarian = ">=1.8.1,<2"
-r-remotes = ">=2.5.0,<3"
-r-cmdstanr = ">=0.9.0,<0.10"
-r-languageserver = ">=0.3.18,<0.4"
-r-optparse = ">=1.8.2,<2"
-ipython = ">=9.16.1,<10"
-python = "3.13.*"
-uv = ">=0.12.7,<0.13"
+# Targets dependencies
+r-igraph = "*"
+r-base64url = "*"
+# Python dependencies
+ipython = ">=9.17.1,<10"
+python = ">=3.14.7,<3.15"
+uv = ">=0.12.12,<0.13"
 unzip = ">=6.0,<7"
-r-maps = ">=3.4.3,<4"
 
 [pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }
+
+# Issues with MacOS SDK 27.0
+[activation]
+env = { SDKROOT = "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" }
