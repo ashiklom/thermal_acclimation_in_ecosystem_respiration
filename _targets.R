@@ -13,7 +13,7 @@ all_site_info <- get_site_info()
 values <- tibble::tibble(
   # site_name = all_site_info[["site_ID"]]
   # site_name = c("US-WCr", "AU-Tum", "BE-Bra")
-  site_name = c("US-GLE", "US-WCr")
+  site_name = c("US-GLE", "US-WCr", "BE-Bra", "FR-Fon", "FR-Bil", "CH-Dav", "FR-FBn")
 )
 
 site_targets <- tar_map(
