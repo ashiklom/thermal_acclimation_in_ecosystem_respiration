@@ -44,8 +44,12 @@ prep_icos_tern_fluxnet <- function(site_info) {
     a$TS_F_MDS_1 <- a$TS_F_MDS_2
     a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
   } else if (name_site == "FI-Sod") {
-    # TODO: Custom soil temperature
-    stop("Need custom soil temperature logic.")
+    # TODO: Use proper date filters here.
+    mod1 <- lm(data = a[1:24383,], TS_F_MDS_2 ~ TS_F_MDS_1)
+    pred2 <- predict(mod1, data.frame(TS_F_MDS_1 = a$TS_F_MDS_1[a$YEAR <= 2005]))
+    mod2 <- lm(data = a[90000:245000,], TS_F_MDS_1 ~ TS_F_MDS_2)
+    a$TS_F_MDS_1[a$YEAR <= 2005] <- predict(mod2, data.frame(TS_F_MDS_2 = pred2))
+    a$TS_F_MDS_1_QC[a$YEAR <= 2005] <- 2
   } else if (name_site == "GF-Guy") {
     # use air temperature for this tropical site so that all tropical sites, we used bottom air temperature.
     a$TS_F_MDS_1 <- a$TA_F_MDS
