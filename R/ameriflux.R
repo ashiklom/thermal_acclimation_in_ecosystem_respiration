@@ -16,7 +16,7 @@ prep_ameriflux <- function(site_info) {
   a[a == -9999] <- NA
 
   if (name_site == "US-Myb") {
-    # use data from the second year, because lots of missing NEE in the first year. 
+    # use data from the second year, because lots of missing NEE in the first year.
     # TODO: Use proper filter here, not magic numbers
     a <- a[17521:245424, ]
     # combine TS data at two depth
@@ -39,25 +39,21 @@ prep_ameriflux <- function(site_info) {
     tz = "UTC"
   )
 
-  a <- a |> 
+  a <- a |>
     dplyr::mutate(DATE = as.Date(.data$TIMESTAMP)) |>
     dplyr::left_join(sunrise_set, by = c("DATE" = "date"))
 
-  # a <- dplyr::as_tibble(a)
-
-  southern_hemisphere <- FALSE
   if (site_info[["LAT"]] < 0) {
     a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
-    southern_hemisphere <- TRUE
   }
 
   # determine: day-time or night-time
   dt <- difftime(a$TIMESTAMP[2], a$TIMESTAMP[1], units = "hours")
-  a$daytime <- ((a$TIMESTAMP + dt/2.0) >= a$sunrise) & (a$TIMESTAMP - dt/2.0 <= a$sunset)
+  a$daytime <- ((a$TIMESTAMP + dt / 2.0) >= a$sunrise) & (a$TIMESTAMP - dt / 2.0 <= a$sunset)
 
   # special cases: sites in Arctic do not have sunrise and sunset sometime of a year
   # TODO: Lat-based filter instead?
-  if (name_site %in% c('US-ICt', 'US-ICh', "US-ICs")) {
+  if (name_site %in% c("US-ICt", "US-ICh", "US-ICs")) {
     a$daytime[is.na(a$daytime) & dplyr::between(a$MONTH, 4, 8)] <- TRUE
     a$daytime[is.na(a$daytime) & !dplyr::between(a$MONTH, 4, 8)] <- FALSE
   }
@@ -139,40 +135,40 @@ prep_ameriflux <- function(site_info) {
   }
 
   DTS <- 24 / as.numeric(dt, units = "hours")
-  EProc <- REddyProc::sEddyProc$new(name_site, ac_u, c('NEE', 'Rg', 'Tair', 'VPD', 'Ustar'), DTS = DTS)
+  EProc <- REddyProc::sEddyProc$new(name_site, ac_u, c("NEE", "Rg", "Tair", "VPD", "Ustar"), DTS = DTS)
   EProc$sSetLocationInfo(LatDeg = lat_site, LongDeg = long_site, TimeZoneHour = tz$utc_offset_h)
 
   if (name_site == "US-ChR") {
     # use default season, and yearly threshold
     uStarTh <- EProc$sEstUstarThold()
-    
-    EProc$sMDSGapFillAfterUstar('NEE', FillAll = FALSE, isVerbose = FALSE)
+
+    EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
     ac_u <- ac_u |>
-      dplyr::mutate(seasonYear = lubridate::year(DateTime)) |>
-      dplyr::left_join(uStarTh[uStarTh$aggregationMode == 'year', c(2, 4)], by = "seasonYear")
+      dplyr::mutate(seasonYear = lubridate::year(.data$DateTime)) |>
+      dplyr::left_join(uStarTh[uStarTh$aggregationMode == "year", c(2, 4)], by = "seasonYear")
   } else {
     ac_u$season <- REddyProc::usCreateSeasonFactorYdayYear(
       ac_u$DateTime - 15*60,  # it sets back 15 min.
       starts = seasonStarts
     )
     uStarTh <- EProc$sEstUstarThold(seasonFactor = ac_u$season)
-    
+
     # gap fill NEE, air temperature and soil temperature
     # By default the gap-filling uses annually aggregated estimates of uStar-Threshold.
     # we can also use a different threshold for each of the defined seasons, by calling the two functions
     # EProc$useSeaonsalUStarThresholds()
     # EProc$sGetUstarScenarios()
     # I only want annually aggregated estimated, because some sites have no seasonal estimates
-    EProc$sMDSGapFillAfterUstar('NEE', FillAll = FALSE, isVerbose = FALSE)
+    EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
     # TODO: Use column names, not column indices
     ac_u <- ac_u |>
       dplyr::left_join(uStarTh[, c("season", "uStar")], by = "season")
   }
-  ac$uStarTh <- ac_u$uStar  
+  ac$uStarTh <- ac_u$uStar
 
   attr(ac, "dt") <- dt
   ac
@@ -214,20 +210,20 @@ prep_ustar_df <- function(a, site_info) {
   if (site_info$estimate_Ts) {
     stop("Soil temperature estimation not implemented yet...")
     df_TS <- read.csv(file = file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')))
-    df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
-    df_TS <- left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
+    df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
+    df_TS <- dplyr::left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
     ac$TS <- df_TS$TS_pred
     rm(df_TS)
   } else {
     if (!is.na(site_info$TS)) {
       ac$TS <- a[[site_info$TS]]
-    } 
+    }
     # deal with special cases
-    if (name_site %in% c('US-NR1', 'US-ICh', "US-ICs")) {
+    if (name_site %in% c("US-NR1", "US-ICh", "US-ICs")) {
       # use PI gap-filled data
       ac$TS[is.na(ac$TS)] <- a$TS_PI_1[is.na(ac$TS)]
     } else if (name_site == "US-Cwt") {
-      # this site has no TS measurements, so we used TS-TA relationships from nearby US-xGB of the same DBF category. 
+      # this site has no TS measurements, so we used TS-TA relationships from nearby US-xGB of the same DBF category.
       ac$TS  <- ac$TA * 0.64718 + 5.13873
     } else if (name_site == "US-MBP") {
       # this site only missed a few TS data, so only estimate these missing data.
@@ -236,7 +232,7 @@ prep_ustar_df <- function(a, site_info) {
       # recent data is more accurate
       mod_lm <- lm(data = ac[ac$YEAR > 2021 & ac$TA > 0, ], TS ~ TA, na.action = na.omit)
       ac$TS <- predict(mod_lm, newdata = data.frame(TA = ac$TA))
-    } else if (name_site %in% c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")) { 
+    } else if (name_site %in% c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")) {
       # cold area, use TA above 0 for growing season
       mod_lm <- lm(data = ac[ac$TA > 0, ], TS ~ TA, na.action = na.omit)
       ac$TS <- predict(mod_lm, newdata = data.frame(TA = ac$TA))
@@ -247,15 +243,15 @@ prep_ustar_df <- function(a, site_info) {
   if (!is.na(site_info$SWC_use)) {
     ac$SWC <- a[[site_info$SWC]]
     # deal with special cases
-    if (name_site == 'US-NR1') {
+    if (name_site == "US-NR1") {
       # use PI gap-filled data
       ac$SWC[is.na(ac$SWC)] <- a$SWC_PI_1[is.na(ac$SWC)]
-    } 
+    }
     # interpolate SWC data if necessary because TS sensor has different frequency with other data
     x <- ac$SWC
     rle_x <- rle(is.na(x))
     min_gap <- min(rle_x$lengths[rle_x$values == TRUE])
-    message(paste0('minimum soil gaps: ', min_gap))
+    message(paste0("minimum soil gaps: ", min_gap))
     if (min_gap <= 8) {
       # Perform interpolation on eligible gaps only
       ac$SWC <- zoo::na.approx(x, na.rm = FALSE, maxgap = 8)
@@ -266,23 +262,24 @@ prep_ustar_df <- function(a, site_info) {
 
   # SW_IN
   ac$SW_IN <- a[[site_info$SW_IN]]
-  if (substr(site_info$SW_IN, 1, 4) == 'PPFD') {
+  if (substr(site_info$SW_IN, 1, 4) == "PPFD") {
     # convert PPFD to SW_IN
     ac$SW_IN  <- ac$SW_IN / 2.3
   }
 
-  # Special cases: US-Jo2: interpolating SW_IN, otherwise ReddyProc does not work for years before 2013 because of no SW_IN data. 
+  # Special cases: US-Jo2: interpolating SW_IN, otherwise ReddyProc does not
+  # work for years before 2013 because of no SW_IN data.
   if (name_site == "US-Jo2") {
     # TODO: More robust implementation! This just grabs the following year's data.
-    ac$SW_IN[is.na(ac$SW_IN)] <- ac$SW_IN[which(is.na(ac$SW_IN)) + 365*48*4]
-  } else if (name_site == 'US-KM4') {
+    ac$SW_IN[is.na(ac$SW_IN)] <- ac$SW_IN[which(is.na(ac$SW_IN)) + 365 * 48 * 4]
+  } else if (name_site == "US-KM4") {
     # use PI gap-filled data
     ac$SW_IN[is.na(ac$SW_IN)] <- a$SW_IN_PI_F[is.na(ac$SW_IN)]
   }
-  
+
   # USTAR
   ac$USTAR <- a[[site_info$USTAR]]
-  
+
   # RH or VPD
   if (!is.na(site_info$RH)) {
     ac$RH <- a[[site_info$RH]]
@@ -291,7 +288,7 @@ prep_ustar_df <- function(a, site_info) {
     ac$VPD <- a[[site_info$VPD]]
     attr(ac, "convert_RH_VPD") <- FALSE
   }
-  
+
   ac$daytime <- a$daytime
 
   ac
