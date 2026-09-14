@@ -120,3 +120,5 @@ Next:
 - `ac` --> `ac_final` and `measured` --> `measured_final` is just filtering to good years and then column selection. If I standardize the column names for `ac` and `measured` between Ameriflux vs. others, this should be trivial.
 - I think I now have a working Ameriflux workflow (for the general case; no soil temperature yet), but it produces some missing `TA` values. Do these actually need to be non-NA?
     - AI says: `!is.na(TA)` check is unnecessary. The variables we need are `NEE`, `TS` (for the total TAS), `SWC`, and `NEE_daytime` (for direct TAS).
+- Implemented soil temperature prediction.
+- Implemented ICOS, TERN, and FLUXNET data reads. All of these seem to be working now.

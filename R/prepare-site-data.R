@@ -4,7 +4,6 @@ prep_icos_tern_fluxnet <- function(site_info) {
   name_site <- site_info[["site_ID"]]
   if (site_info$source %in% c("FLUXNET", "FLUXNET2015")) {
     # TODO: Implement
-    stop("FLUXNET not implemented yet")
     file_path <- list.files(
       file.path(DIR_RAWDATA, "FLUXNET", name_site),
       pattern = "_FLUXMET_(HH|HR)_", full.names = TRUE, recursive = TRUE
@@ -15,16 +14,15 @@ prep_icos_tern_fluxnet <- function(site_info) {
       "%s_TERN_L3_FLUXNET_HH.csv",
       name_site
     ))
-    a <- read.csv(file_path, stringsAsFactors = FALSE)
-    a[a == -9999] <- NA
   } else if (site_info$source == "ICOS") {
     file_path <- file.path(DIR_RAWDATA, "ICOS", name_site, sprintf(
       "%s_ICOS_L2_FLUXNET_HH.csv",
       name_site
     ))
-    a <- read.csv(file_path, stringsAsFactors = FALSE)
-    a[a == -9999] <- NA
   }
+
+  a <- read.csv(file_path, stringsAsFactors = FALSE)
+  a[a == -9999] <- NA
 
   dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
   a$TIMESTAMP <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
@@ -41,7 +39,6 @@ prep_icos_tern_fluxnet <- function(site_info) {
     a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
   }
 
-  # a <- fix_soil_temp(a, name_site)
   if (name_site == "CZ-Stn") {
     # use TS of second layer because the first layer is incomplete
     a$TS_F_MDS_1 <- a$TS_F_MDS_2

@@ -11,9 +11,12 @@ all_site_info <- get_site_info()
 # control over which sites I run while developing.
 # https://books.ropensci.org/targets/static.html
 values <- tibble::tibble(
-  # site_name = all_site_info[["site_ID"]]
-  # site_name = c("US-WCr", "AU-Tum", "BE-Bra")
-  site_name = c("US-GLE", "US-WCr", "BE-Bra", "FR-Fon", "FR-Bil", "CH-Dav", "FR-FBn")
+  site_name = all_site_info |>
+    dplyr::filter(
+      .data$source %in% c("ICOS", "TERN", "FLUXNET"),
+      .data$LAT > 0
+    ) |>
+    dplyr::pull("site_ID")
 )
 
 site_targets <- tar_map(
@@ -25,9 +28,6 @@ list(
   site_targets,
   NULL
 )
-
-# tar_meta(fields = "error") |>
-#   dplyr::filter(name == "site_data_US.WCr")
 
 # list(
 #   tar_target(all_site_info, get_site_info()),
