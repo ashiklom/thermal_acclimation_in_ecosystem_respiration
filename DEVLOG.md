@@ -122,3 +122,8 @@ Next:
     - AI says: `!is.na(TA)` check is unnecessary. The variables we need are `NEE`, `TS` (for the total TAS), `SWC`, and `NEE_daytime` (for direct TAS).
 - Implemented soil temperature prediction.
 - Implemented ICOS, TERN, and FLUXNET data reads. All of these seem to be working now.
+    - IT-Noe has "no non-missing arguments to min" warning. Double check.
+- Next:
+    - Add target for fitting models.
+    - Run model fits on existing sites.
+    - Figure out southern hemisphere logic.
