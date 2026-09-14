@@ -32,8 +32,16 @@ adjust_southern_hemisphere <- function(dat, lat) {
 }
 
 
-detect_growing_season <- function(nee_yearly, site_info, nee_col = "NEE", ts_col = "TS",
+detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
                                   filter_fn = NULL) {
+  nee_yearly <- ac |>
+    dplyr::summarise(
+      NEE = mean(.data[[nee_col]], na.rm = TRUE),
+      TS = mean(.data[[ts_col]], na.rm = TRUE),
+      .by = "DOY",
+    ) |>
+    dplyr::arrange(.data$DOY)
+
   if (is.null(filter_fn)) {
     filter_fn <- function(x) {
       x[[nee_col]] < max(min(x[[nee_col]], na.rm = TRUE) * 0.2, -0.8)

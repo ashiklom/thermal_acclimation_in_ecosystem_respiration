@@ -1,13 +1,13 @@
 ## testing
 
-name_site <- "AU-Tum"
-SWC_use <- get_site_info(name_site)[["SWC_use"]]
-iwindow <- 1
-iyear <- 2002
+# name_site <- "AU-Tum"
+# SWC_use <- get_site_info(name_site)[["SWC_use"]]
+# iwindow <- 1
+# iyear <- 2002
 
 ################################################################################
 
-source("R/utils.R")
+# source("R/utils.R")
 
 .data <- NULL
 

@@ -48,5 +48,10 @@ scripts/.DS_Store
 /data-proc/
 _creds.toml
 
+# Targets stuff
+/_targets/
+
+/_scratch/
+
 # don't gitignore agent documentation, even though it's HTML
 !_agent-docs/*.html

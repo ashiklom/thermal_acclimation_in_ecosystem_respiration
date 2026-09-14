@@ -108,3 +108,15 @@ Next:
 - Revisit growing season detection stuff, especially for southern hemisphere. See _agent-docs/better-growing-season.md for a potentially better implementation. The session is "find long gap years logic..." in the `thermal_acclimation-original` folder.
 - Run the pre-preprocessing for all the sites in targets
 - Do the model fits.
+
+## 2026-09-14
+
+- Ameriflux
+    - Base case is complete. Still need to sort out a few to-do's; most importantly, soil temperature logic.
+- Non-Ameriflux
+    - `measured` is just `a` filtered against a bunch of columns. May as well rename everything in this step.
+    - `ac` is just `a` but filtered to good years.
+- In general, the columns coming out of the preparation scripts should be standardized already. Non-Ameriflux `measured `uses custom filtering based on QC flags, while Ameriflux comes out already clean. So, out of my first if-else block, produce `ac` and `measured`.
+- `ac` --> `ac_final` and `measured` --> `measured_final` is just filtering to good years and then column selection. If I standardize the column names for `ac` and `measured` between Ameriflux vs. others, this should be trivial.
+- I think I now have a working Ameriflux workflow (for the general case; no soil temperature yet), but it produces some missing `TA` values. Do these actually need to be non-NA?
+    - AI says: `!is.na(TA)` check is unnecessary. The variables we need are `NEE`, `TS` (for the total TAS), `SWC`, and `NEE_daytime` (for direct TAS).
