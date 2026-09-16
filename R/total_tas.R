@@ -1,24 +1,15 @@
-## testing
-
-# name_site <- "AU-Tum"
-# SWC_use <- get_site_info(name_site)[["SWC_use"]]
-# iwindow <- 1
-# iyear <- 2002
-
-################################################################################
-
-# source("R/utils.R")
-
-.data <- NULL
-
-DIR_PROC <- file.path("data-proc")
-DIR_RESP <- file.path(DIR_PROC, "respiration")
 N_CORES <- 4        # Used internally by brms
 WINDOW_SIZE <- 14   # Uniform window size: 2 weeks.
 
-BRM_FORMULA <- brms::bf(
+BRM_FORMULA_TOTAL <- brms::bf(
   NEE ~ exp(alpha * TS + beta * TS^2) * C0,
   alpha + beta + C0 ~ 1,
+  nl = TRUE
+)
+
+BRM_FORMULA_DIRECT <- brms::bf(
+  NEE ~ exp(alpha * TS + beta*TS^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2),
+  alpha + beta + C0 + Hs + k2 ~ 1,
   nl = TRUE
 )
 
@@ -39,12 +30,16 @@ Year_Result <- S7::new_class("Year_Result", properties = list(
   alpha = opt_num,
   beta = opt_num,
   C0 = opt_num,
-  Hs = opt_num,
   k2 = opt_num,
+  Hs = opt_num,
   TS = opt_num,
-  ERref = opt_num,
-  lnRatio = opt_num
+  ERref = opt_num
 ))
+
+year_result_df <- S7::new_generic("year_result_df", "year_result")
+S7::method(year_result_df, Year_Result) <- function(year_result) {
+  tibble::tibble(!!!S7::props(year_result))
+}
 
 ################################################################################
 
@@ -53,24 +48,41 @@ adjust_prior <- function(priors, nlpar, p1, p2, family = "normal") {
   priors
 }
 
-get_priors <- function(model_data) {
+get_priors <- function(model_data, direct = FALSE) {
   # Start with default prior
   priors <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
     brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) +
     brms::prior("normal(-0.001, 0.1)", nlpar = "beta", lb = -0.01, ub = 0.0)
 
+  if (direct) {
+    priors_water <- brms::prior("normal(10, 10)", nlpar = "Hs", lb = 0, ub = 1000)
+    priors_gpp <- brms::prior("normal(0.5, 2)", nlpar = "k2", lb = 0, ub = 10)
+    priors <- priors + priors_water + priors_gpp
+  }
+
+  if (direct) {
+    frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * 
+      SWC / (exp(Hs_ln) + SWC) * (exp(C0_ln) + NEE_daytime * exp(k2_ln))
+    start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6, Hs_ln = 2.3)
+  } else {
+    frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln) * TS^2) * (exp(C0_ln))
+    start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9)
+  }
+
+
   # Next, attempt to update the prior using NLS fit.
   tryCatch(
     {
-      mod_nls <- gslnls::gsl_nls(
-        fn = NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln) * TS^2) * (exp(C0_ln)),
-        data = model_data,
-        start = c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9)
-      )
+      mod_nls <- gslnls::gsl_nls(fn = frmu_nls, data = model_data, start = start_nls)
       priors <- priors |>
         adjust_prior("alpha", min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2), 1.0) |>
         adjust_prior("beta", -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01), 0.1) |>
         adjust_prior("C0", min(exp(coefficients(mod_nls)["C0_ln"]), 10), 5)
+      if (direct) {
+        priors <- priors |>
+          adjust_prior("k2", min(exp(coefficients(mod_nls)["k2_ln"]), 10), 2) |>
+          adjust_prior("Hs", min(exp(coefficients(mod_nls)["Hs_ln"]), 1000), 10)
+      }
     },
     error = function(e) {
       message("NLS fit failed with error: ", str(e), ".\n\nKeeping priors unchanged.")
@@ -78,8 +90,9 @@ get_priors <- function(model_data) {
   )
 
   # Next, try to update the prior again using brms fit across all data.
+  brm_frmu <- if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL
   mod0 <- brms::brm(
-    BRM_FORMULA,
+    brm_frmu,
     prior = priors,
     data = model_data,
     iter = 2000,
@@ -90,31 +103,29 @@ get_priors <- function(model_data) {
     refresh = 0
   )
   priors <- priors |>
-    adjust_prior('alpha', brms::fixef(mod0)["alpha_Intercept", "Estimate"], 1.0) |>
-    adjust_prior('beta', brms::fixef(mod0)["beta_Intercept", "Estimate"], 0.1) |>
-    adjust_prior('C0', brms::fixef(mod0)["C0_Intercept", "Estimate"], 5)
+    adjust_prior("alpha", brms::fixef(mod0)["alpha_Intercept", "Estimate"], 1.0) |>
+    adjust_prior("beta", brms::fixef(mod0)["beta_Intercept", "Estimate"], 0.1) |>
+    adjust_prior("C0", brms::fixef(mod0)["C0_Intercept", "Estimate"], 5)
+
+  if (direct) {
+    priors <- priors |> 
+      adjust_prior("k2", brms::fixef(mod0)["k2_Intercept", "Estimate"], 2) |>
+      adjust_prior("Hs", brms::fixef(mod0)["Hs_Intercept", "Estimate"], 10)
+  }
 
   priors
 }
 
 
-total_tas_site <- function(name_site) {
+total_tas_site <- function(site_data, direct = FALSE) {
+  a_measure_night_complete <- site_data[["nightNEE"]]
+  ac <- site_data[["ac"]]
+  feature_gs <- site_data[["feature_gs"]]
+
+  name_site <- feature_gs[["site_ID"]]
+
   site_info <- get_site_info(name_site)
-
-  a_measure_night_complete <- read.csv(file.path(
-    DIR_RESP, name_site,
-    paste0(name_site, "_nightNEE.csv")
-  ))
-
-  ac <- read.csv(file.path(
-    DIR_RESP, name_site,
-    paste0(name_site, "_ac.csv")
-  ))
-
-  feature_gs <- read.csv(file.path(DIR_PROC, "features", "growing_season_features.csv")) |>
-    dplyr::filter(.data$site_ID == name_site)
-
-  stopifnot(nrow(feature_gs) == 1)
+  SWC_use <- site_info[["SWC_use"]]
 
   gStart <- feature_gs[["gStart"]]
   gEnd <- feature_gs[["gEnd"]]
@@ -122,9 +133,29 @@ total_tas_site <- function(name_site) {
   tEnd <- feature_gs[["tEnd"]]
 
   # TODO: Move this logic out of here
-  if (site_info[["SWC_use"]]) {
+  if (SWC_use) {
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(!is.na(.data$SWC))
+  } else if (direct) {
+    # if no measured SWC data use daily SWC from ERA5 land
+    a_measure_night_complete[["SWC"]] <- NULL
+    ac[["SWC"]] <- NULL
+    # use SWC data from ERA5 land climate reanalysis
+    swc_ERA5 <- read.csv(file.path("data-raw", "ERA5_daily_swc.csv")) |>
+      dplyr::mutate(
+        date = as.Date(.data$time),
+        YEAR = lubridate::year(.data$time),
+        MONTH = lubridate::month(.data$time),
+        DAY = lubridate::day(.data$time)
+      ) |>
+      dplyr::filter(.data$site == name_site) |>
+      dplyr::select('YEAR', 'MONTH', 'DAY', 'SWC')
+    # attach to a_measure_night_complete and ac
+    a_measure_night_complete <- a_measure_night_complete |>
+      dplyr::left_join(swc_ERA5, by = c('YEAR', 'MONTH', 'DAY'))
+    ac <- ac |>
+      dplyr::left_join(swc_ERA5, by = c('YEAR', 'MONTH', 'DAY'))
+    SWC_use <- TRUE
   }
 
   # TODO: Move this logic out of here
@@ -144,15 +175,14 @@ total_tas_site <- function(name_site) {
 
   # calculate daily daytime NEE and rolling average
   # Is the data 30 minute or hourly? TODO: Check this logic!
-  dt <- if (ac$MINUTE[2] - ac$MINUTE[1] != 30) 60 else 60 
+  dt <- if (ac$MINUTE[2] - ac$MINUTE[1] != 30) 60 else 30
 
   # unit is umol / m2 / s
   ac_day <- ac |>
     dplyr::filter(.data$daytime) |>
-    dplyr::group_by(.data$YEAR, .data$DOY) |> 
     dplyr::summarise(
       NEE_daytime1 = max(-sum(.data$NEE_uStar_f, na.rm = TRUE) * dt * 60 / 86400, 0.0),
-      .groups = "drop"
+      .by = c("YEAR", "DOY")
     )
 
   # get rolling average of the prior three days
@@ -165,7 +195,7 @@ total_tas_site <- function(name_site) {
   )
 
   # attach it to nighttime data
-  ac_min_doy <- min(ac[["DOY"]])
+  ac_min_doy <- min(ac[["DOY"]])    # nolint
 
   # TODO: Move this logic out of here
   a_measure_night_complete <- a_measure_night_complete |>
@@ -195,24 +225,25 @@ total_tas_site <- function(name_site) {
   # remove the growing_year with incomplete data
   # sites in southern hemisphere lose one year, because growing season crosses two years
   # TODO: Move this logic out of here.
-  if (name_site %in% c('AU-Tum', 'ZA-Kru')) {
+  if (name_site %in% c("AU-Tum", "ZA-Kru")) {
     a_measure_night_complete <- a_measure_night_complete |>
-      dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+      dplyr::filter(dplyr::between(.data$growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
     ac <- ac |>
-      dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+      dplyr::filter(dplyr::between(.data$growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
   }
 
   years <- sort(unique(a_measure_night_complete$growing_year))
 
-  # decide control year: the year with growing-season TS closest to long-term mean. 
+  # decide control year: the year with growing-season TS closest to long-term mean.
   ac_yearly_gs <- ac |>
     dplyr::filter(dplyr::between(.data$DOY, gStart, gEnd)) |>
     dplyr::filter(.data$growing_year %in% years) |>
     dplyr::group_by(.data$growing_year) |>
-    dplyr::summarise(TS = mean(TS, na.rm = TRUE), .groups = "drop_last") |>
+    dplyr::summarise(TS = mean(.data$TS, na.rm = TRUE), .groups = "drop_last") |>
     dplyr::ungroup()
+
   control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
-  
+
   # determine moving window size and number of windows
   if (dt == 30) {
     nobs_threshold <- 100
@@ -223,29 +254,67 @@ total_tas_site <- function(name_site) {
   # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
   nwindow <- max(round((gEnd - gStart + 1) / WINDOW_SIZE), 1)
 
+  window_results <- list()
   for (iwindow in seq_len(nwindow)) {
+    message("########################################")
+    message(iwindow, " of ", nwindow)
     window_start <- gStart + WINDOW_SIZE * (iwindow - 1)
     window_end <- min(gStart + WINDOW_SIZE * iwindow, gEnd)
-    window_result <- total_tas_window(
+    window_name <- paste(window_start, window_end, sep = "_")
+    window_results[[window_name]] <- total_tas_window(
       ac, ac_day, a_measure_night_complete,
-      window_start, window_end, nwindow,
-      site_info[["SWC_use"]], tStart, tEnd
+      window_start, window_end, nwindow, nobs_threshold, control_year,
+      SWC_use, tStart, tEnd, gEnd,
+      direct = direct
     )
   }
+
+  window_results_df <- window_results |>
+    lapply(`[[`, "outcome_siteyear") |>
+    dplyr::bind_rows() |>
+    dplyr::mutate(site_ID = name_site, .before = 1)
+
+  ER_obs_pred <- window_results |>
+    lapply(`[[`, "ER_obs_pred") |>
+    dplyr::bind_rows()
+
+  fit_stats <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)
+
+  mod_ar1 <- nlme::gls(
+    lnRatio ~ TS + window,
+    data = window_results_df,
+    correlation = nlme::corAR1(form = ~ growing_year | window),
+    na.action = na.omit
+  )
+  mod_ar1_smry <- summary(mod_ar1)[["tTable"]]
+
+  outcome <- tibble::tibble(
+    site_ID = name_site,
+    RMSE = fit_stats[["RMSE"]],
+    R2 = fit_stats[["Rsquared"]],
+    control_year = control_year,
+    window_size = WINDOW_SIZE,
+    nwindow = nwindow,
+    TAS = mod_ar1_smry["TS", "Value"],
+    TASp = mod_ar1_smry["TS", "p-value"]
+  )
+
+  outcome
 }
 
 
 # NOTE: Can refactor this further to remove window_start and window_end? Instead, just pass data directly?
 total_tas_window <- function(
   ac, ac_day, a_measure_night_complete,
-  window_start, window_end, nwindow,
-  SWC_use, tStart, tEnd
+  window_start, window_end, nwindow, nobs_threshold, control_year,
+  SWC_use, tStart, tEnd, gEnd,
+  direct = FALSE
 ) {
 
   ac_yearly_window <- ac |>
     dplyr::filter(dplyr::between(.data$DOY, window_start, window_end)) |>
     dplyr::group_by(.data$growing_year) |>
-    dplyr::summarise(TS = mean(.data$TS, na.rm=TRUE), .groups = "drop_last") |>
+    dplyr::summarise(TS = mean(.data$TS, na.rm = TRUE), .groups = "drop_last") |>
     dplyr::ungroup()
 
   skip <- (!dplyr::between(
@@ -269,22 +338,16 @@ total_tas_window <- function(
 
   # get reference temperature, SWC, and NEEday of each window.
   # This is used to fit the data later.
-  TSref <- mean(ac$TS[dplyr::between(ac$DOY, window_start, window_end)], na.rm = TRUE)
-  NEEdayref <- mean(
-    ac_day$NEE_daytime[dplyr::between(ac_day$DOY, window_start, window_end)],
-    na.rm = TRUE
+  keep <- function(dat) dplyr::between(dat$DOY, window_start, window_end)
+  data_ref <- data.frame(
+    TS = mean(ac$TS[keep(ac)], na.rm = TRUE),
+    NEE_daytime = mean(ac_day$NEE_daytime[keep(ac_day)], na.rm = TRUE)
   )
   if (SWC_use) {
-    SWCref <- mean(
-      ac$SWC[dplyr::between(ac$DOY, window_start, window_end)],
-      na.rm = TRUE
-    )
-    data_ref <- data.frame(TS = TSref, NEE_daytime = NEEdayref, SWC = SWCref)
-  } else {
-    data_ref <- data.frame(TS = TSref, NEE_daytime = NEEdayref)
+    data_ref[["SWC"]] <- mean(ac$SWC[keep(ac)], na.rm = TRUE)
   }
 
-  priors <- get_priors(model_data)
+  priors <- get_priors(model_data, direct = direct)
 
   ERref_control <- NA
 
@@ -293,87 +356,129 @@ total_tas_window <- function(
   year_results <- list()
 
   for (iyear in years) {
-    year_results[[as.character(iyear)]] <- fit_tas_year(iyear, model_data, a_measure_night_complete)
+    data_subset <- model_data |>
+      dplyr::filter(.data$growing_year == iyear)
+
+    # two rules are needed:
+    # rule 1: total number of points > 100.
+    # rule 2: TSref is within the 0.025 and 0.975 quantiles.
+    # if the two rules are violated, extend window size.
+    TSref <- data_ref[["TS"]]
+    extend_days <- 0
+
+    check_subset <- function(data_subset, TSref, nobs_threshold) {
+      ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
+      (nrow(data_subset) < nobs_threshold || !dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]]))
+    }
+
+    while (check_subset(data_subset, TSref, nobs_threshold)) {
+      extend_days <- extend_days + 3
+      data_subset <- a_measure_night_complete |>
+        dplyr::filter(.data$growing_year == iyear) |>
+        dplyr::filter(dplyr::between(.data$DOY, window_start - extend_days, window_end + extend_days))
+      # some conditions to break out to avoid dead loop
+      if (
+        (nrow(data_subset) >= nobs_threshold) &&
+          ((window_end + extend_days) >= gEnd) &&
+          (TSref >= max(data_subset$TS, na.rm = TRUE))
+      ) {
+        break
+      }
+      if (extend_days >= 24) { # max window size: two months
+        break
+      }
+    }
+
+    year_result <- Year_Result()
+
+    year_result@nobsv <- nrow(data_subset)
+    year_result@extend_days <- as.integer(extend_days)
+
+    # ensure enough observations
+    ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
+    next_condition <- (
+      # ensure enough observations
+      (nrow(data_subset) <= 25) ||
+        # ensure enough temperature range
+        (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) ||
+        # ensure nighttime NEE is positive
+        (median(data_subset$NEE) < 0.2) ||
+        (mean(data_subset$NEE) < 0.2)
+    )
+
+    if (next_condition) {
+      year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = NULL)
+      next
+    }
+
+    mod <- fit_with_retry(data_subset, priors, direct)
+
+    # Extract model results
+    ER_obs_pred <- data_subset |>
+      dplyr::mutate(NEE_pred = fitted(mod)[, "Estimate"]) |>
+      dplyr::filter(dplyr::between(.data$DOY, window_start, window_end))
+
+    model_params <- brms::fixef(mod)[, "Estimate"]
+    year_result@alpha <- model_params[["alpha_Intercept"]]
+    year_result@beta <- model_params[["beta_Intercept"]]
+    year_result@C0 <- model_params[["C0_Intercept"]]
+
+    if (direct) {
+      year_result@k2 <- model_params[["k2_Intercept"]]
+      year_result@Hs <- model_params[["Hs_Intercept"]]
+    }
+
+    year_result@TS <- ac_yearly_window |>
+      dplyr::filter(.data$growing_year == iyear) |>
+      dplyr::pull("TS")
+
+    df_ERref <- fitted(mod, newdata = data_ref)
+    if (df_ERref[, "Estimate"] >= df_ERref[, "Est.Error"]) {
+      year_result@ERref <- df_ERref[, "Estimate"]
+    }
+
+    if (iyear == control_year) {
+      ERref_control <- year_result@ERref
+    }
+
+    year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = ER_obs_pred)
+  } # end year loop
+
+  df_site_year_window <- year_results |>
+    lapply(`[[`, "year_result") |>
+    lapply(year_result_df) |>
+    dplyr::bind_rows(.id = "growing_year") |>
+    dplyr::mutate(
+      growing_year = as.integer(.data$growing_year),
+      window = paste(window_start, window_end, sep = "_")
+    )
+
+  ER_obs_pred_all <- year_results |>
+    lapply(`[[`, "ER_obs_pred") |>
+    dplyr::bind_rows()
+
+  # if no data in a control year during this window, use average ER across years as the reference conditions
+  if (is.na(ERref_control)) {
+    ERref_control <- mean(df_site_year_window$ERref, na.rm = TRUE)
   }
 
+  df_site_year_window <- df_site_year_window |>
+    dplyr::mutate(lnRatio = log(.data$ERref / ERref_control))
+
+  # remove unrealistic extreme values due to potentially large gaps; this only affects a few sites
+  x <- df_site_year_window$lnRatio
+  outlier <- boxplot.stats(x, coef = 3)$out
+  id.remove <- match(outlier[abs(outlier) > 1.5], x)
+  if (length(id.remove) > 0) {
+    df_site_year_window <- df_site_year_window[-id.remove, ]
+  }
+
+  list(outcome_siteyear = df_site_year_window, ER_obs_pred = ER_obs_pred_all)
 }
 
-
-fit_tas_year <- function(iyear, model_data, a_measure_night_complete) {
-
-  data_subset <- model_data |>
-    dplyr::filter(.data$growing_year == iyear)
-
-  year_result <- Year_Result()
-
-  # two rules are needed:
-  # rule 1: total number of points > 100. 
-  # rule 2: TSref is within the 0.025 and 0.975 quantiles. 
-  # if the two rules are violated, extend window size.
-  extend_days <- 0
-  ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
-
-  while (nrow(data_subset) < nobs_threshold || !dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) {
-    extend_days <- extend_days + 3
-    data_subset <- a_measure_night_complete |>
-      dplyr::filter(growing_year == iyear) |> 
-      dplyr::filter(dplyr::between(.data$DOY, window_start - extend_days, window_end + extend_days))
-    # some conditions to break out to avoid dead loop
-    if (nrow(data_subset) >= nobs_threshold && (window_end + extend_days) >= gEnd && TSref >= max(data_subset$TS, na.rm=T)) {
-      break
-    }
-    if (extend_days >= 24) { # max window size: two months
-      break
-    }
-  }
-
-  year_result@nobsv <- nrow(data_subset)
-  year_result@extend_days <- as.integer(extend_days)
-
-  # ensure enough observations
-  if (nrow(data_subset) <= 25) {
-    return(list(year_result = year_result, ER_obs_pred = NULL))
-  }
-
-  # ensure enough temperature range
-  if (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) {
-    return(list(year_result = year_result, ER_obs_pred = NULL))
-  }
-
-  # ensure nighttime NEE is positive
-  if (median(data_subset$NEE) < 0.2 || mean(data_subset$NEE) < 0.2) {
-    return(list(year_result = year_result, ER_obs_pred = NULL))
-  }
-
-  mod <- fit_with_retry(data_subset, priors)
-
-  # Extract model results
-  ER_obs_pred <- data_subset |>
-    dplyr::mutate(NEE_pred = fitted(mod)[, "Estimate"]) |>
-    dplyr::filter(dplyr::between(.data$DOY, window_start, window_end))
-
-  model_params <- brms::fixef(mod)[, "Estimate"]
-  year_result@alpha <- model_params[["alpha_Intercept"]]
-  year_result@beta <- model_params[["beta_Intercept"]]
-  year_result@C0 <- model_params[["C0_Intercept"]]
-
-  year_result@TS <- ac_yearly_window |>
-    dplyr::filter(.data$growing_year == iyear) |>
-    dplyr::pull("TS")
-
-  df_ERref <- fitted(mod, newdata = data_ref)
-  if (df_ERref[, "Estimate"] < df_ERref[, "Est.Error"]) {
-    year_result@ERref <- df_ERref[, "Estimate"]
-  }
-
-  list(year_result = year_result, ER_obs_pred = ER_obs_pred)
-}
-
-
-
-fit_with_retry <- function(data_subset, priors) {
+fit_with_retry <- function(data_subset, priors, direct = FALSE) {
   brm_args <- list(
-    BRM_FORMULA,
+    if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,
     prior = priors,
     data = data_subset,
     iter = 1000,

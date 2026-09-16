@@ -150,7 +150,7 @@ prep_nee_ac <- function(name_site) {
     dplyr::filter(.data$growing_year %in% good_years) |>
     dplyr::select(
       "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE",
-      "TA", "TS", "SWC", "NEE"
+      "NEE", "TA", "TS", "SWC"
     )
 
   stopifnot(
@@ -161,7 +161,10 @@ prep_nee_ac <- function(name_site) {
   iStart <- min(measured_final[["YEAR"]])
   iEnd <- max(measured_final[["YEAR"]])
 
-  ac_required <- c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "daytime", "NEE", "TA", "TS")
+  ac_required <- c(
+    "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE",
+    "NEE", "NEE_uStar_f", "TA", "TS", "SWC", "SW_IN", "daytime"
+  )
   ac_optional <- c("NEE_QC", "GPP_DT")
 
   ac_final <- ac |>

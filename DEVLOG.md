@@ -127,3 +127,11 @@ Next:
     - Add target for fitting models.
     - Run model fits on existing sites.
     - Figure out southern hemisphere logic.
+    - Add parallelization to targets workflow.
+
+## 2026-09-15
+
+- Total TAS target created. Seems to work.
+- Added basic local parallelization on my MacOS.
+- Total TAS fits seem to work for most sites.
+- Next: Add the direct TAS.

@@ -1,9 +1,13 @@
 library(targets)
 library(tarchetypes)
+library(crew)
+
+tar_option_set(
+  error = "continue",
+  controller = crew_controller_local(workers = 10)
+)
 
 tar_source()
-
-tar_option_set(error = "continue")
 
 all_site_info <- get_site_info()
 
@@ -21,18 +25,12 @@ values <- tibble::tibble(
 
 site_targets <- tar_map(
   values = values,
-  tar_target(site_data, prep_nee_ac(site_name), format = "qs", cue = tar_cue("never"))
+  tar_target(site_data, prep_nee_ac(site_name), format = "qs"),
+  tar_target(site_tas_total, total_tas_site(site_data), format = "qs"),
+  tar_target(site_tas_direct, total_tas_site(site_data, direct = TRUE), format = "qs")
 )
 
 list(
   site_targets,
   NULL
 )
-
-# list(
-#   tar_target(all_site_info, get_site_info()),
-#   # Some test sites
-#   tar_target(site_names, all_site_info[["site_ID"]]),
-#   tar_target(site_data, prep_nee_ac(site_names), pattern = map(site_names), format = "qs"),
-#   NULL
-# )
