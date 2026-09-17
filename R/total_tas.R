@@ -269,6 +269,10 @@ total_tas_site <- function(site_data, direct = FALSE) {
     )
   }
 
+  if (length(window_results) == 0) {
+    stop("No results produced, possibly because all windows were skipped.")
+  }
+
   window_results_df <- window_results |>
     lapply(`[[`, "outcome_siteyear") |>
     dplyr::bind_rows() |>
@@ -332,7 +336,7 @@ total_tas_window <- function(
     dplyr::filter(dplyr::between(.data$DOY, window_start, window_end))
 
   if (nrow(model_data) < 100) {
-    message("Skipping because too few values in window.")
+    message("Skipping because too few values in window (", nrow(model_data), ").")
     return(NULL)
   }
 
