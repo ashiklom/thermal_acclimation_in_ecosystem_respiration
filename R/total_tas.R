@@ -213,13 +213,13 @@ total_tas_site <- function(site_data, direct = FALSE) {
   # TODO: Will this be a problem in leap years?
   a_measure_night_complete <- a_measure_night_complete |>
     dplyr::mutate(growing_year = dplyr::case_when(
-      DOY <= 366 ~ YEAR,
-      TRUE ~ YEAR - 1
+      .data$DOY <= 366 ~ .data$YEAR,
+      TRUE ~ .data$YEAR - 1
     ))
   ac <- ac |>
     dplyr::mutate(growing_year = dplyr::case_when(
-      DOY <= 366 ~ YEAR,
-      TRUE ~ YEAR - 1
+      .data$DOY <= 366 ~ .data$YEAR,
+      TRUE ~ .data$YEAR - 1
     ))
 
   # remove the growing_year with incomplete data
