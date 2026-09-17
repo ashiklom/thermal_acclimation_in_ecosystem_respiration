@@ -88,7 +88,7 @@ if [[ ! ${#SITES[@]} -gt 0 ]]; then
   while IFS= read -r line; do
     site="$line"
     present=$(find data-raw/FLUXNET -name "*_${site}_FLUXNET_*.zip")
-    if [[ -n $present && ! $OVERWRITE ]]; then
+    if [[ -n "$present" ]] && [[ "$OVERWRITE" != "true" ]]; then
       PRESENT+=($site)
     else
       SITES+=($site)

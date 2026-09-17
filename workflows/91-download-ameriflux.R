@@ -114,16 +114,13 @@ downloaded_files <- amf_download_base(
 downloaded_basenames <- basename(downloaded_files)
 downloaded_sites <- sub("^AMF_([^_]+)_BASE.*", "\\1", downloaded_basenames)
 target_paths <- file.path(opt$out_dir, downloaded_sites, downloaded_basenames)
-dir.create(unique(dirname(target_paths)), recursive = TRUE, showWarnings = FALSE)
+target_dirs <- unique(dirname(target_paths))
+lapply(target_dirs, dir.create, recursive = TRUE, showWarnings = FALSE)
 files_needing_move <- downloaded_files[downloaded_files != target_paths]
 if (length(files_needing_move) > 0) {
   for (i in which(downloaded_files != target_paths)) {
-    file.copy(downloaded_files[i], target_paths[i], overwrite = TRUE)
+    file.rename(downloaded_files[i], target_paths[i])
   }
 }
 
 message(sprintf("Successfully downloaded %d files to %s", length(downloaded_files), opt$out_dir))
-message("Downloaded files:")
-for (f in downloaded_basenames) {
-  message(sprintf("  %s", f))
-}
