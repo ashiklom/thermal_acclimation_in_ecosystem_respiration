@@ -16,40 +16,14 @@ targets = {
   description = "Run targets::tar_make()"
 }
 
-download_ameriflux = {
-  description = "Download Ameriflux data",
-  depends-on = ["deps"],
-  cmd = ["Rscript", "workflows/91-download-ameriflux.R"]
-}
-download_fluxnet = {
-  description = "Download FLUXNET data",
-  cmd = ["./workflows/92-download-fluxnet.sh"]
-}
-download_icos = {
-  description = "Download ICOS data",
-  cmd = ["./workflows/93-download-icos.py"]
-}
-download_tern = {
-  description = "Download TERN data",
-  cmd = ["./workflows/94-download-tern.py"]
-}
 download_aanet = {
   description = "Download AA-Net data",
   cmd = ["Rscript", "workflows/96-download-aanet.R"]
 }
+
 download_era5 = {
   description = "Download ERA5 SWC data",
   cmd = ["./workflows/97-download-era5-swc.py"]
-}
-
-download_all = {
-  description = "Download all data",
-  depends-on = [
-    "download_ameriflux",
-    "download_fluxnet",
-    "download_icos",
-    "download_tern"
-  ]
 }
 
 [dependencies]
