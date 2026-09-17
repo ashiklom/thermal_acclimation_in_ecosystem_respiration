@@ -38,7 +38,8 @@ values <- tibble::tibble(
 
 site_targets <- tar_map(
   values = values,
-  tar_target(site_data, prep_nee_ac(site_name), format = "qs"),
+  tar_target(site_dl, download_site(site_name) ,format = "file"),
+  tar_target(site_data, {site_dl; prep_nee_ac(site_name)}, format = "qs"),
   tar_target(site_tas_total, total_tas_site(site_data), format = "qs"),
   tar_target(site_tas_direct, total_tas_site(site_data, direct = TRUE), format = "qs")
 )
