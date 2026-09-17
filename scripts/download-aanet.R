@@ -3,7 +3,6 @@ library(amerifluxr)
 source("R/utils.R")
 
 credfile <- "_creds.toml"
-stopifnot(file.exists(credfile))
 creds <- parse_toml(credfile)
 
 downloaded_files <- amf_download_bif(

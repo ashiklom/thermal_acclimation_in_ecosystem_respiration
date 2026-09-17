@@ -18,12 +18,12 @@ targets = {
 
 download_aanet = {
   description = "Download AA-Net data",
-  cmd = ["Rscript", "workflows/96-download-aanet.R"]
+  cmd = ["Rscript", "scripts/download-aanet.R"]
 }
 
 download_era5 = {
   description = "Download ERA5 SWC data",
-  cmd = ["./workflows/97-download-era5-swc.py"]
+  cmd = ["./scripts/download-era5-swc.py"]
 }
 
 [dependencies]

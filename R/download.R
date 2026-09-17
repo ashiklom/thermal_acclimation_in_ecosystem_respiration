@@ -14,7 +14,6 @@ download_site <- function(name_site, overwrite = FALSE) {
 }
 
 download_ameriflux <- function(name_site, overwrite = FALSE) {
-  stopifnot(file.exists("_creds.toml"))
   creds <- parse_toml("_creds.toml")
   outdir <- file.path("data-raw", "Ameriflux", name_site)
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
@@ -45,7 +44,7 @@ download_icos <- function(name_site, overwrite = FALSE) {
   if (!file.exists(target) || overwrite) {
     system2(
       "uv",
-      c("run", "workflows/93-download-icos.py", "--sites", name_site, "--overwrite"),
+      c("run", "scripts/download-icos.py", "--sites", name_site, "--overwrite"),
       stdout = TRUE,
       stderr = TRUE
     )
@@ -58,7 +57,7 @@ download_tern <- function(name_site, overwrite = FALSE) {
   if (!file.exists(target) || overwrite) {
     system2(
       "uv",
-      c("run", "workflows/94-download-tern.py", "--sites", name_site, "--overwrite"),
+      c("run", "scripts/download-tern.py", "--sites", name_site, "--overwrite"),
       stdout = TRUE,
       stderr = TRUE
     )
@@ -71,7 +70,7 @@ download_fluxnet <- function(name_site, overwrite = FALSE) {
   if (!file.exists(target) || overwrite) {
     system2(
       "bash",
-      c("workflows/92-download-fluxnet.sh", "--sites", name_site, "--overwrite"),
+      c("scripts/download-fluxnet.sh", "--sites", name_site, "--overwrite"),
       stdout = TRUE,
       stderr = TRUE
     )
