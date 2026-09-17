@@ -1,13 +1,26 @@
 library(targets)
 library(tarchetypes)
 library(crew)
-
-tar_option_set(
-  error = "continue",
-  controller = crew_controller_local(workers = 10)
-)
+library(crew.cluster)
 
 tar_source()
+
+local <- crew_controller_local(workers = 10)
+slurm <- crew_controller_slurm(
+  workers = 20,
+  options_cluster = crew_options_slurm(
+    time_minutes = 12*60,
+    n_tasks = 4,
+    verbose = TRUE
+  )
+)
+
+fqdn <- system2("hostname", stdout = TRUE)
+tar_option_set(
+  error = "continue",
+  controller = if (grepl("ycrc.yale.edu", fqdn, fixed = TRUE)) slurm else local,
+  cue = tar_cue("never")
+)
 
 all_site_info <- get_site_info()
 
