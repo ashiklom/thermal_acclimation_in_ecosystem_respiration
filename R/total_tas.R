@@ -21,6 +21,46 @@ site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "
 
 ################################################################################
 
+# Soil water content is expressed as a PERCENT (0-100) everywhere in this
+# analysis, matching the convention of the flux-tower SWC columns and of the
+# `Hs ~ normal(10, 10), ub = 1000` prior in `BRM_FORMULA_DIRECT`. ERA5-Land
+# reports volumetric soil water (`swvl1`) as a fraction (m3/m3), so it has to be
+# rescaled on read. `data-raw/` deliberately holds the provider's native units.
+ERA5_SWC_TO_PERCENT <- 100
+
+read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_swc.csv")) {
+  swc <- read.csv(path) |>
+    dplyr::filter(.data$site == name_site)
+
+  if (nrow(swc) == 0) {
+    stop("No ERA5 soil water data for site ", name_site, " in ", path, ".")
+  }
+
+  # Guard against silently ingesting data that has already been rescaled, or
+  # that is in some other unit entirely. ERA5 volumetric soil water is
+  # physically bounded well below 1.
+  swc_max <- max(swc$SWC, na.rm = TRUE)
+  if (!is.finite(swc_max) || swc_max > 1.5) {
+    stop(
+      "ERA5 soil water for ", name_site, " has a maximum of ", signif(swc_max, 4),
+      ", which is not a volumetric fraction (m3/m3). Expected values within ",
+      "[0, 1]; check the units in ", path, "."
+    )
+  }
+
+  swc |>
+    dplyr::mutate(
+      date = as.Date(.data$time),
+      YEAR = lubridate::year(.data$date),
+      MONTH = lubridate::month(.data$date),
+      DAY = lubridate::day(.data$date),
+      SWC = .data$SWC * ERA5_SWC_TO_PERCENT
+    ) |>
+    dplyr::select("YEAR", "MONTH", "DAY", "SWC")
+}
+
+################################################################################
+
 opt_int <- S7::new_property(S7::class_integer, default = NA_integer_)
 opt_num <- S7::new_property(S7::class_numeric, default = NA_real_)
 
@@ -141,15 +181,7 @@ total_tas_site <- function(site_data, direct = FALSE) {
     a_measure_night_complete[["SWC"]] <- NULL
     ac[["SWC"]] <- NULL
     # use SWC data from ERA5 land climate reanalysis
-    swc_ERA5 <- read.csv(file.path("data-raw", "ERA5_daily_swc.csv")) |>
-      dplyr::mutate(
-        date = as.Date(.data$time),
-        YEAR = lubridate::year(.data$time),
-        MONTH = lubridate::month(.data$time),
-        DAY = lubridate::day(.data$time)
-      ) |>
-      dplyr::filter(.data$site == name_site) |>
-      dplyr::select('YEAR', 'MONTH', 'DAY', 'SWC')
+    swc_ERA5 <- read_era5_swc(name_site)
     # attach to a_measure_night_complete and ac
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::left_join(swc_ERA5, by = c('YEAR', 'MONTH', 'DAY'))

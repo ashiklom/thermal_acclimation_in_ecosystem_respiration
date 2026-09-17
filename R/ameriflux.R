@@ -31,13 +31,41 @@ prep_ameriflux <- function(site_info) {
     lutz::tz_lookup_coords(lat = lat_site, lon = long_site, method = "accurate")
   )
 
+  # AmeriFlux BASE timestamps are local standard time (no daylight saving), and
+  # `amf_read_base` parses them with `tz = "GMT"`. So `a$TIMESTAMP` is a local
+  # clock reading wearing a UTC label, and sunrise/sunset have to be put in that
+  # same frame before they can be compared against it.
+  #
+  # The timezone passed to `getSunlightTimes()` is not merely a display choice:
+  # it also decides which solar day's events get returned. Asking for UTC yields
+  # a sunrise and a sunset belonging to *different* local days at these
+  # longitudes, which makes the daytime test unsatisfiable for most of the year.
+  # So request the times in the site's local standard time, then relabel (not
+  # convert) them to UTC. This reproduces the original workflow, which did the
+  # relabel via an `as.character()` round-trip.
+  #
+  # `Etc/GMT` zones are fixed-offset (no DST, which is what we want here) and use
+  # the inverted POSIX sign convention, hence the negation. They only exist at
+  # whole-hour offsets; every AmeriFlux site is currently UTC-4 to UTC-9, and we
+  # would rather fail loudly than silently mis-classify if that ever changes.
+  if (tz$utc_offset_h != round(tz$utc_offset_h)) {
+    stop(
+      "Site ", name_site, " has a fractional UTC offset (", tz$utc_offset_h,
+      " h), which cannot be expressed as an Etc/GMT zone. Day/night ",
+      "classification needs a fixed-offset zone for this site."
+    )
+  }
+  tz_site <- sprintf("Etc/GMT%+d", -as.integer(tz$utc_offset_h))
+
   sunrise_set <- suncalc::getSunlightTimes(
     date = seq.Date(as.Date(min(a$TIMESTAMP)), as.Date(max(a$TIMESTAMP)), by = 1),
     keep = c("sunrise", "sunset"),
     lat = lat_site,
     lon = long_site,
-    tz = "UTC"
+    tz = tz_site
   )
+  sunrise_set$sunrise <- lubridate::force_tz(sunrise_set$sunrise, "UTC")
+  sunrise_set$sunset <- lubridate::force_tz(sunrise_set$sunset, "UTC")
 
   a <- a |>
     dplyr::mutate(DATE = as.Date(.data$TIMESTAMP)) |>
@@ -53,7 +81,7 @@ prep_ameriflux <- function(site_info) {
 
   # special cases: sites in Arctic do not have sunrise and sunset sometime of a year
   # TODO: Lat-based filter instead?
-  if (name_site %in% c("US-ICt", "US-ICh", "US-ICs")) {
+  if (name_site %in% SITES_LOW_LIGHT_NIGHT) {
     a$daytime[is.na(a$daytime) & dplyr::between(a$MONTH, 4, 8)] <- TRUE
     a$daytime[is.na(a$daytime) & !dplyr::between(a$MONTH, 4, 8)] <- FALSE
   }

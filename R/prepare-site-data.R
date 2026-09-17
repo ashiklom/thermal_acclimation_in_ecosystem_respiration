@@ -106,10 +106,25 @@ prep_nee_ac <- function(name_site) {
       dplyr::filter(
         !is.na(.data$NEE),
         !is.na(.data$TS),
-        !is.na(.data$SWC),
         !is.na(.data$USTAR),
         .data$USTAR >= .data$uStarTh
       )
+
+    # Only require soil water where it is actually measured. Sites with
+    # `SWC_use == "NO"` carry an all-NA SWC column, so an unconditional filter
+    # here would discard every observation.
+    if (isTRUE(site_info$SWC_use)) {
+      measured <- measured |> dplyr::filter(!is.na(.data$SWC))
+    }
+
+    keep_night <- if (name_site %in% SITES_LOW_LIGHT_NIGHT) {
+      rlang::expr(.data$SW_IN < 10 | !.data$daytime)
+    } else {
+      rlang::expr(!.data$daytime)
+    }
+    measured <- measured |>
+      dplyr::filter(!!keep_night, .data$NEE > -5, .data$NEE < 30) |>
+      tibble::as_tibble()
   } else if (site_info$source %in% c("FLUXNET", "FLUXNET2015", "ICOS", "TERN")) {
     ac <- prep_icos_tern_fluxnet(site_info)
     measured <- ac |>

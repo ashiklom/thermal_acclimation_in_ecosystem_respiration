@@ -47,6 +47,9 @@ extracted_ds = (dat
                 .sel(time=slice("1990-01-01", "2026-07-01"))
                 .assign_coords(site=site_dim))
 
+# NOTE: `swvl1` is ERA5-Land volumetric soil water for layer 1 (0-7 cm), in
+# m3/m3. It is written out here in that native unit; the analysis convention is
+# percent (0-100), and `read_era5_swc()` in R/total_tas.R does the conversion.
 daily = extracted_ds["swvl1"].resample(time="1D").mean()
 
 daily_pd = daily.to_pandas()
