@@ -26,6 +26,16 @@ download_era5 = {
   cmd = ["./scripts/download-era5-swc.py"]
 }
 
+test = {
+  description = "Run unit tests for the data-preparation layer",
+  cmd = ["Rscript", "tests/run-tests.R"]
+}
+
+reconcile = {
+  description = "Reconcile step-01 outputs against the original manuscript outputs",
+  cmd = ["Rscript", "tests/reconcile-step01.R"]
+}
+
 [dependencies]
 r-bayesplot = ">=1.15.0,<2"
 r-boot = ">=1.3_32,<2"
@@ -79,6 +89,7 @@ r-crew = ">=1.3.3,<2"
 r-targets = ">=1.12.0,<2"
 r-tarchetypes = ">=0.14.1,<0.15"
 "r-crew.cluster" = ">=0.4.0,<0.5"
+r-testthat = ">=3.3.1,<4"
 
 [pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }

@@ -10,7 +10,7 @@ download_site <- function(name_site, overwrite = FALSE) {
   if (is.null(fn)) {
     stop("No download method for site ", name_site, " with source `", site_source, "`.")
   }
-  fn(name_site, overwrite = TRUE)
+  fn(name_site, overwrite = overwrite)
 }
 
 download_ameriflux <- function(name_site, overwrite = FALSE) {
@@ -18,7 +18,10 @@ download_ameriflux <- function(name_site, overwrite = FALSE) {
   outdir <- file.path("data-raw", "Ameriflux", name_site)
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
   result_file <- list.files(outdir, sprintf(".*_%s_BASE-BADM_.*.zip", name_site), full.names = TRUE)
-  if (length(flist) == 0 || overwrite) {
+  if (length(result_file) > 1) {
+    warning("Found multiple matching files in ", outdir, ". Check this for correctness.")
+  }
+  if (length(result_file) == 0 || overwrite) {
     result_file <- amerifluxr::amf_download_base(
       user_id = creds$user_id,
       user_email = creds$user_email,
@@ -31,8 +34,6 @@ download_ameriflux <- function(name_site, overwrite = FALSE) {
       out_dir = outdir,
       verbose = TRUE
     )
-  } else if (length(flist) > 1) {
-    warning("Found multiple matching files in ", outdir, ". Check this for correctness.")
   } else {
     message("Skipping download because file already exists.")
   }
