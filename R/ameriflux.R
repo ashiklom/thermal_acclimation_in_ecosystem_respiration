@@ -248,14 +248,14 @@ prep_ustar_df <- function(a, site_info) {
     } else if (name_site == "US-MBP") {
       # this site only missed a few TS data, so only estimate these missing data.
       ac$TS[is.na(ac$TS)] <- ac$TA[is.na(ac$TS)] * 0.3688005 + 5.8670273
-    } else if (name_site == "US-BZo") {
+    } else if (name_site %in% SITES_TS_FROM_TA_RECENT) {
       # recent data is more accurate
-      mod_lm <- lm(data = ac[ac$YEAR > 2021 & ac$TA > 0, ], TS ~ TA, na.action = na.omit)
-      ac$TS <- predict(mod_lm, newdata = data.frame(TA = ac$TA))
-    } else if (name_site %in% c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")) {
+      mod_lm <- ts_ta_model(ac[ac$YEAR > 2021 & ac$TA > 0, ])
+      ac$TS <- replace_ts(predict_ts_from_ta(mod_lm, ac$TA))
+    } else if (name_site %in% SITES_TS_FROM_TA_COLD) {
       # cold area, use TA above 0 for growing season
-      mod_lm <- lm(data = ac[ac$TA > 0, ], TS ~ TA, na.action = na.omit)
-      ac$TS <- predict(mod_lm, newdata = data.frame(TA = ac$TA))
+      mod_lm <- ts_ta_model(ac[ac$TA > 0, ])
+      ac$TS <- replace_ts(predict_ts_from_ta(mod_lm, ac$TA))
     }
   }
 

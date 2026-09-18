@@ -9,13 +9,21 @@ fix_soil_temp <- function(a, site_info) {
         "TIMESTAMP", "YEAR", "DOY", "HOUR", "MINUTE",
         dplyr::all_of(c(site_info$TS, site_info$TA))
       )
-    if (name_site %in% c('US-Los', "US-Ced")) {
-      data$NETRAD <- a$NETRAD_1_1_1
-    } else if (name_site %in% c("US-SRG", "CA-Man")) {
-      data$NETRAD <- a$NETRAD
-    } else if (name_site %in% c("US-Ho1")) {
-      data$NETRAD <- a$NETRAD_2_1_1
-    } 
+    # Which column holds net radiation is declared per site in
+    # site_info.csv. It used to be an if/else here as well, duplicating the
+    # mapping that `scripts/revise-site-info.R` already builds -- the two
+    # agreed, but only by hand.
+    netrad_column <- site_info[["netrad_column"]]
+    if (!is.na(netrad_column)) {
+      if (!netrad_column %in% names(a)) {
+        stop(
+          name_site, " declares netrad_column = ", shQuote(netrad_column),
+          ", which is not in its AmeriFlux record."
+        )
+      }
+      data$NETRAD <- a[[netrad_column]]
+    }
+    
   } else {
     # TS_F_MDS_1 is the training target here, not the output: the model learns
     # TS from TA (and NETRAD) on the hours where TS was measured, then predicts
@@ -78,8 +86,8 @@ fix_soil_temp <- function(a, site_info) {
     data$TS_pred <- predict(lm, data)
   } else {
     # no netrad at this site
-    lm <- lm(data = data[data$TA > 0, ], TS ~ TA)
-    data$TS_pred <- predict(lm, data)
+    mod_lm <- ts_ta_model(data[data$TA > 0, ])
+    data$TS_pred <- replace_ts(predict_ts_from_ta(mod_lm, data$TA))
   }
 
   data

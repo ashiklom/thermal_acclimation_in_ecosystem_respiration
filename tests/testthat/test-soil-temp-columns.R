@@ -156,3 +156,24 @@ test_that("an undeclared or unknown fit domain fails by name", {
   expect_error(ts_fit_data(f$ac, f$night, NA_character_), "must declare ts_linear_domain")
   expect_error(ts_fit_data(f$ac, f$night, "whole_record"), "Unknown ts_linear_domain")
 })
+
+# ------------------------------------- the shared TS ~ TA fit, step-01 form
+
+test_that("the consolidated fit reproduces the inline lm it replaced", {
+  # `prep_ustar_df()` and `fix_soil_temp()` used to write
+  # `lm(data = d[d$TA > 0, ], TS ~ TA, na.action = na.omit)` followed by
+  # `predict(mod, newdata = data.frame(TA = d$TA))`, replacing TS wholesale.
+  set.seed(3)
+  d <- data.frame(TA = c(rnorm(200, 8, 6), NA, NA))
+  d$TS <- 0.6 * d$TA + 3 + rnorm(nrow(d))
+  d$TS[c(5, 11, 40)] <- NA
+
+  want_mod <- lm(data = d[d$TA > 0, ], TS ~ TA, na.action = na.omit)
+  want <- predict(want_mod, newdata = data.frame(TA = d$TA))
+
+  got <- replace_ts(predict_ts_from_ta(ts_ta_model(d[d$TA > 0, ]), d$TA))
+  expect_equal(unname(got), unname(want))
+  # Wholesale replacement keeps the NAs, unlike the overlay form. (`predict()`
+  # names its result by row; the names carry no information here.)
+  expect_equal(unname(is.na(got)), is.na(d$TA))
+})
