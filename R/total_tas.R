@@ -214,15 +214,11 @@ total_tas_site <- function(site_data, direct = FALSE, ts_col = NULL, swc_col = N
   # produced every variant this site offers along with the growing-season
   # bounds belonging to each, so the column and its bounds are selected
   # together and cannot disagree.
-  # `_targets.R` sets `tar_cue("never")`, so a `site_data` object stored before
-  # step 01 started carrying these columns would be reused silently and fail
-  # somewhere less obvious. Say so here instead.
   if (is.null(site_data[["ts_bounds"]])) {
     stop(
       name_site, ": this site_data was built before soil-temperature columns ",
       "were carried explicitly, so it has no `ts_bounds`. Rebuild it with ",
-      "`prep_nee_ac()` -- and note that `tar_cue(\"never\")` in _targets.R means ",
-      "targets will not invalidate it on its own."
+      "`prep_nee_ac()`, or delete the stale `_targets/` store."
     )
   }
 

@@ -85,3 +85,36 @@ SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 # are a step-02 concern.
 SITES_TS_FROM_TA_RECENT <- c("US-BZo")
 SITES_TS_FROM_TA_COLD <- c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")
+
+# The development site sample: what `_targets.R` runs by default.
+#
+# Running every northern-hemisphere FLUXNET-family site end to end is not a
+# development loop. Cost is roughly (qualifying years x 14-day windows) Stan
+# fits per site per model, and the full list of 44 comes to several thousand.
+# These six are picked to be cheap *and* to cover every branch the pipeline
+# has, so a change that breaks one of them shows up in minutes rather than
+# after an overnight run:
+#
+#   DE-RuC   40  the cheapest site available; TS_linear selection; measured
+#                soil water; one of the two SITES_GS_NEE_ZERO cut-offs
+#   DE-Hte   63  fix_soil_temp()'s linear-regression fallback, and SWC_use NO,
+#                so the direct model takes the ERA5 path
+#   DE-Akm   78  fix_soil_temp()'s random-forest (NETRAD) branch
+#   FI-Sod  100  a three-product splice (FLUXNET2015+FLUXNET+ICOS), the
+#                pre-2006 soil-temperature recalibration, the second NEE-zero
+#                site, and the sparse gap profile
+#   SE-Deg  176  Warm Winter 2020 in the splice
+#   NL-Loo  176  a two-product splice (FLUXNET+ICOS); TS_linear
+#
+# The number is (original nyear x round(growing-season length / 14)) taken from
+# the manuscript's own growing_season_feature_*.csv -- a proxy for how many
+# fits a site costs, not a runtime. Step 01 for all six together takes about 40
+# seconds.
+#
+# Two branches are deliberately left out because both are expensive: CH-Dav's
+# pre-gap-scan TS >= 2 C truncation (364) and GF-Guy's year-round growing
+# season with air temperature standing in for soil (520). Both are pinned by
+# tests/ts-swc-baseline.R instead, which needs no model fits.
+#
+# Set THERMAL_SITES=all to run the full list. See `pipeline_sites()`.
+DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo")

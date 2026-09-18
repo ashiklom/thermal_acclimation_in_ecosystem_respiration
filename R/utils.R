@@ -116,3 +116,41 @@ parse_toml <- function(path) {
   }
   result
 }
+
+# Which sites the pipeline builds targets for.
+#
+# `"dev"` (the default) is the small representative sample in `DEV_SITES`;
+# `"all"` is every site the FLUXNET-family reader handles. The full list is
+# matched by substring because `source` is a `+`-separated provenance list
+# (e.g. "WW2020+FLUXNET+ICOS"); see `FLUX_PRODUCTS` in R/constants.R.
+#
+# This is called while the pipeline is being *constructed*, because `tar_map()`
+# needs the site names in order to generate target names. So it cannot itself
+# be a target, and reads site_info.csv directly.
+pipeline_sites <- function(scope = Sys.getenv("THERMAL_SITES", "dev"),
+                           site_info = get_site_info()) {
+  handled <- site_info |>
+    dplyr::filter(
+      !grepl("AmeriFlux_BASE", .data$source, fixed = TRUE),
+      .data$LAT > 0
+    ) |>
+    dplyr::pull("site_ID")
+
+  if (identical(scope, "all")) return(handled)
+  if (!identical(scope, "dev")) {
+    stop("THERMAL_SITES must be \"dev\" or \"all\", not ", shQuote(scope), ".")
+  }
+
+  # A typo in DEV_SITES would otherwise produce a pipeline whose targets each
+  # fail separately at download time, and under `error = "continue"` that looks
+  # much like a data problem.
+  unknown <- setdiff(DEV_SITES, handled)
+  if (length(unknown)) {
+    stop(
+      "DEV_SITES names ", length(unknown), " site(s) this pipeline does not ",
+      "handle: ", paste(shQuote(unknown), collapse = ", "),
+      ". They have to be northern-hemisphere and not AmeriFlux BASE."
+    )
+  }
+  DEV_SITES
+}

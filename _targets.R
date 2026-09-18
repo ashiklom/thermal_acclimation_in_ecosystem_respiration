@@ -16,28 +16,26 @@ slurm <- crew_controller_slurm(
 )
 
 fqdn <- system2("hostname", stdout = TRUE)
+# No global `cue = tar_cue("never")`. It was a development escape hatch from
+# when every run meant hours of Stan sampling, but as a default it means a code
+# fix to `prep_nee_ac()` invalidates nothing downstream, and the results table
+# ends up assembled from two different versions of the code. targets already
+# skips unchanged work; the way to make a run affordable is to run fewer sites,
+# which is what `pipeline_sites()` does.
 tar_option_set(
   error = "continue",
-  controller = if (grepl("ycrc.yale.edu", fqdn, fixed = TRUE)) slurm else local,
-  cue = tar_cue("never")
+  controller = if (grepl("ycrc.yale.edu", fqdn, fixed = TRUE)) slurm else local
 )
-
-all_site_info <- get_site_info()
 
 # Use static branching to get informative target names, and to have finer
 # control over which sites I run while developing.
 # https://books.ropensci.org/targets/static.html
-values <- tibble::tibble(
-  site_name = all_site_info |>
-    dplyr::filter(
-      # Every site the FLUXNET-family reader handles, i.e. not AmeriFlux BASE.
-      # Matched by substring because `source` is a `+`-separated provenance
-      # list (e.g. "WW2020+FLUXNET+ICOS"); see FLUX_PRODUCTS in R/constants.R.
-      !grepl("AmeriFlux_BASE", .data$source, fixed = TRUE),
-      .data$LAT > 0
-    ) |>
-    dplyr::pull("site_ID")
-)
+#
+# `pipeline_sites()` returns the six-site development sample by default and the
+# full list under THERMAL_SITES=all. See `DEV_SITES` in R/constants.R for what
+# each of the six is there to cover.
+values <- tibble::tibble(site_name = pipeline_sites())
+message("Pipeline sites (", nrow(values), "): ", paste(values$site_name, collapse = ", "))
 
 site_targets <- tar_map(
   values = values,

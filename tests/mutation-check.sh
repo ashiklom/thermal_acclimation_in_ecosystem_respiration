@@ -151,6 +151,19 @@ add "RH-to-VPD decision dropped from the result" \
     'list(ac = ac, convert_rh = convert_rh)' \
     'list(ac = ac)'
 
+add "dev sample drops the random-forest site" \
+    R/constants.R \
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo")' \
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "FI-Sod", "SE-Deg", "NL-Loo")'
+add "dev sample drops the multi-product splices" \
+    R/constants.R \
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo")' \
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm")'
+add "unknown THERMAL_SITES falls back silently" \
+    R/utils.R \
+    'stop("THERMAL_SITES must be \"dev\" or \"all\", not ", shQuote(scope), ".")' \
+    'return(handled)'
+
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do
   if ! python3 - "${FILES[$i]}" "${FROM[$i]}" "${TO[$i]}" <<'PY'
