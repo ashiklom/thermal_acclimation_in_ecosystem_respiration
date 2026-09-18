@@ -73,3 +73,13 @@ SITES_GS_NEE_ZERO <- c("FI-Sod", "DE-RuC")
 # truncated there.
 TS_MIN_VALID <- 2.0
 SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
+
+# AmeriFlux sites with no usable measured soil temperature, where `TS` is
+# *constructed* from air temperature during step 01 -- so this is how their
+# `TS_measured` column comes to exist, not a later substitution for it. The two
+# lists differ only in the rows the regression is fitted on: US-BZo uses its
+# recent years because the earlier record is unreliable, the cold sites use all
+# rows above freezing. Disjoint from the `ts_col == "TS_linear"` sites, which
+# are a step-02 concern.
+SITES_TS_FROM_TA_RECENT <- c("US-BZo")
+SITES_TS_FROM_TA_COLD <- c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")

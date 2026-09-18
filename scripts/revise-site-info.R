@@ -34,6 +34,26 @@ netrad_sites <- tribble(
 )
 ts_regression_sites <- c("DE-Hte", "FR-FBn")
 
+# Sites whose soil temperature the second pipeline step replaces with a TS ~ TA
+# regression. This was the hard-coded `site_TS_issue` vector in R/total_tas.R;
+# it is a per-site property, so it belongs here with the other per-site
+# switches. A site is in the list iff `ts_col == "TS_linear"`.
+#
+# `ts_linear_domain` is the data the regression is fitted on, and it is a
+# separate axis rather than an implementation detail: every site but one is
+# fitted on the `ac` table restricted to TA > 0, while US-Tw1 is fitted on the
+# nighttime table because -- per the original's comment -- "slope will be too
+# low if using ac data for the subtropical wetland sites". Collapsing the two
+# would change that site's coefficients.
+ts_linear_sites <- c(
+  "BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "CH-Lae", "DE-RuC",
+  "DE-SfS", "FI-Sod", "IT-Ren", "NL-Loo", "US-Bar", "US-BZB", "US-BZF", "US-BZS",
+  "US-CMW", "US-GLE", "US-Ha2", "US-IB2", "US-Jo2", "US-KL2", "US-Kon", "US-LL1",
+  "US-MBP", "US-Myb", "US-NC4", "US-Tw1", "US-ICt", "BE-Dor", "CA-TP4", "UK-AMo",
+  "RU-Fyo", "ZA-Kru", "IT-Tor"
+)
+ts_linear_night_sites <- c("US-Tw1")
+
 # Provenance, oldest product first. `source` is a `+`-separated ordered list
 # because no single product covers the full record at most of these sites.
 #
@@ -76,8 +96,30 @@ sites_v2 <- sites |>
       !is.na(.data$netrad_column) ~ "NETRAD",
       .data$site_ID %in% ts_regression_sites ~ "linear regression",
       TRUE ~ NA_character_
+    ),
+    ts_col = if_else(.data$site_ID %in% ts_linear_sites, "TS_linear", "TS_measured"),
+    ts_linear_domain = case_when(
+      !.data$site_ID %in% ts_linear_sites ~ NA_character_,
+      .data$site_ID %in% ts_linear_night_sites ~ "night",
+      TRUE ~ "ac"
     )
   )
+
+# Guard the two new columns against drifting out of step: a fit domain without a
+# selection is meaningless, and a selection without a domain has nothing to fit.
+stopifnot(
+  all(is.na(sites_v2$ts_linear_domain) == (sites_v2$ts_col == "TS_measured")),
+  all(sites_v2$ts_col %in% c("TS_measured", "TS_linear")),
+  all(sites_v2$ts_linear_domain %in% c("ac", "night") | is.na(sites_v2$ts_linear_domain))
+)
+# Every named site must exist, or a rename upstream would silently shrink the list.
+missing_ts_sites <- setdiff(c(ts_linear_sites, ts_linear_night_sites), sites_v2$site_ID)
+if (length(missing_ts_sites) > 0) {
+  stop(
+    "ts_linear_sites names sites that are not in site_info: ",
+    paste(missing_ts_sites, collapse = ", ")
+  )
+}
 
 # sites_v2 |>
 #   count(source)

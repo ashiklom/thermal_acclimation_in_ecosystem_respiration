@@ -13,11 +13,6 @@ BRM_FORMULA_DIRECT <- brms::bf(
   nl = TRUE
 )
 
-# TODO: Move this into site_info.csv
-site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "CH-Lae", "DE-RuC", "DE-SfS", "FI-Sod",
-                   "IT-Ren", "NL-Loo", "US-Bar", "US-BZB", "US-BZF", "US-BZS", "US-CMW", "US-GLE", "US-Ha2",
-                   "US-IB2", "US-Jo2", "US-KL2", "US-Kon", "US-LL1", "US-MBP", "US-Myb", "US-NC4", "US-Tw1", "US-ICt",
-                   "BE-Dor", "CA-TP4", "UK-AMo", "RU-Fyo", "ZA-Kru", "IT-Tor")
 
 ################################################################################
 
@@ -199,8 +194,8 @@ total_tas_site <- function(site_data, direct = FALSE) {
   }
 
   # TODO: Move this logic out of here
-  if (name_site %in% site_TS_issue) {
-    if (name_site %in% c("US-Tw1")) {
+  if (identical(site_info[["ts_col"]], "TS_linear")) {
+    if (identical(site_info[["ts_linear_domain"]], "night")) {
       # slope will be too low if using ac data for the subtropical wetland sites.
       mod_lm <- lm(data = a_measure_night_complete, TS ~ TA, na.action = na.omit)
     } else {

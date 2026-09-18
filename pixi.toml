@@ -36,6 +36,11 @@ reconcile = {
   cmd = ["Rscript", "tests/reconcile-step01.R"]
 }
 
+ts-baseline = {
+  description = "Check the TS/SWC column refactor against its frozen step-02 oracle",
+  cmd = ["Rscript", "tests/ts-swc-baseline.R"]
+}
+
 check-updates = {
   description = "Check whether providers have newer flux data than data-raw/ holds",
   cmd = ["uv", "run", "scripts/check-data-updates.py"]

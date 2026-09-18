@@ -24,7 +24,9 @@ get_site_info <- function(site_ID = NULL) {
     gEnd = "i",
     SWC_use = "c",
     estimate_ts_method = "c",
-    netrad_column = "c"
+    netrad_column = "c",
+    ts_col = "c",
+    ts_linear_domain = "c"
   )
 
   dat <- readr::read_csv(
