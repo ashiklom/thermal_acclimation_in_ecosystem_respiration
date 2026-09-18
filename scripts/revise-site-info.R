@@ -58,4 +58,25 @@ sites_v2 <- sites |>
 # sites_v2 |>
 #   count(source)
 
+# Guard the invariant `prep_ustar_df()` depends on: any AmeriFlux site we intend
+# to read soil water for must name the column to read. Only AmeriFlux consults
+# this field -- ICOS/TERN/FLUXNET use the standardised `SWC_F_MDS_1` -- so the
+# check is scoped to that source. Failing here names the offending sites. The
+# alternative is worse than it sounds: `a[[NA_character_]]` on the base
+# data.frame `amf_read_base()` returns is NULL rather than an error, so the
+# column is dropped silently and the complaint surfaces much later, in
+# `prep_nee_ac()`, as a missing `SWC` column pointing nowhere near the cause.
+missing_swc_col <- sites_v2 |>
+  filter(
+    .data$source == "AmeriFlux_BASE",
+    .data$SWC_use == "YES",
+    is.na(.data$SWC)
+  )
+if (nrow(missing_swc_col) > 0) {
+  stop(
+    "AmeriFlux sites marked `SWC_use == \"YES\"` with no `SWC` column name: ",
+    paste(missing_swc_col[["site_ID"]], collapse = ", ")
+  )
+}
+
 write_csv(sites_v2, "data-core/site_info.csv", na="")

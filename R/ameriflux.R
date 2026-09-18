@@ -268,7 +268,12 @@ prep_ustar_df <- function(a, site_info) {
   }
 
   # Soil water
-  if (!is.na(site_info$SWC_use)) {
+  # `SWC_use` is recoded to a logical by `get_site_info()`, and is never NA, so
+  # this has to test the value rather than its presence. Sites flagged "NO"
+  # deliberately discard soil water even where a column is available (22 of the
+  # 33 AmeriFlux "NO" sites do name one), which is why this keys on the flag and
+  # not on whether `site_info$SWC` is populated.
+  if (isTRUE(site_info$SWC_use)) {
     ac$SWC <- a[[site_info$SWC]]
     # deal with special cases
     if (name_site == "US-NR1") {
