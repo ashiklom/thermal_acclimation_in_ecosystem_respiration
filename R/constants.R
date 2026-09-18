@@ -25,8 +25,10 @@ FLUX_PRODUCTS <- list(
   WW2020 = list(dir = "WW2020", pattern = "_FLUXNET2015_FULLSET_(HH|HR)_.*[.]csv$"),
   # FLUXNET-Archive product via fluxnet-shuttle: the merged full-record product.
   FLUXNET = list(dir = "FLUXNET", pattern = "_FLUXMET_(HH|HR)_.*[.]csv$"),
-  # An older FLUXNET2015 release, still the only source for one site (ZA-Kru).
-  FLUXNET2015 = list(dir = "FLUXNET", pattern = "_FLUXNET2015_FULLSET_(HH|HR)_.*[.]csv$"),
+  # FLUXNET2015 (through 2014): the last static release, and for some sites the
+  # only source of their early record. Acquired by hand -- see `download.R` --
+  # so it gets its own directory rather than sharing the shuttle's.
+  FLUXNET2015 = list(dir = "FLUXNET2015", pattern = "_FLUXNET2015_FULLSET_(HH|HR)_.*[.]csv$"),
   # ICOS ETC L2: labelled period only, but reaches later than the others.
   ICOS = list(dir = "ICOS", pattern = "_FLUXMET_(HH|HR)_.*[.]csv$"),
   TERN = list(dir = "TERN", pattern = "_TERN_L3_FLUXNET_HH.*[.]csv$"),

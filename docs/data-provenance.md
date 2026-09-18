@@ -63,6 +63,43 @@ which would make the `TS >= 2 C` filter compare against a logical NA. Sentinel
 removal stays a numeric `dat[dat == -9999] <- NA` so that a future release
 writing `-9999.0` is still caught.
 
+### FLUXNET2015, and why it is acquired by hand
+
+`FLUXNET2015` is the last static FLUXNET release (through 2014). It is the only
+product here with no programmatic interface: downloading requires an
+interactive login at fluxnet.org plus acceptance of the FLUXNET2015 Data
+Policy, which is granted per site-year (Tier 1 vs Tier 2). The FLUXNET Shuttle
+does have an API but federates AmeriFlux, ICOS and TERN only, none of which
+hold the pre-2015 record. `download_fluxnet2015()` in `R/download.R`
+therefore prints the procedure and the exact target directory rather than
+attempting a download; `check-data-updates.py` checks only that it is present,
+since a closed release cannot update.
+
+Unzip into `data-raw/FLUXNET2015/<site>/`, keeping the archive alongside the
+extracted tables.
+
+### FI-Sod: the one record with a hole in the middle
+
+FI-Sod needs all three of its products and still has a gap:
+
+| period | source | status |
+|---|---|---|
+| 2001–2014 | FLUXNET2015 FULLSET | held |
+| 2015–2022 | — | **no public product** |
+| 2023–2025 | ICOS ETC-Archive L2 (shuttle copy stops at 2024) | held |
+
+The gap is a publication gap, not necessarily a measurement one. FI-Sod was
+ICOS-labelled on **2023-05-23**, and ICOS publishes from just before labelling
+— every ICOS object for the station, current or deprecated, starts
+2022-12-31. FLUXNET2015 closed at 2014. FI-Sod is **absent from Warm Winter
+2020** (73 members, checked directly), so that route is closed too. Anything
+for 2015–2022 would have to come from the site PI at FMI or a national
+archive.
+
+Even so, the site now reconciles well: gStart 124 and gEnd 270 match the
+manuscript exactly, and it yields 12 qualifying years against the
+manuscript's 10.
+
 ### Known shortfall
 
 **IT-Noe** is absent from Warm Winter 2020 altogether, and both current products

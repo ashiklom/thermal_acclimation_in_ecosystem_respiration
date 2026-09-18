@@ -66,7 +66,7 @@ DE-Hai,51.0792,10.4522,430,DBF,Cfb,720,FLUXNET,NO,,,,,,,,,,,,,,YES,,,TS_measured
 DE-Tha,50.9626,13.5651,385,ENF,Cfb,843,FLUXNET+ICOS,NO,,,,,,,,,,,,,,YES,,,TS_measured,
 DK-Sor,55.4859,11.6446,40,DBF,Cfb,660,FLUXNET+ICOS,NO,1999,,,,,,,,,,1999 no SWC data,,,YES,,,TS_measured,
 FI-Hyy,61.8474,24.2948,181,ENF,Dfc,709,FLUXNET+ICOS,NO,,,,,,,,,,,,,,YES,,,TS_measured,
-FI-Sod,67.3624,26.6386,180,ENF,Dfc,500,FLUXNET,NO,"2002, 2003",,,,,,,,,,"2002, 2003 missed lots of data; 2002 abnormal temperature; we used loose gap constrain for this site because too many data are missed.",,270,YES,,,TS_linear,ac
+FI-Sod,67.3624,26.6386,180,ENF,Dfc,500,FLUXNET2015+FLUXNET+ICOS,NO,"2002, 2003",,,,,,,,,,"2002, 2003 missed lots of data; 2002 abnormal temperature; we used loose gap constrain for this site because too many data are missed.",,270,YES,,,TS_linear,ac
 FR-Pue,43.7413,3.5957,270,EBF,Csa,883,FLUXNET,YES,"2001:2003, 2005, 2013",,,,,,,,,,"2001-2003 lack of SWC, 2005 insect effect, 2013 low model accuracy likely sensor problem",,,YES,NETRAD,NETRAD,TS_measured,
 IT-MBo,46.0147,11.0458,1550,GRA,Dfb,1214,FLUXNET+ICOS,NO,,,,,,,,,,,,,,YES,,,TS_measured,
 IT-Noe,40.6062,8.1517,25,CSH,Csa,588,FLUXNET+ICOS,NO,,,,,,,,,,,,,,NO,,,TS_measured,

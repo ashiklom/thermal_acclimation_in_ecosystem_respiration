@@ -37,6 +37,12 @@ How each product is checked:
           checked for membership and filename but is not expected to change;
           an UPDATE here would mean the collection was revised.
 
+  FLUXNET2015
+          A closed legacy release with no programmatic interface at all, so
+          only presence is checked. It never updates. Acquiring it is a manual
+          step -- `download_fluxnet2015()` in R/download.R prints the
+          procedure.
+
 See docs/data-provenance.md.
 """
 
@@ -63,7 +69,7 @@ LOCAL = {
     "ICOS": ("ICOS", "*.zip"),
     "WW2020": ("WW2020", "*.zip"),
     "FLUXNET": ("FLUXNET", "*.zip"),
-    "FLUXNET2015": ("FLUXNET", "*.zip"),
+    "FLUXNET2015": ("FLUXNET2015", "*.zip"),
     "TERN": ("TERN", "*.csv"),
     "AmeriFlux_BASE": ("Ameriflux", "*.zip"),
 }
@@ -163,7 +169,13 @@ def main() -> int:
                     remote = remote_icos(site)
                 elif product == "WW2020":
                     remote = remote_ww2020(site)
-                elif product in ("FLUXNET", "FLUXNET2015"):
+                elif product == "FLUXNET2015":
+                    # A closed 2020 release with no service behind it, and the
+                    # shuttle does not carry it -- comparing against the
+                    # shuttle snapshot would report a spurious UPDATE forever.
+                    # Presence is the only thing worth checking.
+                    remote = local
+                elif product == "FLUXNET":
                     if shuttle is None:
                         remote = None
                     else:

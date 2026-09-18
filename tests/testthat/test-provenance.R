@@ -108,3 +108,47 @@ test_that("no R source compares site_info$source to a bare product name", {
   }
   expect_equal(offenders, character())
 })
+
+# ------------------------------------------------------- FLUXNET2015
+
+test_that("FLUXNET2015 has its own directory, distinct from the shuttle's", {
+  # The two products share a site's provenance list at FI-Sod, and their
+  # filename patterns are different, but keeping them in one directory invited
+  # confusion about which one a file belonged to -- and FLUXNET2015 is
+  # acquired by hand, so it is not the downloader's to manage.
+  expect_equal(FLUX_PRODUCTS[["FLUXNET2015"]]$dir, "FLUXNET2015")
+  expect_equal(FLUX_PRODUCTS[["FLUXNET"]]$dir, "FLUXNET")
+  # The shuttle's FLUXMET pattern must not match a FLUXNET2015 FULLSET table,
+  # or a site declaring both would resolve the same file twice.
+  fullset <- "FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv"
+  fluxmet <- "ICOSETC_FI-Sod_FLUXNET_FLUXMET_HH_2023-2025_v1.3_r1.csv"
+  expect_true(grepl(FLUX_PRODUCTS[["FLUXNET2015"]]$pattern, fullset))
+  expect_false(grepl(FLUX_PRODUCTS[["FLUXNET"]]$pattern, fullset))
+  expect_true(grepl(FLUX_PRODUCTS[["FLUXNET"]]$pattern, fluxmet))
+  expect_false(grepl(FLUX_PRODUCTS[["FLUXNET2015"]]$pattern, fluxmet))
+})
+
+test_that("FI-Sod declares the three products its record actually needs", {
+  # 2001-2014 from FLUXNET2015, 2023-2024 from the shuttle, 2023-2025 from
+  # ICOS. Nothing public covers 2015-2022; see docs/data-provenance.md.
+  expect_equal(
+    site_sources(get_site_info("FI-Sod")),
+    c("FLUXNET2015", "FLUXNET", "ICOS")
+  )
+})
+
+test_that("an absent FLUXNET2015 archive explains how to obtain it", {
+  # There is no programmatic route, so the downloader's whole job is to say so
+  # precisely rather than fail obscurely or silently skip.
+  err <- expect_error(download_fluxnet2015("XX-None"), "by hand")
+  msg <- conditionMessage(err)
+  expect_match(msg, "XX-None")
+  expect_match(msg, "fluxnet.org")
+  expect_match(msg, "Data Policy")
+  expect_match(msg, file.path("data-raw", "FLUXNET2015", "XX-None"), fixed = TRUE)
+})
+
+test_that("a present FLUXNET2015 archive is left alone", {
+  skip_if(is.na(product_file("FI-Sod", "FLUXNET2015")), "FI-Sod FLUXNET2015 not downloaded")
+  expect_message(download_fluxnet2015("FI-Sod"), "already present")
+})

@@ -75,59 +75,70 @@ read_spliced_products <- function(site_info) {
 
 # FI-Sod's shallow soil temperature sensor is unreliable before 2006. The
 # original re-derived it by chaining two regressions between the two sensor
-# depths, and expressed the two fitting periods as row ranges into one specific
-# data release: `a[1:24383, ]` for the early relationship, `a[90000:245000, ]`
-# for the late one.
+# depths, and expressed the fitting periods as row ranges into one specific
+# data release:
 #
-# Row ranges do not survive a re-download. On the FLUXNET-Archive product
-# currently on disk FI-Sod spans 2023-2024, so `90000:245000` lies entirely
-# past the end of the table, every selected row is NA and `lm()` aborts with
-# "0 (non-NA) cases" -- the site cannot be processed at all. On a longer
-# release the indices would not error, which is worse: they would silently
-# select different dates than the author intended.
+#   mod1 <- lm(data = a[1:24383, ],      TS_F_MDS_2 ~ TS_F_MDS_1)
+#   mod2 <- lm(data = a[90000:245000, ], TS_F_MDS_1 ~ TS_F_MDS_2)
 #
-# Stated as dates the intent is release-independent. Learn how the unreliable
-# early shallow sensor relates to the deep sensor *during the bad period*, use
-# that to put the early shallow values onto the deep sensor's scale, then bring
-# them back through the *good* period's deep-to-shallow relationship. The
-# result is flagged QC = 2, i.e. gap-filled rather than measured, exactly as
-# before.
+# Row ranges do not survive a re-download. On the FLUXNET-Archive product alone
+# FI-Sod spans 2023-2024, so `90000:245000` lay entirely past the end of the
+# table and `lm()` aborted with "0 (non-NA) cases" -- the site could not be
+# processed at all. On a record of a *different* length it would not error,
+# which is worse: it would quietly select different dates.
 #
-# This is a deliberate change of behaviour at one site rather than a pure
-# refactor, and it is worth being explicit about why that is acceptable: the
-# original's early window was roughly 1.4 years rather than the whole pre-2006
-# period, and which dates those rows covered in the author's release cannot be
-# recovered. Nothing working is being altered -- the site errors outright
-# today.
+# The windows below are those same row ranges resolved to timestamps against
+# the release the manuscript was written on: FLUXNET2015 FULLSET HH for
+# FI-Sod, 2001-2014, which is exactly 245,424 contiguous half-hourly rows --
+# note that the original's upper bound of 245000 all but exhausts it. Because
+# the record is gap-free, row index and timestamp map one-to-one, so this is a
+# faithful translation rather than an interpretation, and it reproduces the
+# original's coefficients exactly on that file. There is a test for that.
+#
+# Using year boundaries instead -- fit on everything before 2006, and on
+# everything after -- looks tidier and is wrong. Measured on the same file, the
+# early relationship changes from slope 0.865 to slope 0.307, and the rebuilt
+# pre-2006 soil temperature moves by 8.13 C RMS (mean +6.97 C, max 13.5 C) on
+# values spanning -8 to 23.6 C. The early sensor's behaviour evidently does not
+# hold steady across 2001-2005, so which part of that period the relationship
+# is learned from matters a great deal.
 FI_SOD_TS_BAD_THROUGH <- 2005
+# a[1:24383, ] and a[90000:245000, ] of FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv
+FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
+FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")
 
 recalibrate_fi_sod_soil_temp <- function(a) {
+  in_window <- function(w) a$TIMESTAMP_START >= w[[1]] & a$TIMESTAMP_START <= w[[2]]
+  early <- in_window(FI_SOD_EARLY_WINDOW)
+  late <- in_window(FI_SOD_LATE_WINDOW)
+  # The rows being rebuilt. This predicate is verbatim from the original, which
+  # fitted on windows but applied to whole years.
   bad <- a$YEAR <= FI_SOD_TS_BAD_THROUGH
-  good <- !bad
 
   complete_pairs <- function(i) {
     sum(!is.na(a$TS_F_MDS_1[i]) & !is.na(a$TS_F_MDS_2[i]))
   }
-  n_bad <- complete_pairs(bad)
-  n_good <- complete_pairs(good)
+  n_early <- complete_pairs(early)
+  n_late <- complete_pairs(late)
 
-  # Both relationships have to be estimable. Skipping loudly beats erroring:
-  # a record that simply does not reach back before 2006 needs no
-  # recalibration, and should not take the whole site down with it.
-  if (n_bad == 0 || n_good == 0) {
+  # Both relationships have to be estimable. Skipping loudly beats erroring: a
+  # record that does not reach back past 2006 needs no recalibration and should
+  # not take the whole site down with it.
+  if (n_early == 0 || n_late == 0 || !any(bad)) {
     message(
       "FI-Sod: skipping the pre-", FI_SOD_TS_BAD_THROUGH + 1,
       " soil temperature recalibration. It needs complete TS_F_MDS_1/",
-      "TS_F_MDS_2 pairs on both sides of ", FI_SOD_TS_BAD_THROUGH,
-      "; this record has ", n_bad, " before and ", n_good, " after, spanning ",
+      "TS_F_MDS_2 pairs in ", FI_SOD_EARLY_WINDOW[[1]], "-", FI_SOD_EARLY_WINDOW[[2]],
+      " and ", FI_SOD_LATE_WINDOW[[1]], "-", FI_SOD_LATE_WINDOW[[2]],
+      "; this record has ", n_early, " and ", n_late, ", spanning ",
       min(a$YEAR), "-", max(a$YEAR), "."
     )
     return(a)
   }
 
-  # Bad-period shallow -> deep, then good-period deep -> shallow.
-  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = a[bad, ], na.action = na.omit)
-  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = a[good, ], na.action = na.omit)
+  # Early-window shallow -> deep, then good-period deep -> shallow.
+  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = a[early, ], na.action = na.omit)
+  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = a[late, ], na.action = na.omit)
 
   deep_est <- predict(to_deep, data.frame(TS_F_MDS_1 = a$TS_F_MDS_1[bad]))
   a$TS_F_MDS_1[bad] <- predict(to_shallow, data.frame(TS_F_MDS_2 = deep_est))

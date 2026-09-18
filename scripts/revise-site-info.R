@@ -85,11 +85,18 @@ sites_v2 <- sites |>
       grepl("FLUXNET2020|FLUXNET2025", .data$source) ~ "FLUXNET",
       # A few more specific sites can use FLUXNET shuttle
       .data$site_ID %in% c("FI-Sod", "IT-SRo") ~ "FLUXNET",
+      # (FI-Sod picks up FLUXNET2015 and ICOS below.)
       TRUE ~ .data$source
     ),
     source = case_when(
       .data$source == "ICOS" & .data$site_ID %in% ww2020_sites ~ "WW2020+FLUXNET+ICOS",
       .data$source == "ICOS" ~ "FLUXNET+ICOS",
+      # FI-Sod's shuttle product is only 2023-2024 and it is absent from Warm
+      # Winter 2020, so its early record has to come from FLUXNET2015
+      # (2001-2014, acquired by hand). ICOS ETC-Archive L2 reaches 2025 where
+      # the shuttle copy stops at 2024. The 2015-2022 stretch has no public
+      # product at all -- see docs/data-provenance.md.
+      .data$site_ID == "FI-Sod" ~ "FLUXNET2015+FLUXNET+ICOS",
       TRUE ~ .data$source
     ),
     estimate_ts_method = case_when(

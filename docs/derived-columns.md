@@ -119,8 +119,9 @@ behaviour, flagged rather than changed.
 
 Two more collisions of the same kind, both inherited:
 
-- **FI-Sod** reconstructs pre-2006 soil temperature in step 01 and then, being
-  a `TS_linear` site, discards it in favour of a `TS ~ TA` fit.
+- **FI-Sod** reconstructs pre-2006 soil temperature in step 01 — an expensive
+  two-stage chain between sensor depths — and then, being a `TS_linear` site,
+  discards it in favour of a `TS ~ TA` fit.
 - **US-MBP** fills soil temperature *gaps* from air temperature in step 01, and
   then has the whole column replaced by a differently-fitted regression.
 
