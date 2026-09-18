@@ -17,6 +17,22 @@ fix_soil_temp <- function(a, site_info) {
       data$NETRAD <- a$NETRAD_2_1_1
     } 
   } else {
+    # TS_F_MDS_1 is the training target here, not the output: the model learns
+    # TS from TA (and NETRAD) on the hours where TS was measured, then predicts
+    # the rest. So some measured TS has to be present somewhere in the record.
+    # A site whose only downloaded product omits soil temperature entirely --
+    # FR-Fon's Warm Winter 2020 archive, for instance -- needs its later
+    # products fetched before this can run.
+    needed <- c("TS_F_MDS_1", "TA_F_MDS", "NETRAD")
+    absent <- setdiff(needed, names(a))
+    if (length(absent)) {
+      stop(
+        name_site, " needs predicted soil temperature, but the spliced record ",
+        "has no ", paste(absent, collapse = ", "), " column. Declared products: ",
+        paste(site_sources(site_info), collapse = " + "),
+        ". Check that all of them are downloaded."
+      )
+    }
     data <- a |>
       dplyr::select(
         "TIMESTAMP", "YEAR", "DOY", "HOUR", "MINUTE",
