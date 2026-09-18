@@ -134,7 +134,11 @@ prep_ameriflux <- function(site_info) {
   #l###############################################################################
   # Begin U-star filtering
   ################################################################################
-  gs <- detect_growing_season(ac, site_info, nee_col = "NEE", ts_col = "TS")
+  gs <- detect_growing_season(
+    ac, site_info,
+    nee_col = "NEE", ts_col = "TS",
+    nee_threshold = "uncapped"
+  )
   gStart <- gs$gStart
   gEnd <- gs$gEnd
   tStart <- gs$tStart
@@ -199,6 +203,10 @@ prep_ameriflux <- function(site_info) {
   ac$uStarTh <- ac_u$uStar
 
   attr(ac, "dt") <- dt
+  # Hand the growing season back so `prep_nee_ac()` reuses the one the u-star
+  # season factor was built from, rather than recomputing and risking a
+  # disagreement.
+  attr(ac, "gs") <- gs
   ac
 }
 
@@ -219,8 +227,9 @@ prep_ustar_df <- function(a, site_info) {
 
   # remove the NEE data without FC measurements
   if (!is.na(site_info[["FC"]])) {
-    ac <- ac |>
-      dplyr::mutate(NEE = dplyr::na_if(.data$NEE, is.na(a[[site_info[["FC"]]]])))
+    # NB: not `na_if()`, which compares values -- here we are masking by
+    # position, using a logical index drawn from a different column.
+    ac$NEE[is.na(a[[site_info[["FC"]]]])] <- NA_real_
   }
 
   # combine NEE time series and FC time series; because either one is incomplete

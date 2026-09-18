@@ -33,7 +33,10 @@ adjust_southern_hemisphere <- function(dat, lat) {
 
 
 detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
-                                  filter_fn = NULL) {
+                                  nee_threshold) {
+  nee_threshold <- match.arg(nee_threshold, c("capped", "uncapped", "zero"))
+  name_site <- site_info[["site_ID"]]
+
   nee_yearly <- ac |>
     dplyr::summarise(
       NEE = mean(.data[[nee_col]], na.rm = TRUE),
@@ -42,13 +45,21 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
     ) |>
     dplyr::arrange(.data$DOY)
 
-  if (is.null(filter_fn)) {
-    filter_fn <- function(x) {
-      x[[nee_col]] < max(min(x[[nee_col]], na.rm = TRUE) * 0.2, -0.8)
-    }
+  # The original workflows used three different cut-offs for "this day-of-year
+  # counts as growing season", and they are not interchangeable. At a site whose
+  # minimum mean NEE is -10, "capped" admits every day down to -0.8 while
+  # "uncapped" stops at -2.0, which moves gStart/gEnd by weeks -- and those feed
+  # the u-star season factor, the gap thresholds, and the window layout.
+  nee_min <- min(nee_yearly[[nee_col]], na.rm = TRUE)
+  cutoff <- switch(nee_threshold,
+    capped = max(nee_min * 0.2, -0.8), # 01_02a, every EuroFlux site but two
+    uncapped = nee_min * 0.2,          # 01_02b, every AmeriFlux site
+    zero = 0.0                         # 01_02a, FI-Sod and DE-RuC
+  )
+  tmp <- nee_yearly |> dplyr::filter(.data[[nee_col]] < cutoff)
+  if (nrow(tmp) < 8) {
+    stop(name_site, " has too few seasonal points to estimate growing season.")
   }
-  tmp <- nee_yearly |> dplyr::filter(filter_fn(nee_yearly))
-  if (nrow(tmp) < 8) stop(site_name, " has too few seasonal points to estimate growing season.")
 
   # Original comment: 
   # """

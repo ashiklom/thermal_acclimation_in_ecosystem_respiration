@@ -102,6 +102,8 @@ prep_nee_ac <- function(name_site) {
 
   if (site_info$source == "AmeriFlux_BASE") {
     ac <- prep_ameriflux(site_info)
+    gs <- attr(ac, "gs")
+    stopifnot(!is.null(gs))
     measured <- ac |>
       dplyr::filter(
         !is.na(.data$NEE),
@@ -127,6 +129,10 @@ prep_nee_ac <- function(name_site) {
       tibble::as_tibble()
   } else if (site_info$source %in% c("FLUXNET", "FLUXNET2015", "ICOS", "TERN")) {
     ac <- prep_icos_tern_fluxnet(site_info)
+    gs <- detect_growing_season(
+      ac, site_info,
+      nee_threshold = if (name_site %in% SITES_GS_NEE_ZERO) "zero" else "capped"
+    )
     measured <- ac |>
       dplyr::filter(
         !is.na(.data$TA),
@@ -152,13 +158,31 @@ prep_nee_ac <- function(name_site) {
     stop(name_site, " has no observations after the nighttime quality filter.")
   }
 
-  gs <- detect_growing_season(ac, site_info)
   gStart <- gs$gStart
   gEnd <- gs$gEnd
   tStart <- gs$tStart
   tEnd <- gs$tEnd
 
+  # A few sites have unreliable NEE below 2 C, so both the reported temperature
+  # floor and the observations themselves are truncated there. The two original
+  # workflows truncated at different points and that is preserved here: for
+  # CH-Dav the cold observations are dropped *before* the data-gap scan, so they
+  # can change which years qualify, while for US-Ha1 and US-GLE they are dropped
+  # after it. Unifying the two would silently change results at three sites.
+  truncate_cold <- name_site %in% SITES_TS_MIN_2C
+  is_ameriflux <- site_info$source == "AmeriFlux_BASE"
+  if (truncate_cold) {
+    tStart <- max(tStart, TS_MIN_VALID)
+    if (!is_ameriflux) {
+      measured <- measured |> dplyr::filter(.data$TS >= TS_MIN_VALID)
+    }
+  }
+
   good_years <- get_good_years(measured, gStart, gEnd, dt, name_site)
+
+  if (truncate_cold && is_ameriflux) {
+    measured <- measured |> dplyr::filter(.data$TS >= TS_MIN_VALID)
+  }
 
   measured_final <- measured |>
     dplyr::mutate(growing_year = dplyr::if_else(.data$DOY <= 366, .data$YEAR, .data$YEAR - 1)) |>

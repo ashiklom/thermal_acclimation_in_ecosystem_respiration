@@ -203,6 +203,13 @@ total_tas_site <- function(site_data, direct = FALSE) {
     a_measure_night_complete$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
     TS_pred <- predict(mod_lm, newdata = data.frame(TA = ac$TA), na.action = na.pass)
     ac$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
+
+    # The bounds carried in `feature_gs` were derived from the measured TS we
+    # just overwrote, so they have to be recomputed on the regressed scale.
+    # They gate the window-skip test in `total_tas_window()`.
+    ts_growing_season <- ac$TS[dplyr::between(ac$DOY, gStart, gEnd)]
+    tStart <- quantile(ts_growing_season, 0.025, na.rm = TRUE)
+    tEnd <- quantile(ts_growing_season, 0.975, na.rm = TRUE)
   }
 
   # calculate daily daytime NEE and rolling average
