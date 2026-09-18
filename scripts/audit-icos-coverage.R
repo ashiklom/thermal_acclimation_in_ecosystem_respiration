@@ -84,7 +84,7 @@ main <- function() {
     NULL
   }
 
-  sites <- site_info$site_ID[site_info$source == "ICOS"]
+  sites <- site_info$site_ID[grepl("ICOS", site_info$source, fixed = TRUE)]
   for (site in sites) {
     sources <- site_sources(site)
     shut <- if (!is.null(shuttle) && site %in% shuttle$site_id) {

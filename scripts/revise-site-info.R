@@ -92,7 +92,7 @@ sites_v2 <- sites |>
 # `prep_nee_ac()`, as a missing `SWC` column pointing nowhere near the cause.
 missing_swc_col <- sites_v2 |>
   filter(
-    .data$source == "AmeriFlux_BASE",
+    grepl("AmeriFlux_BASE", .data$source, fixed = TRUE),
     .data$SWC_use == "YES",
     is.na(.data$SWC)
   )

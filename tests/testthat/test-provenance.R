@@ -92,3 +92,19 @@ test_that("a single product passes through untouched", {
 test_that("splicing nothing is an error, not an empty frame", {
   expect_error(splice_products(list()), "Nothing to splice")
 })
+
+test_that("no R source compares site_info$source to a bare product name", {
+  # `source` is a `+`-separated list, so `== "ICOS"` silently matches nothing
+  # once a site gains a second product. Three call sites were missed when the
+  # column became compound -- fix_soil_temp(), the _targets.R site filter and
+  # the coverage audit -- and each failed late and confusingly. Compare via
+  # site_reader()/site_sources(), or grepl(..., fixed = TRUE).
+  offenders <- character()
+  for (f in c(list.files("R", pattern = "[.]R$", full.names = TRUE), "_targets.R")) {
+    lines <- readLines(f, warn = FALSE)
+    hits <- grep("(\\$source|\\[\\[\"source\"\\]\\])\\s*(==|%in%)", lines)
+    hits <- hits[!grepl("^\\s*#", lines[hits])]
+    if (length(hits)) offenders <- c(offenders, sprintf("%s:%d", f, hits))
+  }
+  expect_equal(offenders, character())
+})

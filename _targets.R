@@ -30,7 +30,10 @@ all_site_info <- get_site_info()
 values <- tibble::tibble(
   site_name = all_site_info |>
     dplyr::filter(
-      .data$source %in% c("ICOS", "TERN", "FLUXNET"),
+      # Every site the FLUXNET-family reader handles, i.e. not AmeriFlux BASE.
+      # Matched by substring because `source` is a `+`-separated provenance
+      # list (e.g. "WW2020+FLUXNET+ICOS"); see FLUX_PRODUCTS in R/constants.R.
+      !grepl("AmeriFlux_BASE", .data$source, fixed = TRUE),
       .data$LAT > 0
     ) |>
     dplyr::pull("site_ID")

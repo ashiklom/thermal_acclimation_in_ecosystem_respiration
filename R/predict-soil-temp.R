@@ -3,7 +3,7 @@
 fix_soil_temp <- function(a, site_info) {
   name_site <- site_info[["site_ID"]]
 
-  if (site_info$source == "AmeriFlux_BASE") {
+  if (site_reader(site_info) == "ameriflux") {
     data <- a |>
       dplyr::select(
         "TIMESTAMP", "YEAR", "DOY", "HOUR", "MINUTE",
@@ -16,7 +16,7 @@ fix_soil_temp <- function(a, site_info) {
     } else if (name_site %in% c("US-Ho1")) {
       data$NETRAD <- a$NETRAD_2_1_1
     } 
-  } else if (site_info$source %in% c("TERN", "ICOS", "FLUXNET", "FLUXNET2015")) {
+  } else {
     data <- a |>
       dplyr::select(
         "TIMESTAMP", "YEAR", "DOY", "HOUR", "MINUTE",
@@ -34,8 +34,6 @@ fix_soil_temp <- function(a, site_info) {
     } else if (name_site == "FR-Pue") {
       data$TS[data$YEAR < 2016] <- NA
     }
-  } else {
-    stop("Unknown data source: ", site_info$source)
   }
 
   # Gapfill missing air temperature data
