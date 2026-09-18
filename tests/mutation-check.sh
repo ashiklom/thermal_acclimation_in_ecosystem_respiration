@@ -74,6 +74,29 @@ add "AmeriFlux table left a base data.frame" \
   a[a == -9999] <- NA' \
     '  )
   a[a == -9999] <- NA'
+add "TS substitution wholesale, not overlaid" \
+    R/soil-temp-columns.R \
+    '  ts[!is.na(ts_pred)] <- ts_pred[!is.na(ts_pred)]
+  ts
+}' \
+    '  ts_pred
+}'
+add "TS fit domain loses the TA > 0 restriction" \
+    R/soil-temp-columns.R \
+    '    ac = ac[ac$TA > 0, ],' \
+    '    ac = ac,'
+add "TS fit domains collapsed into one" \
+    R/soil-temp-columns.R \
+    '    night = nightNEE,' \
+    '    night = ac[ac$TA > 0, ],'
+add "TS bounds taken over the whole record" \
+    R/soil-temp-columns.R \
+    '  gs <- ts[dplyr::between(doy, gStart, gEnd)]' \
+    '  gs <- ts'
+add "TS bounds taken from the nighttime table" \
+    R/soil-temp-columns.R \
+    '  bounds <- ts_bounds(ac$TS, ac$DOY, gStart, gEnd)' \
+    '  bounds <- ts_bounds(nightNEE$TS, nightNEE$DOY, gStart, gEnd)'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

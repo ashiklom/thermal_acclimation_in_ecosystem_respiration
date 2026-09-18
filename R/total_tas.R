@@ -195,24 +195,15 @@ total_tas_site <- function(site_data, direct = FALSE) {
 
   # TODO: Move this logic out of here
   if (identical(site_info[["ts_col"]], "TS_linear")) {
-    if (identical(site_info[["ts_linear_domain"]], "night")) {
-      # slope will be too low if using ac data for the subtropical wetland sites.
-      mod_lm <- lm(data = a_measure_night_complete, TS ~ TA, na.action = na.omit)
-    } else {
-      # using data with TA > 0, because we focus on grouping season
-      mod_lm <- lm(data = ac[ac$TA > 0, ], TS ~ TA, na.action = na.omit)
-    }
-    TS_pred <- predict(mod_lm, newdata = data.frame(TA = a_measure_night_complete$TA), na.action = na.pass)
-    a_measure_night_complete$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
-    TS_pred <- predict(mod_lm, newdata = data.frame(TA = ac$TA), na.action = na.pass)
-    ac$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
-
-    # The bounds carried in `feature_gs` were derived from the measured TS we
-    # just overwrote, so they have to be recomputed on the regressed scale.
-    # They gate the window-skip test in `total_tas_window()`.
-    ts_growing_season <- ac$TS[dplyr::between(ac$DOY, gStart, gEnd)]
-    tStart <- quantile(ts_growing_season, 0.025, na.rm = TRUE)
-    tEnd <- quantile(ts_growing_season, 0.975, na.rm = TRUE)
+    substituted <- apply_ts_linear(
+      ac, a_measure_night_complete, site_info, gStart, gEnd
+    )
+    ac <- substituted$ac
+    a_measure_night_complete <- substituted$nightNEE
+    # The bounds carried in `feature_gs` were derived from the measured TS just
+    # overwritten, so they have to be recomputed on the regressed scale.
+    tStart <- substituted$tStart
+    tEnd <- substituted$tEnd
   }
 
   # calculate daily daytime NEE and rolling average
