@@ -1,6 +1,6 @@
-# Choosing which soil-temperature column the model is fitted on. The estimator
-# itself is tested in test-soil-temp-columns.R; this is about selection being
-# unambiguous and failing by name when it cannot be.
+# Choosing which soil-temperature and soil-water column the model is fitted on.
+# The estimators themselves are tested in test-soil-temp-columns.R; this is
+# about selection being unambiguous and failing by name when it cannot be.
 
 use_project_root()
 
@@ -53,4 +53,52 @@ test_that("bounds for an unproduced column are an error, not a silent fallback",
   bounds <- tibble::tibble(ts_col = "TS_measured", tStart = 2.5, tEnd = 18.0)
   expect_error(ts_bounds_for(bounds, "TS_linear"), "TS_linear")
   expect_error(ts_bounds_for(bounds, "TS_linear"), "found 0")
+})
+
+# ------------------------------------------------------------ soil water
+
+test_that("default_swc_col depends on the model as well as the site", {
+  measured <- list(site_ID = "X-Msr", SWC_use = TRUE)
+  none <- list(site_ID = "X-Non", SWC_use = FALSE)
+  # Measured soil water is used whenever it exists, for either model.
+  expect_equal(default_swc_col(measured, direct = FALSE), "SWC_measured")
+  expect_equal(default_swc_col(measured, direct = TRUE), "SWC_measured")
+  # Without it, only the direct model needs a fallback: soil water is in its
+  # formula, and absent from the total model's.
+  expect_true(is.na(default_swc_col(none, direct = FALSE)))
+  expect_equal(default_swc_col(none, direct = TRUE), "SWC_era5")
+})
+
+test_that("resolve_swc_column materialises the requested column as SWC", {
+  dat <- fake_tables()
+  expect_equal(resolve_swc_column(dat, "SWC_measured", "X-Tst")$SWC, c(20, 21, 22))
+  expect_equal(resolve_swc_column(dat, "SWC_era5", "X-Tst")$SWC, c(30, 31, 32))
+  out <- resolve_swc_column(dat, "SWC_era5", "X-Tst")
+  expect_equal(out$SWC_measured, c(20, 21, 22))
+})
+
+test_that("an absent soil-water column fails by name and names the site", {
+  dat <- fake_tables()
+  err <- expect_error(resolve_swc_column(dat, "SWC_satellite", "X-Tst"), "SWC_satellite")
+  expect_match(conditionMessage(err), "X-Tst")
+  expect_match(conditionMessage(err), "SWC_measured")
+})
+
+test_that("an empty ERA5 fallback tells the user what to run", {
+  # This replaces the error `read_era5_swc()` used to raise at the same point
+  # in the pipeline, so the failure mode is preserved rather than dropped.
+  dat <- fake_tables()
+  dat$SWC_era5 <- NA_real_
+  err <- expect_error(resolve_swc_column(dat, "SWC_era5", "X-Tst"), "ERA5")
+  expect_match(conditionMessage(err), "download_era5")
+  expect_match(conditionMessage(err), "X-Tst")
+})
+
+test_that("an empty measured column is left to behave as before", {
+  # Deliberately not guarded: scoping the emptiness check to the reanalysis
+  # column keeps this change from altering any site that runs today.
+  dat <- fake_tables()
+  dat$SWC_measured <- NA_real_
+  expect_silent(out <- resolve_swc_column(dat, "SWC_measured", "X-Tst"))
+  expect_true(all(is.na(out$SWC)))
 })

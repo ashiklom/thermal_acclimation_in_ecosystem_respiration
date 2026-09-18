@@ -311,6 +311,39 @@ prep_nee_ac <- function(name_site) {
     identical(measured_final[["TS"]], measured_final[["TS_measured"]])
   )
 
+  # ------------------------------------------------- SWC column variants
+  #
+  # Measured soil water and the ERA5-Land reanalysis are carried side by side
+  # rather than one replacing the other. The second step used to drop `SWC` and
+  # join the reanalysis in its place, which made the two impossible to compare
+  # and meant the same join ran again for every model variant. Both columns are
+  # in PERCENT; see `ERA5_SWC_TO_PERCENT`.
+  ac_final[["SWC_measured"]] <- ac_final[["SWC"]]
+  measured_final[["SWC_measured"]] <- measured_final[["SWC"]]
+
+  # Absent reanalysis is not fatal here: the total model never reads soil
+  # water, so only the direct model is entitled to complain, and it does --
+  # see `resolve_swc_column()`.
+  era5 <- tryCatch(
+    read_era5_swc(name_site),
+    error = function(e) {
+      message("  ERA5 soil water unavailable (", conditionMessage(e), ")")
+      NULL
+    }
+  )
+  if (is.null(era5)) {
+    ac_final[["SWC_era5"]] <- NA_real_
+    measured_final[["SWC_era5"]] <- NA_real_
+  } else {
+    era5 <- dplyr::rename(era5, SWC_era5 = "SWC")
+    n_ac <- nrow(ac_final)
+    n_night <- nrow(measured_final)
+    ac_final <- dplyr::left_join(ac_final, era5, by = c("YEAR", "MONTH", "DAY"))
+    measured_final <- dplyr::left_join(measured_final, era5, by = c("YEAR", "MONTH", "DAY"))
+    # A daily table joined onto half-hourly rows must annotate, never multiply.
+    stopifnot(nrow(ac_final) == n_ac, nrow(measured_final) == n_night)
+  }
+
   declared_ts <- site_info[["ts_col"]]
   if (!declared_ts %in% ts_bounds_tbl[["ts_col"]]) {
     stop(

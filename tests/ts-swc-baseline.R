@@ -221,8 +221,45 @@ selection_matches_oracle <- function(sd_, site_info, name_site) {
   )
 }
 
+# The soil-water equivalent of the check above, per model variant: does
+# selecting a column reproduce what the oracle's destructive join produced?
+#
+# The oracle's nightNEE is row-filtered when measured soil water is used, so
+# the nighttime comparison is made on the same filter rather than on raw row
+# counts; `ac` is never row-filtered and is compared directly.
+swc_selection_matches_oracle <- function(sd_, site_info, name_site, direct) {
+  ora <- original_swc_step02(sd_$ac, sd_$nightNEE, name_site, site_info$SWC_use, direct)
+  swc_col <- default_swc_col(site_info, direct)
+
+  same <- function(a, b) isTRUE(all.equal(a, b, tolerance = TOLERANCE))
+  if (is.na(swc_col)) {
+    # No column selected: the total model at a site with no measured soil
+    # water. The oracle leaves both tables alone, so nothing may change.
+    checks <- c(
+      ac_SWC = same(sd_$ac$SWC, ora$ac$SWC),
+      night_rows = identical(nrow(sd_$nightNEE), nrow(ora$nightNEE)),
+      swc_use = identical(FALSE, ora$SWC_use)
+    )
+    return(list(ok = all(checks), failed = paste(names(checks)[!checks], collapse = ","), swc_col = "<none>"))
+  }
+
+  sel_ac <- resolve_swc_column(sd_$ac, swc_col, name_site)
+  sel_night <- resolve_swc_column(sd_$nightNEE, swc_col, name_site)
+  if (isTRUE(site_info$SWC_use)) {
+    sel_night <- dplyr::filter(sel_night, !is.na(.data$SWC))
+  }
+  checks <- c(
+    ac_SWC = same(sel_ac$SWC, ora$ac$SWC),
+    night_SWC = same(sel_night$SWC, ora$nightNEE$SWC),
+    night_rows = identical(nrow(sel_night), nrow(ora$nightNEE)),
+    swc_use = identical(TRUE, ora$SWC_use)
+  )
+  list(ok = all(checks), failed = paste(names(checks)[!checks], collapse = ","), swc_col = swc_col)
+}
+
 rows <- list()
 selection <- list()
+swc_selection <- list()
 for (name_site in sites) {
   cat(sprintf("\n==== %s ====\n", name_site))
   t0 <- Sys.time()
@@ -257,6 +294,20 @@ for (name_site in sites) {
   )
 
   for (direct in c(FALSE, TRUE)) {
+    ssel <- tryCatch(
+      swc_selection_matches_oracle(sd_, si, name_site, direct),
+      error = function(e) list(ok = FALSE, failed = paste("error:", conditionMessage(e)), swc_col = "?")
+    )
+    swc_selection[[paste(name_site, direct)]] <- tibble::tibble(
+      site_ID = name_site, direct = direct, swc_col = ssel$swc_col,
+      ok = ssel$ok, failed = ssel$failed
+    )
+    cat(sprintf(
+      "  swc selection vs oracle (direct=%-5s %-13s): %s%s\n", direct, ssel$swc_col,
+      if (ssel$ok) "match" else "MISMATCH",
+      if (nzchar(ssel$failed)) paste0(" [", ssel$failed, "]") else ""
+    ))
+
     swc <- original_swc_step02(sd_$ac, sd_$nightNEE, name_site, si$SWC_use, direct)
     ts <- original_ts_step02(
       swc$ac, swc$nightNEE, name_site,
@@ -298,8 +349,19 @@ if (nrow(sel_report)) {
   print(as.data.frame(sel_report), row.names = FALSE)
   selection_failed <- any(!sel_report$ok)
   cat(sprintf(
-    "\n  %d of %d sites reproduce the oracle by column selection\n",
+    "\n  %d of %d sites reproduce the oracle's TS by column selection\n",
     sum(sel_report$ok), nrow(sel_report)
+  ))
+}
+
+swc_report <- dplyr::bind_rows(swc_selection)
+if (nrow(swc_report)) {
+  cat("\n========== SWC SELECTION vs ORACLE ==========\n")
+  print(as.data.frame(swc_report), row.names = FALSE)
+  selection_failed <- selection_failed || any(!swc_report$ok)
+  cat(sprintf(
+    "\n  %d of %d site-runs reproduce the oracle's SWC by column selection\n",
+    sum(swc_report$ok), nrow(swc_report)
   ))
 }
 

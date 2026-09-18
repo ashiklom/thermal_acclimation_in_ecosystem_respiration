@@ -105,6 +105,23 @@ add "TS bounds fall back to the first row" \
     R/soil-temp-columns.R \
     '  row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]' \
     '  row <- ts_bounds[1, ]'
+add "reanalysis SWC preferred over measured" \
+    R/soil-water-columns.R \
+    '  if (isTRUE(site_info[["SWC_use"]])) return("SWC_measured")
+  if (isTRUE(direct)) return("SWC_era5")
+  NA_character_' \
+    '  if (isTRUE(direct)) return("SWC_era5")
+  if (isTRUE(site_info[["SWC_use"]])) return("SWC_measured")
+  NA_character_'
+add "SWC fallback applied to the total model too" \
+    R/soil-water-columns.R \
+    '  if (isTRUE(direct)) return("SWC_era5")
+  NA_character_' \
+    '  "SWC_era5"'
+add "SWC selection ignored, always measured" \
+    R/soil-water-columns.R \
+    '  dat[["SWC"]] <- dat[[swc_col]]' \
+    '  dat[["SWC"]] <- dat[["SWC_measured"]]'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

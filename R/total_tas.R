@@ -39,6 +39,16 @@ read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_sw
     stop("No ERA5 soil water data for site ", name_site, " in ", path, ".")
   }
 
+  # One row per site-day, or the daily join onto the half-hourly tables would
+  # multiply rows instead of annotating them -- which would silently inflate
+  # every count downstream.
+  if (anyDuplicated(swc[c("time")])) {
+    stop(
+      "ERA5 soil water for ", name_site, " has duplicate dates in ", path,
+      ". Expected one row per site-day."
+    )
+  }
+
   # Guard against silently ingesting data that has already been rescaled, or
   # that is in some other unit entirely. ERA5 volumetric soil water is
   # physically bounded well below 1.
@@ -160,10 +170,11 @@ get_priors <- function(model_data, direct = FALSE) {
 }
 
 
-# `ts_col` overrides the site's declared soil-temperature column, for
-# sensitivity runs that compare estimation methods against each other. Left
-# NULL it uses `site_info$ts_col`, which is the normal path.
-total_tas_site <- function(site_data, direct = FALSE, ts_col = NULL) {
+# `ts_col` and `swc_col` override the soil-temperature and soil-water columns
+# the model is fitted on, for sensitivity runs that compare estimation methods
+# or measured-versus-reanalysis soil water against each other. Left NULL they
+# resolve to the site's declaration, which is the normal path.
+total_tas_site <- function(site_data, direct = FALSE, ts_col = NULL, swc_col = NULL) {
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
   feature_gs <- site_data[["feature_gs"]]
@@ -171,27 +182,32 @@ total_tas_site <- function(site_data, direct = FALSE, ts_col = NULL) {
   name_site <- feature_gs[["site_ID"]]
 
   site_info <- get_site_info(name_site)
-  SWC_use <- site_info[["SWC_use"]]
 
   gStart <- feature_gs[["gStart"]]
   gEnd <- feature_gs[["gEnd"]]
 
-  # TODO: Move this logic out of here
-  if (SWC_use) {
+  # Soil water: choose a column, as with soil temperature. `prep_nee_ac()`
+  # carries both `SWC_measured` and `SWC_era5` on every table, so no reading or
+  # joining happens here.
+  #
+  # Unlike TS, the choice depends on the model as well as the site, which is
+  # why it cannot be a single column in site_info.csv: the direct model needs
+  # soil water, so a site with none measured falls back to ERA5-Land, while the
+  # total model does not use soil water at all and therefore needs no fallback.
+  swc_col <- swc_col %||% default_swc_col(site_info, direct)
+  if (!is.na(swc_col)) {
+    ac <- resolve_swc_column(ac, swc_col, name_site)
+    a_measure_night_complete <- resolve_swc_column(a_measure_night_complete, swc_col, name_site)
+  }
+  SWC_use <- !is.na(swc_col)
+
+  # Measured soil water is a requirement where it exists: the original drops
+  # nighttime observations that lack it. The ERA5 fallback is deliberately not
+  # filtered on -- it is a daily reanalysis with its own gaps, and filtering on
+  # it would discard observations the original kept.
+  if (isTRUE(site_info[["SWC_use"]])) {
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(!is.na(.data$SWC))
-  } else if (direct) {
-    # if no measured SWC data use daily SWC from ERA5 land
-    a_measure_night_complete[["SWC"]] <- NULL
-    ac[["SWC"]] <- NULL
-    # use SWC data from ERA5 land climate reanalysis
-    swc_ERA5 <- read_era5_swc(name_site)
-    # attach to a_measure_night_complete and ac
-    a_measure_night_complete <- a_measure_night_complete |>
-      dplyr::left_join(swc_ERA5, by = c('YEAR', 'MONTH', 'DAY'))
-    ac <- ac |>
-      dplyr::left_join(swc_ERA5, by = c('YEAR', 'MONTH', 'DAY'))
-    SWC_use <- TRUE
   }
 
   # Soil temperature: choose a column, do not compute one. `prep_nee_ac()`
