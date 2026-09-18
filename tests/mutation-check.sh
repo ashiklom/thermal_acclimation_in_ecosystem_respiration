@@ -142,6 +142,14 @@ add "FI-Sod windows widened to year boundaries" \
 FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")' \
     'FI_SOD_EARLY_WINDOW <- c("200101010000", "200512312330")
 FI_SOD_LATE_WINDOW <- c("200601010000", "201412312330")'
+add "RH-to-VPD conversion flagged for every site" \
+    R/ameriflux.R \
+    'convert_rh <- !is.na(site_info$RH)' \
+    'convert_rh <- TRUE'
+add "RH-to-VPD decision dropped from the result" \
+    R/ameriflux.R \
+    'list(ac = ac, convert_rh = convert_rh)' \
+    'list(ac = ac)'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

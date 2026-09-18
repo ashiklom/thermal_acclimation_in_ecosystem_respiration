@@ -211,9 +211,7 @@ prep_fluxnet_family <- function(site_info) {
       NEE_uStar_f = .data$NEE
     )
 
-  # Save dt as attribute for later use.
-  attr(result, "dt") <- dt
-  result
+  list(ac = result, dt = dt)
 
 }
 
@@ -221,10 +219,13 @@ prep_fluxnet_family <- function(site_info) {
 prep_nee_ac <- function(name_site) {
   site_info <- get_site_info(name_site)
 
+  # Both readers return `list(ac =, dt =, ...)`. The AmeriFlux one also returns
+  # the growing season it detected, because the u-star filtering it ran already
+  # depended on it.
   if (site_reader(site_info) == "ameriflux") {
-    ac <- prep_ameriflux(site_info)
-    gs <- attr(ac, "gs")
-    stopifnot(!is.null(gs))
+    prepared <- prep_ameriflux(site_info)
+    ac <- prepared[["ac"]]
+    gs <- prepared[["gs"]]
     measured <- ac |>
       dplyr::filter(
         !is.na(.data$NEE),
@@ -249,7 +250,8 @@ prep_nee_ac <- function(name_site) {
       dplyr::filter(!!keep_night, .data$NEE > -5, .data$NEE < 30) |>
       tibble::as_tibble()
   } else {
-    ac <- prep_fluxnet_family(site_info)
+    prepared <- prep_fluxnet_family(site_info)
+    ac <- prepared[["ac"]]
     gs <- detect_growing_season(
       ac, site_info,
       nee_threshold = if (name_site %in% SITES_GS_NEE_ZERO) "zero" else "capped"
@@ -270,8 +272,7 @@ prep_nee_ac <- function(name_site) {
       tibble::as_tibble()
   }
 
-  dt <- attr(ac, "dt")
-  stopifnot(!is.null(dt))
+  dt <- prepared[["dt"]]
 
   if (nrow(measured) == 0) {
     stop(name_site, " has no observations after the nighttime quality filter.")

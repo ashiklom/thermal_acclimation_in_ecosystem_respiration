@@ -112,7 +112,8 @@ prep_ameriflux <- function(site_info) {
   }
 
   # Prepare data frame (ac) for u-star filtering
-  ac <- prep_ustar_df(a, site_info)
+  ustar <- prep_ustar_df(a, site_info)
+  ac <- ustar[["ac"]]
 
   #l###############################################################################
   # Begin U-star filtering
@@ -141,8 +142,7 @@ prep_ameriflux <- function(site_info) {
       .keep = "none"
     )
 
-  stopifnot(!is.null(attr(ac, "convert_RH_VPD")))
-  if (attr(ac, "convert_RH_VPD")) {
+  if (ustar[["convert_rh"]]) {
     ac_u$rH    <- ac$RH
     ac_u$VPD <- REddyProc::fCalcVPDfromRHandTair(ac_u$rH, ac_u$Tair)
   } else {
@@ -185,12 +185,12 @@ prep_ameriflux <- function(site_info) {
   }
   ac$uStarTh <- ac_u$uStar
 
-  attr(ac, "dt") <- dt
-  # Hand the growing season back so `prep_nee_ac()` reuses the one the u-star
-  # season factor was built from, rather than recomputing and risking a
-  # disagreement.
-  attr(ac, "gs") <- gs
-  ac
+  # `dt` and `gs` are results of this function, not properties of the table, so
+  # they are returned as such. `gs` in particular has to be handed back rather
+  # than recomputed downstream: it is the growing season the u-star season
+  # factor was built from, and a second call that disagreed with it would put
+  # the seasonal thresholds and the growing-season bounds out of step.
+  list(ac = ac, dt = dt, gs = gs)
 }
 
 prep_ustar_df <- function(a, site_info) {
@@ -305,18 +305,21 @@ prep_ustar_df <- function(a, site_info) {
   # USTAR
   ac$USTAR <- a[[site_info$USTAR]]
 
-  # RH or VPD
-  if (!is.na(site_info$RH)) {
+  # RH or VPD. Whether VPD has to be derived from relative humidity is decided
+  # by the site's column mapping here and needed by the caller, so it is part of
+  # this function's result rather than an attribute riding on the table: any
+  # dplyr verb that dropped attributes would have turned it into a missing-VPD
+  # error inside REddyProc, several steps away from the cause.
+  convert_rh <- !is.na(site_info$RH)
+  if (convert_rh) {
     ac$RH <- a[[site_info$RH]]
-    attr(ac, "convert_RH_VPD") <- TRUE
   } else {
     ac$VPD <- a[[site_info$VPD]]
-    attr(ac, "convert_RH_VPD") <- FALSE
   }
 
   ac$daytime <- a$daytime
 
-  ac
+  list(ac = ac, convert_rh = convert_rh)
 }
 
 

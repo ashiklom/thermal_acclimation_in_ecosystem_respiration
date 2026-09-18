@@ -13,7 +13,7 @@ test_that("the FC mask blanks NEE by position, not by value", {
   a[[si$NEE]] <- c(1, 2, 0, 5)
   a[[si$FC]] <- c(NA, 7, NA, 9)
 
-  ac <- suppressWarnings(suppressMessages(prep_ustar_df(a, si)))
+  ac <- suppressWarnings(suppressMessages(prep_ustar_df(a, si)))[["ac"]]
 
   expected <- c(1, 2, 0, 5)
   expected[is.na(a[[si$FC]])] <- NA # what the original did
@@ -30,7 +30,7 @@ swc_cases <- list(
 for (case in swc_cases) {
   test_that(sprintf("soil water for %s: %s", case$site, case$why), {
     si <- get_site_info(case$site)
-    ac <- suppressWarnings(suppressMessages(prep_ustar_df(synthetic_ameriflux(si), si)))
+    ac <- suppressWarnings(suppressMessages(prep_ustar_df(synthetic_ameriflux(si), si)))[["ac"]]
     expect_true("SWC" %in% names(ac))
     if (case$swc == "read") {
       expect_false(all(is.na(ac$SWC)))
@@ -106,4 +106,31 @@ test_that("a fractional UTC offset is refused rather than mis-classified", {
   si$LAT <- 47.5
   si$LONG <- -52.7 # Newfoundland, UTC-3:30
   expect_error(site_sunlight_times(si, as.Date("2015-06-01")), "fractional UTC offset")
+})
+
+# `prep_ustar_df()` and `prep_ameriflux()` used to hand results back to their
+# callers as attributes on the returned data frame. These pin the named-list
+# contract that replaced them: the fields have to be present, and they have to
+# carry the right values. An attribute silently dropped by a dplyr verb would
+# have surfaced much further downstream -- as a missing VPD inside REddyProc,
+# or as a recomputed growing season disagreeing with the u-star season factor.
+test_that("prep_ustar_df returns the table and the RH-conversion decision", {
+  rh_site <- get_site_info("US-Kon") # RH named
+  vpd_site <- get_site_info("US-GLE") # no RH, VPD named
+  expect_false(is.na(rh_site$RH))
+  expect_true(is.na(vpd_site$RH))
+
+  for (case in list(list(si = rh_site, convert = TRUE, col = "RH"),
+                    list(si = vpd_site, convert = FALSE, col = "VPD"))) {
+    out <- suppressWarnings(suppressMessages(
+      prep_ustar_df(synthetic_ameriflux(case$si), case$si)
+    ))
+    expect_named(out, c("ac", "convert_rh"))
+    expect_identical(out$convert_rh, case$convert,
+                     info = paste(case$si$site_ID, "convert_rh"))
+    # The flag decides which humidity column `prep_ameriflux()` reads, so the
+    # two have to agree: claiming a conversion with no RH column would fail
+    # inside REddyProc instead of here.
+    expect_true(case$col %in% names(out$ac), info = case$si$site_ID)
+  }
 })
