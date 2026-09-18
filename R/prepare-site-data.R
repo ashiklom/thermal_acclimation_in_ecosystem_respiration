@@ -39,9 +39,12 @@ read_spliced_products <- function(site_info) {
       message("  ", product, ": not downloaded, skipping")
       next
     }
-    dat <- read.csv(path, stringsAsFactors = FALSE)
+    # `FLUXNET_COL_TYPES` guarantees character timestamps -- which the ordering
+    # below and `splice_products()` both depend on -- and doubles everywhere
+    # else. A column that violates the contract surfaces in `problems()`
+    # instead of quietly changing type.
+    dat <- readr::read_csv(path, col_types = FLUXNET_COL_TYPES, progress = FALSE)
     dat[dat == -9999] <- NA
-    dat$TIMESTAMP_START <- as.character(dat$TIMESTAMP_START)
     dat <- dat[order(dat$TIMESTAMP_START), ]
     message(
       "  ", product, ": ", nrow(dat), " rows, ",

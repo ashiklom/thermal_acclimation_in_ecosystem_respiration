@@ -59,6 +59,21 @@ add "single-product source list" \
     R/utils.R \
     'sources <- trimws(unlist(strsplit(site_info[["source"]], "+", fixed = TRUE)))' \
     'sources <- site_info[["source"]]'
+add "flux timestamps typed numeric" \
+    R/constants.R \
+    'TIMESTAMP_START = readr::col_character(),' \
+    'TIMESTAMP_START = readr::col_double(),'
+add "flux columns typed character" \
+    R/constants.R \
+    '.default = readr::col_double()' \
+    '.default = readr::col_character()'
+add "AmeriFlux table left a base data.frame" \
+    R/ameriflux.R \
+    '  ) |>
+    tibble::as_tibble()
+  a[a == -9999] <- NA' \
+    '  )
+  a[a == -9999] <- NA'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

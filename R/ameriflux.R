@@ -8,11 +8,24 @@ prep_ameriflux <- function(site_info) {
   file_path <- files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)]
   stopifnot(length(file_path) == 1)
   message("Reading Ameriflux data...")
+  # `amf_read_base()` returns a base data.frame, and everything below reaches
+  # into it with column names taken from `site_info` (`a[[site_info$SW_IN]]`,
+  # `FC`, `TA`, `TS`, `SWC`, `USTAR`, ...). On a data.frame a missing or NA name
+  # yields NULL silently: the column is simply never created, and the complaint
+  # surfaces much later in `prep_nee_ac()` as an absent `SWC` pointing nowhere
+  # near the cause. A tibble raises "Can't extract column with
+  # `NA_character_`" at the point of use instead, which makes every one of
+  # those lookups self-checking rather than relying on the per-field invariant
+  # in `scripts/revise-site-info.R`. Verified safe for the pipeline: REddyProc
+  # accepts a tibble and returns identical u-star thresholds and gap-fills, and
+  # `SW_IN`/`USTAR` -- the two lookups that are not guarded by `!is.na()` -- are
+  # populated for all 71 AmeriFlux sites.
   a <- amerifluxr::amf_read_base(
     file_path,
     parse_timestamp = TRUE,
     unzip = TRUE
-  )
+  ) |>
+    tibble::as_tibble()
   a[a == -9999] <- NA
 
   if (name_site == "US-Myb") {
@@ -73,7 +86,8 @@ prep_ameriflux <- function(site_info) {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.
     bzf_file <- files_AmeriFlux_BASE[grepl('US-BZF', files_AmeriFlux_BASE)]
     stopifnot(length(bzf_file) == 1)
-    a_BZF <- amf_read_base(bzf_file, parse_timestamp = TRUE, unzip = TRUE)
+    a_BZF <- amerifluxr::amf_read_base(bzf_file, parse_timestamp = TRUE, unzip = TRUE) |>
+      tibble::as_tibble()
     a_BZF[a_BZF==-9999] <- NA
     df <- data.frame(BZS = a$TA_PI_F[between(a$YEAR, 2016, 2019)], BZF = a_BZF$TA_PI_F[between(a_BZF$YEAR, 2016, 2019)])
     mod <- lm(data=df, BZS ~ BZF)

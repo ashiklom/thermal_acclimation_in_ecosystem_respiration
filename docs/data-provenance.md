@@ -53,6 +53,16 @@ earlier, longer-history product therefore wins wherever two overlap. Products
 are re-sorted by actual first timestamp rather than trusting the declared order,
 so a mis-ordered `source` string cannot silently truncate a record.
 
+The comparison is on the 12-digit timestamp *strings*, so the tables are read
+under `FLUXNET_COL_TYPES` (`R/constants.R`), which declares
+`TIMESTAMP_START`/`TIMESTAMP_END` as character and everything else as double.
+That is a contract, not a convenience: under type guessing the timestamps come
+back as doubles and have to be converted back, and a column that is `-9999` for
+its entire length -- these files are full of them -- can be typed `logical`,
+which would make the `TS >= 2 C` filter compare against a logical NA. Sentinel
+removal stays a numeric `dat[dat == -9999] <- NA` so that a future release
+writing `-9999.0` is still caught.
+
 ### Known shortfall
 
 **IT-Noe** is absent from Warm Winter 2020 altogether, and both current products

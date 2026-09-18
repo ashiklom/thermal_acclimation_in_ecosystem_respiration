@@ -29,7 +29,15 @@ site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "
 ERA5_SWC_TO_PERCENT <- 100
 
 read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_swc.csv")) {
-  swc <- read.csv(path) |>
+  swc <- readr::read_csv(
+    path,
+    col_types = readr::cols(
+      time = readr::col_date(),
+      site = readr::col_character(),
+      SWC = readr::col_double()
+    ),
+    progress = FALSE
+  ) |>
     dplyr::filter(.data$site == name_site)
 
   if (nrow(swc) == 0) {

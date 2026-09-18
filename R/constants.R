@@ -33,6 +33,30 @@ FLUX_PRODUCTS <- list(
   AmeriFlux_BASE = list(dir = "Ameriflux", pattern = "^AMF_.*_BASE.*[.]zip$")
 )
 
+# Column contract for every FLUXNET-format half-hourly table (FLUXNET-Archive,
+# ICOS ETC L2, TERN L3, Warm Winter 2020). Reading these with type *guessing*
+# has two failure modes that this spec closes:
+#
+#   * The timestamps are 12-digit stamps like 199601010000. Guessed, they come
+#     back as doubles, and `splice_products()` orders and compares them as
+#     strings -- so the previous code converted them back with `as.character()`
+#     and depended on R not choosing scientific notation. Declaring them
+#     character makes the contract the splice relies on explicit.
+#   * These files are mostly sentinel-filled, and many columns are -9999 for
+#     their entire length. Guessed *with* `-9999` treated as NA, such a column
+#     is typed `logical`, and a later `TS >= TS_MIN_VALID` filter then silently
+#     compares against a logical NA. `.default = col_double()` keeps it double.
+#
+# Sentinel removal stays a numeric comparison (`dat[dat == -9999] <- NA`) rather
+# than moving into readr's `na` argument, because `na` matches the raw string:
+# all 110 tables currently on disk write a bare `-9999`, but a future release
+# writing `-9999.0` would slip straight through a string match.
+FLUXNET_COL_TYPES <- readr::cols(
+  TIMESTAMP_START = readr::col_character(),
+  TIMESTAMP_END = readr::col_character(),
+  .default = readr::col_double()
+)
+
 # Arctic tundra sites with periods of the year where the whole day is daytime
 # (or night). Two consequences: sunrise/sunset are undefined on those days and
 # have to be filled in by month, and the nighttime respiration filter also keeps
