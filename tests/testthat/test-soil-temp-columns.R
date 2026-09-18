@@ -177,3 +177,80 @@ test_that("the consolidated fit reproduces the inline lm it replaced", {
   # names its result by row; the names carry no information here.)
   expect_equal(unname(is.na(got)), is.na(d$TA))
 })
+
+# --------------------------------------------- FI-Sod's pre-2006 rebuild
+
+# A record straddling the 2005 boundary, with the early shallow sensor biased
+# and noisy relative to the deep one -- which is the situation the
+# recalibration exists for.
+fi_sod_fixture <- function(years = 2003:2010, per_year = 400, seed = 7) {
+  set.seed(seed)
+  n <- length(years) * per_year
+  year <- rep(years, each = per_year)
+  deep <- 8 + 6 * sin(seq(0, 2 * pi * length(years), length.out = n)) + rnorm(n, 0, 0.5)
+  shallow <- deep + rnorm(n, 0, 0.8)
+  # The early shallow sensor reads badly: offset and over-responsive.
+  early <- year <= 2005
+  shallow[early] <- 1.6 * deep[early] - 3.5 + rnorm(sum(early), 0, 1.2)
+  tibble::tibble(
+    YEAR = year,
+    TS_F_MDS_1 = shallow,
+    TS_F_MDS_2 = deep,
+    TS_F_MDS_1_QC = 0,
+    TS_F_MDS_2_QC = 0
+  )
+}
+
+test_that("the pre-2006 rebuild composes the two sensor-depth regressions", {
+  a <- fi_sod_fixture()
+  out <- recalibrate_fi_sod_soil_temp(a)
+
+  early <- a$YEAR <= 2005
+  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = a[early, ], na.action = na.omit)
+  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = a[!early, ], na.action = na.omit)
+  want <- predict(
+    to_shallow,
+    data.frame(TS_F_MDS_2 = predict(to_deep, data.frame(TS_F_MDS_1 = a$TS_F_MDS_1[early])))
+  )
+
+  expect_equal(unname(out$TS_F_MDS_1[early]), unname(want))
+  # Flagged as gap-filled rather than measured, as before.
+  expect_true(all(out$TS_F_MDS_1_QC[early] == 2))
+  # And the good period is untouched, values and flags alike.
+  expect_equal(out$TS_F_MDS_1[!early], a$TS_F_MDS_1[!early])
+  expect_equal(out$TS_F_MDS_1_QC[!early], a$TS_F_MDS_1_QC[!early])
+})
+
+test_that("the rebuild actually corrects the early sensor", {
+  # If the composition collapsed to the identity the whole exercise would be
+  # pointless, and a broken version could pass the structural test above.
+  a <- fi_sod_fixture()
+  out <- recalibrate_fi_sod_soil_temp(a)
+  early <- a$YEAR <= 2005
+  expect_false(isTRUE(all.equal(out$TS_F_MDS_1[early], a$TS_F_MDS_1[early])))
+  # The corrected early values should track the deep sensor more closely than
+  # the raw ones did, since that is what the good period's relationship says.
+  raw_err <- mean(abs(a$TS_F_MDS_1[early] - a$TS_F_MDS_2[early]))
+  fixed_err <- mean(abs(out$TS_F_MDS_1[early] - a$TS_F_MDS_2[early]))
+  expect_lt(fixed_err, raw_err)
+})
+
+test_that("a record that does not straddle 2005 is skipped, not an error", {
+  # This is FI-Sod as downloaded today: the FLUXNET-Archive product spans
+  # 2023-2024 only. The original indexed rows 90000:245000 here and aborted
+  # with "0 (non-NA) cases", taking the whole site down.
+  recent <- fi_sod_fixture(years = 2023:2024)
+  expect_message(out <- recalibrate_fi_sod_soil_temp(recent), "skipping")
+  expect_equal(out, recent)
+
+  early_only <- fi_sod_fixture(years = 2003:2005)
+  expect_message(out2 <- recalibrate_fi_sod_soil_temp(early_only), "skipping")
+  expect_equal(out2, early_only)
+})
+
+test_that("the skip message says what the record actually holds", {
+  recent <- fi_sod_fixture(years = 2023:2024)
+  msg <- capture_messages(recalibrate_fi_sod_soil_temp(recent))
+  expect_match(paste(msg, collapse = " "), "2023-2024")
+  expect_match(paste(msg, collapse = " "), "0 before")
+})

@@ -366,8 +366,44 @@ if (nrow(swc_report)) {
 }
 
 if (write_mode || !file.exists(outfile)) {
-  readr::write_csv(report, outfile)
-  cat("\n  WROTE baseline:", outfile, "(", nrow(report), "rows )\n")
+  # Merge rather than replace. A `--write --sites X` run must not silently
+  # discard the baseline for every site it did not run, which is exactly what
+  # writing `report` straight out would do.
+  #
+  # Rows for untouched sites are carried across as *text*, not parsed and
+  # re-written. A read/write round-trip through readr perturbs the last one or
+  # two digits of a double -- numerically irrelevant, far inside TOLERANCE, but
+  # it rewrites about a hundred fields of this file every time one site is
+  # refreshed, which buries the change that actually matters in the diff.
+  new_text <- strsplit(readr::format_csv(report), "\n", fixed = TRUE)[[1]]
+  new_text <- new_text[nzchar(new_text)]
+  header <- new_text[[1]]
+  body <- new_text[-1]
+
+  if (file.exists(outfile)) {
+    old_text <- readLines(outfile, warn = FALSE)
+    old_text <- old_text[nzchar(old_text)]
+    if (!identical(old_text[[1]], header)) {
+      stop(
+        "The committed baseline's columns differ from this run's, so the two ",
+        "cannot be merged row-wise. Re-run `--write` over every site instead:\n  ",
+        "Rscript tests/ts-swc-baseline.R --write"
+      )
+    }
+    refreshed <- unique(report$site_ID)
+    old_body <- old_text[-1]
+    site_of <- sub(",.*$", "", old_body)
+    kept <- old_body[!site_of %in% refreshed]
+    cat(sprintf(
+      "\n  merging: %d row(s) rewritten for %s, %d row(s) kept verbatim for %d other site(s)\n",
+      length(body), paste(refreshed, collapse = ", "),
+      length(kept), length(unique(sub(",.*$", "", kept)))
+    ))
+    body <- c(kept, body)
+  }
+  body <- body[order(sub(",.*$", "", body), body)]
+  writeLines(c(header, body), outfile)
+  cat("  WROTE baseline:", outfile, "(", length(body), "rows )\n")
   quit(status = if (selection_failed) 1 else 0)
 }
 
