@@ -36,6 +36,21 @@ reconcile = {
   cmd = ["Rscript", "tests/reconcile-step01.R"]
 }
 
+check-updates = {
+  description = "Check whether providers have newer flux data than data-raw/ holds",
+  cmd = ["uv", "run", "scripts/check-data-updates.py"]
+}
+
+download-icos = {
+  description = "Download ICOS ETC L2 or Warm Winter 2020 archives (--product/--sites)",
+  cmd = ["uv", "run", "scripts/download-icos.py"]
+}
+
+audit-coverage = {
+  description = "Report per-site record coverage against the manuscript's year counts",
+  cmd = ["Rscript", "scripts/audit-icos-coverage.R"]
+}
+
 [dependencies]
 r-bayesplot = ">=1.15.0,<2"
 r-boot = ">=1.3_32,<2"

@@ -57,6 +57,46 @@ get_site_info <- function(site_ID = NULL) {
   result
 }
 
+# The ordered provenance list for a site, oldest product first. See
+# `FLUX_PRODUCTS` in R/constants.R for why this is a list and not a scalar.
+site_sources <- function(site_info) {
+  sources <- trimws(unlist(strsplit(site_info[["source"]], "+", fixed = TRUE)))
+  unknown <- setdiff(sources, names(FLUX_PRODUCTS))
+  if (length(unknown)) {
+    stop(
+      "Site ", site_info[["site_ID"]], " names unknown data product(s): ",
+      paste(shQuote(unknown), collapse = ", "),
+      ". Known products: ", paste(names(FLUX_PRODUCTS), collapse = ", "), "."
+    )
+  }
+  sources
+}
+
+# Which reader handles this site. AmeriFlux BASE needs its own path (u-star
+# filtering, per-site column names); everything else is FLUXNET-format.
+site_reader <- function(site_info) {
+  if ("AmeriFlux_BASE" %in% site_sources(site_info)) "ameriflux" else "fluxnet_family"
+}
+
+# Where a given product's half-hourly table for a site lives, or NA if absent.
+product_file <- function(site, product) {
+  spec <- FLUX_PRODUCTS[[product]]
+  if (is.null(spec)) stop("Unknown data product: ", product)
+  hits <- list.files(
+    file.path(DIR_RAWDATA, spec$dir, site),
+    pattern = spec$pattern, full.names = TRUE, recursive = TRUE
+  )
+  if (length(hits) == 0) return(NA_character_)
+  if (length(hits) > 1) {
+    stop(
+      "Found ", length(hits), " candidate ", product, " files for ", site, ":\n",
+      paste(" ", hits, collapse = "\n"),
+      "\nExpected exactly one. Remove the stale copies."
+    )
+  }
+  hits
+}
+
 # Helper: parse simple TOML key = "value" lines
 parse_toml <- function(path) {
   lines <- readLines(path, warn = FALSE)

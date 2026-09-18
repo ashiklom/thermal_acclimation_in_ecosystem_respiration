@@ -47,6 +47,18 @@ add "ERA5 percent conversion (blocker 1)" \
     R/total_tas.R \
     'SWC = .data$SWC * ERA5_SWC_TO_PERCENT' \
     'SWC = .data$SWC'
+add "splice keeps later product on overlap" \
+    R/prepare-site-data.R \
+    'combined <- dplyr::bind_rows(combined, nxt[nxt$TIMESTAMP_START > tail_start, ])' \
+    'combined <- dplyr::bind_rows(combined[combined$TIMESTAMP_START < nxt$TIMESTAMP_START[1], ], nxt)'
+add "splice trusts declared order" \
+    R/prepare-site-data.R \
+    'parts <- parts[order(vapply(parts, function(d) d$TIMESTAMP_START[1], ""))]' \
+    'parts <- parts'
+add "single-product source list" \
+    R/utils.R \
+    'sources <- trimws(unlist(strsplit(site_info[["source"]], "+", fixed = TRUE)))' \
+    'sources <- site_info[["source"]]'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

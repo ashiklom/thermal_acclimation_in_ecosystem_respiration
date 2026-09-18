@@ -1,28 +1,78 @@
 .data <- rlang::.data
 
-prep_icos_tern_fluxnet <- function(site_info) {
+# Read every product named in a site's provenance list and splice them into one
+# record, oldest first.
+#
+# The splice rule is the original workflow's
+# (01_02a_filter_high_quality_night_respiration_EuroFlux.R:57-67): append each
+# later product only from the first timestamp after the running record's end, so
+# the earlier (longer-history) product wins wherever they overlap. All the
+# products are FLUXNET-format, so their columns already agree.
+# Concatenate per-product tables into one record.
+#
+# Each element of `parts` must be sorted by TIMESTAMP_START. Products are
+# ordered by their own first timestamp rather than by the caller's order, so a
+# mis-ordered `source` string cannot silently truncate the record; then each
+# later product contributes only the rows after the running record's end, so the
+# earlier (longer-history) product wins wherever two overlap.
+splice_products <- function(parts) {
+  if (length(parts) == 0) stop("Nothing to splice.")
+  parts <- parts[order(vapply(parts, function(d) d$TIMESTAMP_START[1], ""))]
+  combined <- parts[[1]]
+  for (i in seq_along(parts)[-1]) {
+    nxt <- parts[[i]]
+    tail_start <- combined$TIMESTAMP_START[nrow(combined)]
+    combined <- dplyr::bind_rows(combined, nxt[nxt$TIMESTAMP_START > tail_start, ])
+  }
+  combined
+}
+
+
+read_spliced_products <- function(site_info) {
   name_site <- site_info[["site_ID"]]
-  if (site_info$source %in% c("FLUXNET", "FLUXNET2015")) {
-    # TODO: Implement
-    file_path <- list.files(
-      file.path(DIR_RAWDATA, "FLUXNET", name_site),
-      pattern = "_FLUXMET_(HH|HR)_", full.names = TRUE, recursive = TRUE
+  wanted <- site_sources(site_info)
+
+  parts <- list()
+  for (product in wanted) {
+    path <- product_file(name_site, product)
+    if (is.na(path)) {
+      message("  ", product, ": not downloaded, skipping")
+      next
+    }
+    dat <- read.csv(path, stringsAsFactors = FALSE)
+    dat[dat == -9999] <- NA
+    dat$TIMESTAMP_START <- as.character(dat$TIMESTAMP_START)
+    dat <- dat[order(dat$TIMESTAMP_START), ]
+    message(
+      "  ", product, ": ", nrow(dat), " rows, ",
+      substr(dat$TIMESTAMP_START[1], 1, 4), "-",
+      substr(dat$TIMESTAMP_START[nrow(dat)], 1, 4)
     )
-    stopifnot(length(file_path) == 1)
-  } else if (site_info$source == "TERN") {
-    file_path <- file.path(DIR_RAWDATA, "TERN", name_site, sprintf(
-      "%s_TERN_L3_FLUXNET_HH.csv",
-      name_site
-    ))
-  } else if (site_info$source == "ICOS") {
-    file_path <- file.path(DIR_RAWDATA, "ICOS", name_site, sprintf(
-      "%s_ICOS_L2_FLUXNET_HH.csv",
-      name_site
-    ))
+    parts[[product]] <- dat
   }
 
-  a <- read.csv(file_path, stringsAsFactors = FALSE)
-  a[a == -9999] <- NA
+  if (length(parts) == 0) {
+    stop(
+      name_site, " has none of its declared products on disk (",
+      paste(wanted, collapse = ", "), "). Run the matching download first."
+    )
+  }
+
+  combined <- splice_products(parts)
+  if (length(parts) > 1) {
+    message(
+      "  spliced -> ", nrow(combined), " rows, ",
+      substr(combined$TIMESTAMP_START[1], 1, 4), "-",
+      substr(combined$TIMESTAMP_START[nrow(combined)], 1, 4)
+    )
+  }
+  combined
+}
+
+
+prep_fluxnet_family <- function(site_info) {
+  name_site <- site_info[["site_ID"]]
+  a <- read_spliced_products(site_info)
 
   dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
   a$TIMESTAMP <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
@@ -100,7 +150,7 @@ prep_icos_tern_fluxnet <- function(site_info) {
 prep_nee_ac <- function(name_site) {
   site_info <- get_site_info(name_site)
 
-  if (site_info$source == "AmeriFlux_BASE") {
+  if (site_reader(site_info) == "ameriflux") {
     ac <- prep_ameriflux(site_info)
     gs <- attr(ac, "gs")
     stopifnot(!is.null(gs))
@@ -127,8 +177,8 @@ prep_nee_ac <- function(name_site) {
     measured <- measured |>
       dplyr::filter(!!keep_night, .data$NEE > -5, .data$NEE < 30) |>
       tibble::as_tibble()
-  } else if (site_info$source %in% c("FLUXNET", "FLUXNET2015", "ICOS", "TERN")) {
-    ac <- prep_icos_tern_fluxnet(site_info)
+  } else {
+    ac <- prep_fluxnet_family(site_info)
     gs <- detect_growing_season(
       ac, site_info,
       nee_threshold = if (name_site %in% SITES_GS_NEE_ZERO) "zero" else "capped"
@@ -147,8 +197,6 @@ prep_nee_ac <- function(name_site) {
         .data$NEE < 30
       ) |>
       tibble::as_tibble()
-  } else {
-    stop("Unkonwn site source: ", site_info$source)
   }
 
   dt <- attr(ac, "dt")
@@ -170,7 +218,7 @@ prep_nee_ac <- function(name_site) {
   # can change which years qualify, while for US-Ha1 and US-GLE they are dropped
   # after it. Unifying the two would silently change results at three sites.
   truncate_cold <- name_site %in% SITES_TS_MIN_2C
-  is_ameriflux <- site_info$source == "AmeriFlux_BASE"
+  is_ameriflux <- site_reader(site_info) == "ameriflux"
   if (truncate_cold) {
     tStart <- max(tStart, TS_MIN_VALID)
     if (!is_ameriflux) {

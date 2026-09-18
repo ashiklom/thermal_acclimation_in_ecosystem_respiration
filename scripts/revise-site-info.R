@@ -34,6 +34,25 @@ netrad_sites <- tribble(
 )
 ts_regression_sites <- c("DE-Hte", "FR-FBn")
 
+# Provenance, oldest product first. `source` is a `+`-separated ordered list
+# because no single product covers the full record at most of these sites.
+#
+# The ICOS ETC L2 product covers only each station's ICOS-labelled period, so on
+# its own it truncated 21 of these 26 records -- DE-Tha to 7 years against the 28
+# the manuscript used. The FLUXNET-Archive product (via fluxnet-shuttle) carries
+# the full history and is the primary source; ICOS is spliced on top because it
+# reaches later at some sites (UK-AMo: shuttle ends 2024, ICOS reaches 2026).
+#
+# Four sites are short in both current products and need Warm Winter 2020
+# (1989-2020) underneath as well. Measured recovery, WW2020 + current:
+#   GF-Guy  2004-2020 + 2017-2026 -> 23 yr (needs 20)
+#   SE-Deg  2001-2020 + 2018-2025 -> 25 yr (needs 22)
+#   FR-Fon  2005-2020 + 2018-2025 -> 21 yr (needs 18)
+#   SE-Nor  2014-2020 + 2017-2025 -> 12 yr (needs 11)
+# IT-Noe is deliberately not in this list: it is absent from Warm Winter 2020
+# altogether, so it stays short at ~5 of 11 years. See docs/data-provenance.md.
+ww2020_sites <- c("GF-Guy", "SE-Deg", "FR-Fon", "SE-Nor")
+
 sites_v2 <- sites |>
   left_join(netrad_sites, by = "site_ID") |>
   mutate(
@@ -46,6 +65,11 @@ sites_v2 <- sites |>
       grepl("FLUXNET2020|FLUXNET2025", .data$source) ~ "FLUXNET",
       # A few more specific sites can use FLUXNET shuttle
       .data$site_ID %in% c("FI-Sod", "IT-SRo") ~ "FLUXNET",
+      TRUE ~ .data$source
+    ),
+    source = case_when(
+      .data$source == "ICOS" & .data$site_ID %in% ww2020_sites ~ "WW2020+FLUXNET+ICOS",
+      .data$source == "ICOS" ~ "FLUXNET+ICOS",
       TRUE ~ .data$source
     ),
     estimate_ts_method = case_when(

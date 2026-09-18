@@ -1,5 +1,38 @@
 DIR_RAWDATA <- "data-raw"
 
+# Flux data products, keyed by the token used in `site_info$source`.
+#
+# A site's `source` is a `+`-separated, ordered provenance list -- oldest
+# product first -- because no single product covers the full record at most
+# sites. This mirrors the original workflow, whose `source` strings were
+# underscore-joined for the same reason (`FLUXNET2025_ICOS2025`).
+#
+# The reason it is needed: the ICOS "Ecosystem final quality (L2) product in
+# ETC-Archive format" covers only the period since a station was ICOS-labelled,
+# so a station labelled in 2019 has an L2 product starting in 2019 however long
+# it has run. The pre-label history is in the FLUXNET-format products. See
+# docs/data-provenance.md and scripts/audit-icos-coverage.R.
+#
+#   dir     -- directory under data-raw/ holding one sub-directory per site
+#   pattern -- regex matching the half-hourly table inside a site directory
+#
+# The patterns are anchored on `.csv` because the downloaders keep the archive
+# they extracted from alongside the table: the archive filename encodes the
+# product, year span and release, which is what `scripts/check-data-updates.py`
+# compares against the provider.
+FLUX_PRODUCTS <- list(
+  # Warm Winter 2020 (1989-2020): FLUXNET2015 FULLSET format, deepest history.
+  WW2020 = list(dir = "WW2020", pattern = "_FLUXNET2015_FULLSET_(HH|HR)_.*[.]csv$"),
+  # FLUXNET-Archive product via fluxnet-shuttle: the merged full-record product.
+  FLUXNET = list(dir = "FLUXNET", pattern = "_FLUXMET_(HH|HR)_.*[.]csv$"),
+  # An older FLUXNET2015 release, still the only source for one site (ZA-Kru).
+  FLUXNET2015 = list(dir = "FLUXNET", pattern = "_FLUXNET2015_FULLSET_(HH|HR)_.*[.]csv$"),
+  # ICOS ETC L2: labelled period only, but reaches later than the others.
+  ICOS = list(dir = "ICOS", pattern = "_FLUXMET_(HH|HR)_.*[.]csv$"),
+  TERN = list(dir = "TERN", pattern = "_TERN_L3_FLUXNET_HH.*[.]csv$"),
+  AmeriFlux_BASE = list(dir = "Ameriflux", pattern = "^AMF_.*_BASE.*[.]zip$")
+)
+
 # Arctic tundra sites with periods of the year where the whole day is daytime
 # (or night). Two consequences: sunrise/sunset are undefined on those days and
 # have to be filled in by month, and the nighttime respiration filter also keeps

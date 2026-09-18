@@ -1,187 +1,163 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["icoscp", "pandas"]
+# dependencies = ["icoscp_core", "requests"]
 # ///
 
-"""Download ICOS ETC level-2 ecosystem data for one or more stations."""
+"""Download ICOS ecosystem flux archives for one or more stations.
+
+Two products are available here, and most sites need both, because neither
+covers the full record on its own:
+
+  icos    The "Ecosystem final quality (L2) product in ETC-Archive format"
+          (datatype etcL2Fluxnet). By design this covers only the period since
+          a station was ICOS-labelled -- a station labelled in 2019 has an L2
+          product starting in 2019 however long it has been running -- so on
+          its own it truncates most records severely. It does, however, reach
+          later than the other products.
+
+  ww2020  Warm Winter 2020 (1989-2020), the FLUXNET2015-format product that
+          carries the pre-labelling history for 73 stations, including several
+          outside the ICOS network.
+
+The full-record FLUXNET-Archive product is fetched separately, by
+scripts/download-fluxnet.sh via fluxnet-shuttle.
+
+Both products are saved as shipped and the half-hourly table extracted
+verbatim; nothing here reformats or renames columns. An earlier version of this
+script rebuilt a FLUXNET-shaped table out of three ICOS L2 products, which
+meant synthesising `NIGHT` from a shortwave threshold and fabricating QC flags
+from value presence -- both of which then fed the QC filters downstream. The
+archives already contain the real columns.
+
+See docs/data-provenance.md.
+"""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import re
+import zipfile
 from pathlib import Path
 
-import pandas as pd
-from icoscp.dobj import Dobj
-from icoscp_core.icos import meta
-
+import requests
+from icoscp_core.icos import data, meta
 
 LOGGER = logging.getLogger(__name__)
+
 STATION_URI = "http://meta.icos-cp.eu/resources/stations/ES_{site}"
-DATATYPE_URI = "http://meta.icos-cp.eu/resources/cpmeta/{datatype}"
-OUTPUT_DIR = Path("data-raw/ICOS")
-DEFAULT_SITE_INFO = Path("data-core/site_info.csv")
+ETC_L2_FLUXNET = "http://meta.icos-cp.eu/resources/cpmeta/etcL2Fluxnet"
+WW2020_COLLECTION = "https://meta.icos-cp.eu/collections/gdINRHdRH6xknqoLsIU1FOZ4"
+
+# product -> (directory under data-raw, regex for the half-hourly table in the zip)
+PRODUCTS = {
+    "icos": ("ICOS", re.compile(r"_FLUXMET_(HH|HR)_.*\.csv$")),
+    "ww2020": ("WW2020", re.compile(r"_FLUXNET2015_FULLSET_(HH|HR)_.*\.csv$")),
+}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Download ICOS ETC level-2 ecosystem data in FLUXNET-style CSV format."
-    )
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("-s", "--sites", nargs="+", help="Site IDs, e.g. DE-Tha CH-Dav.")
     parser.add_argument(
-        "-s",
-        "--sites",
-        nargs="+",
-        help="ICOS site IDs to download, for example FR-FBn FR-Fon.",
+        "-p", "--product", choices=sorted(PRODUCTS), default="icos",
+        help="Which archive to fetch (default: icos).",
     )
-    parser.add_argument(
-        "-f",
-        "--site-info",
-        type=Path,
-        default=DEFAULT_SITE_INFO,
-        help=f"Site metadata CSV with a source column (default: {DEFAULT_SITE_INFO}).",
-    )
-    parser.add_argument(
-        "-o",
-        "--overwrite",
-        action="store_true",
-        help="Replace existing normalized CSV files.",
-    )
-    parser.add_argument(
-        "-d",
-        "--output-dir",
-        type=Path,
-        default=OUTPUT_DIR,
-        help=f"Output directory (default: {OUTPUT_DIR}).",
-    )
+    parser.add_argument("-o", "--overwrite", action="store_true")
+    parser.add_argument("-d", "--output-dir", type=Path, default=Path("data-raw"))
     return parser.parse_args()
 
 
-def station_ids(site_info: Path, requested: list[str] | None) -> list[str]:
-    if requested:
-        return list(dict.fromkeys(requested))
-
-    if not site_info.is_file():
-        raise FileNotFoundError(f"Site info not found: {site_info}")
-
-    table = pd.read_csv(site_info, usecols=["site_ID", "source"])
-    return (
-        table.loc[table.source == "ICOS", "site_ID"].drop_duplicates().tolist()
-    )
-
-
-def get_product(
-    site: str, datatype: str, columns: list[str] | None = None
-) -> pd.DataFrame:
-    station_uri = STATION_URI.format(site=site)
+def icos_l2_uri(site: str) -> str:
+    """The station's single ETC L2 FLUXNET object."""
     objects = meta.list_data_objects(
-        datatype=DATATYPE_URI.format(datatype=datatype), station=station_uri
+        datatype=ETC_L2_FLUXNET, station=STATION_URI.format(site=site)
     )
     if not objects:
-        raise RuntimeError(f"No {datatype} level-2 product found for {site}")
+        raise RuntimeError(f"No ICOS ETC L2 FLUXNET product for {site}")
+    if len(objects) > 1:
+        # Has never happened; if it starts to, picking blindly would silently
+        # take a slice of the record, which is the bug this script once had.
+        names = ", ".join(o.filename for o in objects)
+        raise RuntimeError(f"{site} has {len(objects)} L2 objects, expected 1: {names}")
+    LOGGER.info("  %s", objects[0].filename)
+    return objects[0].uri
 
-    latest = objects[0]
-    LOGGER.info("  %s: %s", datatype, latest.filename)
-    dobj = Dobj(latest.uri)
-    return dobj.get(columns=columns)
+
+def ww2020_uri(site: str) -> str:
+    """The station's member of the Warm Winter 2020 collection."""
+    members = requests.get(
+        WW2020_COLLECTION, headers={"Accept": "application/json"}, timeout=120
+    ).json()["members"]
+    pattern = re.compile(rf"^FLX_{re.escape(site)}_FLUXNET2015_FULLSET_")
+    hits = [m for m in members if pattern.match(m["name"])]
+    if not hits:
+        raise RuntimeError(
+            f"{site} is not in Warm Winter 2020. Its pre-labelling history is "
+            f"not available from this product."
+        )
+    LOGGER.info("  %s", hits[0]["name"])
+    return hits[0]["res"]
 
 
-def normalize(site: str) -> pd.DataFrame:
-    fluxnet = get_product(
-        site,
-        "etcL2Fluxnet",
-        [
-            "TIMESTAMP",
-            "TA_F",
-            "TA_F_QC",
-            "SW_IN_F",
-            "SW_IN_F_QC",
-            "NEE_VUT_REF",
-            "NEE_VUT_REF_QC",
-        ],
-    )
-    meteo = get_product(site, "etcL2Meteo", ["TIMESTAMP", "SW_OUT", "LW_IN", "LW_OUT", "SWC_1"])
-    meteosens_object = meta.list_data_objects(
-        datatype=DATATYPE_URI.format(datatype="etcL2Meteosens"),
-        station=STATION_URI.format(site=site),
-    )
-    if not meteosens_object:
-        raise RuntimeError(f"No etcL2Meteosens level-2 product found for {site}")
-    meteosens_dobj = Dobj(meteosens_object[0].uri)
-    ts_columns = [column for column in meteosens_dobj.colNames or [] if column.startswith("TS_")]
-    if not ts_columns:
-        raise RuntimeError(f"{site} Meteosens product has no soil temperature columns")
-    meteosens = meteosens_dobj.get(columns=["TIMESTAMP", ts_columns[0]])
+def fetch(uri: str, site_dir: Path) -> Path:
+    """Save the object to site_dir as shipped, returning the local path.
 
-    fluxnet = fluxnet.rename(
-        columns={
-            "TA_F": "TA_F_MDS",
-            "TA_F_QC": "TA_F_MDS_QC",
-            "SW_IN_F": "SW_IN_F_MDS",
-            "SW_IN_F_QC": "SW_IN_F_MDS_QC",
-        }
-    )
-    required_fluxnet = [
-        "TIMESTAMP",
-        "TA_F_MDS",
-        "TA_F_MDS_QC",
-        "SW_IN_F_MDS",
-        "SW_IN_F_MDS_QC",
-        "NEE_VUT_REF",
-        "NEE_VUT_REF_QC",
-    ]
-    missing = sorted(set(required_fluxnet) - set(fluxnet.columns))
-    if missing:
-        raise RuntimeError(f"{site} Fluxnet product is missing columns: {missing}")
+    `get_file_stream` takes the object URI (not its metadata) and hands back the
+    server-side filename, so the archive keeps the name that encodes its product
+    and year span -- which is what makes the update check in
+    scripts/check-data-updates.R able to compare releases.
+    """
+    site_dir.mkdir(parents=True, exist_ok=True)
+    filename, stream = data.get_file_stream(uri)
+    target = site_dir / filename
+    with stream, open(target, "wb") as dst:
+        while chunk := stream.read(1 << 20):
+            dst.write(chunk)
+    return target
 
-    meteo_columns = [
-        column
-        for column in ["TIMESTAMP", "SW_OUT", "LW_IN", "LW_OUT", "SWC_1"]
-        if column in meteo.columns
-    ]
-    merged = fluxnet[required_fluxnet].merge(
-        meteosens[["TIMESTAMP", ts_columns[0]]], on="TIMESTAMP", how="left"
-    )
-    merged = merged.merge(meteo[meteo_columns], on="TIMESTAMP", how="left")
-    merged = merged.rename(columns={ts_columns[0]: "TS_F_MDS_1", "SWC_1": "SWC_F_MDS_1"})
 
-    merged["NEE_VUT_REF_QC"] = pd.to_numeric(
-        merged["NEE_VUT_REF_QC"], errors="coerce"
-    )
-    merged["TS_F_MDS_1_QC"] = merged["TS_F_MDS_1"].notna().astype(int)
-    merged["SWC_F_MDS_1_QC"] = merged["SWC_F_MDS_1"].notna().astype(int)
-    merged["NETRAD"] = (
-        merged["SW_IN_F_MDS"]
-        - merged.get("SW_OUT", 0)
-        + merged.get("LW_IN", 0)
-        - merged.get("LW_OUT", 0)
-    )
-    merged["NIGHT"] = (merged["SW_IN_F_MDS"] <= 20).fillna(False).astype(int)
-    merged["TIMESTAMP_START"] = pd.to_datetime(merged.pop("TIMESTAMP")).dt.strftime(
-        "%Y%m%d%H%M"
-    )
-    merged["TIMESTAMP_END"] = merged["TIMESTAMP_START"]
-    return merged.sort_values("TIMESTAMP_START").reset_index(drop=True)
+def extract_hh(archive: Path, site_dir: Path, table_re: re.Pattern) -> list[str]:
+    """Pull the half-hourly table out of the archive, leaving the archive in place."""
+    if not zipfile.is_zipfile(archive):
+        # Some objects are shipped as a bare CSV rather than a zip.
+        return [archive.name] if table_re.search(archive.name) else []
+    extracted = []
+    with zipfile.ZipFile(archive) as zf:
+        for member in zf.namelist():
+            if table_re.search(member):
+                target = site_dir / Path(member).name
+                with zf.open(member) as src, open(target, "wb") as dst:
+                    dst.write(src.read())
+                extracted.append(target.name)
+    return extracted
 
 
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    sites = station_ids(args.site_info, args.sites)
-    if not sites:
-        raise RuntimeError("No ecosystem stations found")
+    if not args.sites:
+        raise SystemExit("Nothing to do: pass --sites.")
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    for site in sites:
-        site_dir = args.output_dir / site
-        site_dir.mkdir(parents=True, exist_ok=True)
-        output = site_dir / f"{site}_ICOS_L2_FLUXNET_HH.csv"
-        if output.exists() and not args.overwrite:
-            LOGGER.info("Skipping %s (already exists)", output)
+    subdir, table_re = PRODUCTS[args.product]
+    for site in dict.fromkeys(args.sites):
+        site_dir = args.output_dir / subdir / site
+        existing = [p.name for p in site_dir.glob("*.csv") if table_re.search(p.name)]
+        if existing and not args.overwrite:
+            LOGGER.info("%s (%s): already have %s", site, args.product, existing[0])
             continue
-        LOGGER.info("Downloading %s", site)
-        normalize(site).to_csv(output, index=False, na_rep="-9999")
-        LOGGER.info("  wrote %s", output)
+
+        LOGGER.info("%s (%s):", site, args.product)
+        uri = icos_l2_uri(site) if args.product == "icos" else ww2020_uri(site)
+        archive = fetch(uri, site_dir)
+        extracted = extract_hh(archive, site_dir, table_re)
+        if not extracted:
+            raise RuntimeError(
+                f"{site}: no half-hourly table matching {table_re.pattern} in "
+                f"{archive.name}"
+            )
+        LOGGER.info("  extracted %s", ", ".join(extracted))
 
 
 if __name__ == "__main__":
