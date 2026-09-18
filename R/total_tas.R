@@ -174,14 +174,23 @@ get_priors <- function(model_data, direct = FALSE) {
 # the model is fitted on, for sensitivity runs that compare estimation methods
 # or measured-versus-reanalysis soil water against each other. Left NULL they
 # resolve to the site's declaration, which is the normal path.
-total_tas_site <- function(site_data, direct = FALSE, ts_col = NULL, swc_col = NULL) {
+total_tas_site <- function(site_data, site_info, direct = FALSE,
+                           ts_col = NULL, swc_col = NULL) {
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
   feature_gs <- site_data[["feature_gs"]]
 
   name_site <- feature_gs[["site_ID"]]
 
-  site_info <- get_site_info(name_site)
+  # Both arguments carry a site identity. A mismatched pair would fit one
+  # site's data against another site's declared columns -- which runs, and is
+  # wrong, and leaves no trace downstream.
+  if (!identical(site_info[["site_ID"]], name_site)) {
+    stop(
+      "site_info is for ", site_info[["site_ID"]],
+      " but site_data is for ", name_site, "."
+    )
+  }
 
   gStart <- feature_gs[["gStart"]]
   gEnd <- feature_gs[["gEnd"]]

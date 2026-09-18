@@ -173,7 +173,7 @@ cached_step01 <- function(name_site) {
     if (identical(hit$code_key, CODE_KEY)) return(hit$value)
   }
   value <- tryCatch(
-    suppressWarnings(suppressMessages(prep_nee_ac(name_site))),
+    suppressWarnings(suppressMessages(prep_nee_ac(get_site_info(name_site)))),
     error = function(e) structure(conditionMessage(e), class = "baseline_error")
   )
   saveRDS(list(code_key = CODE_KEY, value = value), path)

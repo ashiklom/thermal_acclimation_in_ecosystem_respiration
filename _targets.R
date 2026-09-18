@@ -39,13 +39,21 @@ message("Pipeline sites (", nrow(values), "): ", paste(values$site_name, collaps
 
 site_targets <- tar_map(
   values = values,
-  tar_target(site_dl, download_site(site_name) ,format = "file"),
-  tar_target(site_data, {site_dl; prep_nee_ac(site_name)}, format = "qs"),
-  tar_target(site_tas_total, total_tas_site(site_data), format = "qs"),
-  tar_target(site_tas_direct, total_tas_site(site_data, direct = TRUE), format = "qs")
+  # One read of the site declaration per site, threaded into every stage that
+  # needs it. It depends on `site_info_file`, so editing site_info.csv
+  # invalidates exactly the sites whose row could have changed.
+  tar_target(site_info, get_site_info(site_name, path = site_info_file)),
+  tar_target(site_dl, download_site(site_info), format = "file"),
+  tar_target(site_data, {site_dl; prep_nee_ac(site_info)}, format = "qs"),
+  tar_target(site_tas_total, total_tas_site(site_data, site_info), format = "qs"),
+  tar_target(
+    site_tas_direct,
+    total_tas_site(site_data, site_info, direct = TRUE),
+    format = "qs"
+  )
 )
 
 list(
-  site_targets,
-  NULL
+  tar_file(site_info_file, SITE_INFO_CSV),
+  site_targets
 )

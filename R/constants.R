@@ -1,5 +1,9 @@
 DIR_RAWDATA <- "data-raw"
 
+# The site declaration table. Named here rather than spelled out at each
+# reader so the pipeline can register it as a `format = "file"` target.
+SITE_INFO_CSV <- file.path("data-core", "site_info.csv")
+
 # Flux data products, keyed by the token used in `site_info$source`.
 #
 # A site's `source` is a `+`-separated, ordered provenance list -- oldest

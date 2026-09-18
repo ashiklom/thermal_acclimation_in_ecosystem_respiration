@@ -1,4 +1,7 @@
-get_site_info <- function(site_ID = NULL) {
+# `path` is a parameter so the pipeline can hand in a `format = "file"`
+# target and have an edit to the CSV invalidate the sites that read it.
+# Read straight from disk, the file is invisible to the dependency graph.
+get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
   site_info_cols <- readr::cols(
     site_ID = "c",
     LAT = "d",
@@ -29,10 +32,7 @@ get_site_info <- function(site_ID = NULL) {
     ts_linear_domain = "c"
   )
 
-  dat <- readr::read_csv(
-    file.path("data-core", "site_info.csv"),
-    col_types = site_info_cols
-  )
+  dat <- readr::read_csv(path, col_types = site_info_cols)
 
   # Do some cleanup
   dat_clean <- dat |>

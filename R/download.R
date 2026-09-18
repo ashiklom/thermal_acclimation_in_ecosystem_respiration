@@ -2,8 +2,8 @@
 #
 # Most sites need more than one product: see `FLUX_PRODUCTS` in R/constants.R
 # and docs/data-provenance.md for why.
-download_site <- function(name_site, overwrite = FALSE) {
-  site_info <- get_site_info(name_site)
+download_site <- function(site_info, overwrite = FALSE) {
+  name_site <- site_info[["site_ID"]]
   downloaders <- list(
     AmeriFlux_BASE = download_ameriflux,
     FLUXNET = download_fluxnet,

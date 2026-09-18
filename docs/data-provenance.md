@@ -157,7 +157,7 @@ pixi run download-icos -- --product ww2020 --sites GF-Guy
 ./scripts/download-fluxnet.sh --sites DE-Tha --overwrite
 
 # or let the pipeline fetch whatever a site declares
-pixi run R -e 'targets::tar_source(); download_site("DE-Tha", overwrite = TRUE)'
+pixi run R -e 'targets::tar_source(); download_site(get_site_info("DE-Tha"), overwrite = TRUE)'
 ```
 
 `download_site()` walks the site's provenance list, calls the right downloader
@@ -183,20 +183,32 @@ read_spliced_products(site_info)     R/prepare-site-data.R, splices in order
         ▼
 prep_fluxnet_family() / prep_ameriflux()
         ▼
-prep_nee_ac()  ->  site_data target  ->  site_tas_total / site_tas_direct
+prep_nee_ac(site_info)  ->  site_data  ->  site_tas_total / site_tas_direct
+
+site_info.csv (site_info_file, a file target)
+        ▼
+get_site_info(site, path = site_info_file)  ->  site_info target, per site
+        └─ threaded into download_site(), prep_nee_ac(), total_tas_site()
 ```
 
 In `_targets.R` each site's `site_dl` target is `format = "file"` over the paths
 `download_site()` returns, so re-downloading a product changes the file
 fingerprint and invalidates that site's `site_data` and its model fits — and
-only that site's. Two caveats on that, both open issues rather than settled
-behaviour:
+only that site's. The two caveats that used to sit here are both closed:
 
-- `tar_option_set(cue = tar_cue("never"))` is currently set globally, which
-  disables invalidation entirely. Until that is scoped to the expensive targets
-  only, a re-download will *not* trigger a rebuild.
-- `site_info.csv` is read at pipeline-construction time rather than as a file
-  target, so editing a `source` string is invisible to the dependency graph.
+- The global `tar_option_set(cue = tar_cue("never"))` is gone, so invalidation
+  actually happens. What keeps a run affordable instead is running fewer sites:
+  `pipeline_sites()` returns the six-site `DEV_SITES` sample by default, and
+  `THERMAL_SITES=all` restores the full list.
+- `site_info.csv` is a `format = "file"` target (`site_info_file`), read once
+  per site into a `site_info` target that every later stage takes as an
+  argument. Editing a `source` string now invalidates exactly the sites whose
+  row could have changed — and nothing else.
+
+One read that cannot be a target: `pipeline_sites()` itself, because `tar_map()`
+needs the site names while the pipeline is being *constructed*, before any
+target runs. Adding or removing a site from `DEV_SITES` therefore changes the
+shape of the graph rather than invalidating a target in it.
 
 After a refresh, the check that the data is still sane is:
 

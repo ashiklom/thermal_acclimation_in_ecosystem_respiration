@@ -216,8 +216,14 @@ prep_fluxnet_family <- function(site_info) {
 }
 
 
-prep_nee_ac <- function(name_site) {
-  site_info <- get_site_info(name_site)
+# `site_info` is the site's row from site_info.csv, passed in rather than read
+# here. The pipeline reads it once per site and threads it through, so every
+# stage is guaranteed to see the same declaration: `prep_nee_ac()`,
+# `get_good_years()` and `total_tas_site()` between them re-parsed the CSV
+# three times per site, and nothing prevented two of those reads from
+# straddling an edit to it.
+prep_nee_ac <- function(site_info) {
+  name_site <- site_info[["site_ID"]]
 
   # Both readers return `list(ac =, dt =, ...)`. The AmeriFlux one also returns
   # the growing season it detected, because the u-star filtering it ran already
@@ -298,7 +304,7 @@ prep_nee_ac <- function(name_site) {
     }
   }
 
-  good_years <- get_good_years(measured, gStart, gEnd, dt, name_site)
+  good_years <- get_good_years(measured, gStart, gEnd, dt, site_info)
 
   if (truncate_cold && is_ameriflux) {
     measured <- measured |> dplyr::filter(.data$TS >= TS_MIN_VALID)

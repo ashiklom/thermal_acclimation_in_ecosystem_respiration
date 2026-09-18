@@ -102,3 +102,23 @@ test_that("an empty measured column is left to behave as before", {
   expect_silent(out <- resolve_swc_column(dat, "SWC_measured", "X-Tst"))
   expect_true(all(is.na(out$SWC)))
 })
+
+test_that("total_tas_site refuses a site_info that belongs to another site", {
+  # `site_info` is threaded in rather than read from the CSV, which means the
+  # pairing is now something a caller can get wrong. A mismatch would fit one
+  # site's observations against another site's declared `ts_col`/`SWC_use` --
+  # it runs, produces numbers, and leaves nothing to notice downstream. The
+  # guard is checked before any other work, so a stub is enough to reach it.
+  stub <- list(feature_gs = tibble::tibble(site_ID = "NL-Loo"))
+  expect_error(
+    total_tas_site(stub, get_site_info("DE-RuC")),
+    "site_info is for DE-RuC but site_data is for NL-Loo"
+  )
+  # ...and accepts the matching one: it gets past the guard and fails later on
+  # the stub's missing tables, not on identity. Asserting which later error
+  # comes first would just pin the order of the checks below it.
+  expect_error(
+    total_tas_site(stub, get_site_info("NL-Loo")),
+    "^(?!.*site_info is for).*$", perl = TRUE
+  )
+})

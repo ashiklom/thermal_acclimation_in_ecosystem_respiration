@@ -109,9 +109,9 @@ build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere) 
   )
 }
 
-get_good_years <- function(measured, gStart, gEnd, dt, name_site) {
+get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
 
-  site_info <- get_site_info(name_site)
+  name_site <- site_info[["site_ID"]]
   southern_hemisphere <- site_info[["LAT"]] < 0
 
   gap_thresh <- compute_gap_thresholds(gStart, gEnd, name_site)

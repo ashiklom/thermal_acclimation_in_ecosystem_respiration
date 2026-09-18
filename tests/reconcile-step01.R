@@ -90,7 +90,7 @@ for (name_site in sites) {
     {
       setTimeLimit(elapsed = SITE_TIME_BUDGET_SECS, transient = TRUE)
       on.exit(setTimeLimit(elapsed = Inf), add = TRUE)
-      suppressWarnings(suppressMessages(prep_nee_ac(name_site)))
+      suppressWarnings(suppressMessages(prep_nee_ac(get_site_info(name_site))))
     },
     error = function(e) structure(conditionMessage(e), class = "recon_error")
   )
