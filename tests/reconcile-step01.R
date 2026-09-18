@@ -65,8 +65,18 @@ MISSING_DATA <- c(
   "does not exist"
 )
 
+# Exceeded the per-site budget below rather than failing outright.
+TIMED_OUT <- c("reached elapsed time limit", "reached CPU time limit")
+
+# One pathological site should not stall the whole run. This is a soft limit:
+# `setTimeLimit()` only fires at R-level interrupt checks, so it will not
+# interrupt a tight loop inside compiled code -- but REddyProc is mostly R, so
+# in practice it does bite. US-GLE is the site that motivated this.
+SITE_TIME_BUDGET_SECS <- 600
+
 classify_error <- function(msg) {
   hit <- function(patterns) any(vapply(patterns, grepl, logical(1), x = msg, fixed = TRUE))
+  if (hit(TIMED_OUT)) return("timed out")
   if (hit(MISSING_DATA)) return("no raw data")
   if (hit(KNOWN_GAPS)) return("blocked")
   "error"
@@ -77,9 +87,14 @@ for (name_site in sites) {
   cat(sprintf("\n==== %s ====\n", name_site))
   t0 <- Sys.time()
   res <- tryCatch(
-    suppressWarnings(suppressMessages(prep_nee_ac(name_site))),
+    {
+      setTimeLimit(elapsed = SITE_TIME_BUDGET_SECS, transient = TRUE)
+      on.exit(setTimeLimit(elapsed = Inf), add = TRUE)
+      suppressWarnings(suppressMessages(prep_nee_ac(name_site)))
+    },
     error = function(e) structure(conditionMessage(e), class = "recon_error")
   )
+  setTimeLimit(elapsed = Inf)
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   si <- get_site_info(name_site)
   ref <- oracle[oracle$site_ID == name_site, ]
@@ -150,24 +165,28 @@ write.csv(report, outfile, row.names = FALSE)
 cat("\n================ SUMMARY ================\n")
 ok <- report |> dplyr::filter(.data$status == "ok")
 if (nrow(ok)) {
-  ok |>
-    dplyr::select("site_ID", "source", "d_gStart", "d_gEnd", "d_nyear", "night_rows", "flag") |>
-    as.data.frame() |>
-    print(row.names = FALSE)
+  summary_cols <- c("site_ID", "source", "d_gStart", "d_gEnd", "d_nyear", "night_rows", "flag")
+  print(
+    as.data.frame(dplyr::select(ok, dplyr::any_of(summary_cols))),
+    row.names = FALSE
+  )
 }
 cat(sprintf(
-  "\n  %d ok, %d missing raw data, %d blocked by a known gap, %d unexplained error\n",
-  sum(report$status == "ok"), sum(report$status == "no raw data"),
+  "\n  %d ok, %d timed out, %d missing raw data, %d blocked by a known gap, %d unexplained error\n",
+  sum(report$status == "ok"), sum(report$status == "timed out"),
+  sum(report$status == "no raw data"),
   sum(report$status == "blocked"), sum(report$status == "error")
 ))
-for (st in c("no raw data", "blocked", "error")) {
+for (st in c("timed out", "no raw data", "blocked", "error")) {
   bad <- report |> dplyr::filter(.data$status == st)
   if (nrow(bad)) {
     cat(sprintf("\n  %s:\n", st))
-    for (i in seq_len(nrow(bad))) cat(sprintf("    %-8s %s\n", bad$site_ID[i], bad$note[i]))
+    notes <- if ("note" %in% names(bad)) bad$note else rep("", nrow(bad))
+    for (i in seq_len(nrow(bad))) cat(sprintf("    %-8s %s\n", bad$site_ID[i], notes[i]))
   }
 }
 cat(sprintf("\n  written to %s\n", outfile))
 
-# A known gap is not a test failure; an unexplained error is.
-if (any(report$status == "error")) quit(status = 1)
+# A known gap or an absent download is not a test failure. An unexplained error
+# is, and so is a site that blew its time budget.
+if (any(report$status %in% c("error", "timed out"))) quit(status = 1)
