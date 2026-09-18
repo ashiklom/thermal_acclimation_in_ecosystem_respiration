@@ -97,6 +97,14 @@ add "TS bounds taken from the nighttime table" \
     R/soil-temp-columns.R \
     '  bounds <- ts_bounds(ac$TS, ac$DOY, gStart, gEnd)' \
     '  bounds <- ts_bounds(nightNEE$TS, nightNEE$DOY, gStart, gEnd)'
+add "TS selection ignored, always measured" \
+    R/soil-temp-columns.R \
+    '  dat[["TS"]] <- dat[[ts_col]]' \
+    '  dat[["TS"]] <- dat[["TS_measured"]]'
+add "TS bounds fall back to the first row" \
+    R/soil-temp-columns.R \
+    '  row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]' \
+    '  row <- ts_bounds[1, ]'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

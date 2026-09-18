@@ -261,19 +261,82 @@ prep_nee_ac <- function(name_site) {
     dplyr::filter(dplyr::between(.data$YEAR, iStart, iEnd)) |>
     dplyr::select(dplyr::all_of(ac_required), dplyr::any_of(ac_optional))
 
+  # ---------------------------------------------------- TS column variants
+  #
+  # Everything above this point uses measured soil temperature, and that
+  # ordering is load-bearing: the QC filter, the data-gap scan, the
+  # growing-season detection and the TS >= 2 C truncation all ran on the
+  # measured column. Estimated soil temperature is *added alongside* it here
+  # rather than replacing it, so the second pipeline step selects a column
+  # instead of recomputing one, and so the alternatives can be compared.
+  #
+  # This is where the estimation belongs rather than in `total_tas_site()`
+  # because the regression is fitted on `ac`/`nightNEE` -- step-01 products --
+  # and because fitting it in step 02 meant refitting it identically for the
+  # total and direct model runs.
+  ac_final[["TS_measured"]] <- ac_final[["TS"]]
+  measured_final[["TS_measured"]] <- measured_final[["TS"]]
+
+  # Bounds per TS column, not as free-standing scalars. They are the 2.5/97.5
+  # percentiles of growing-season soil temperature and they gate the
+  # window-skip test downstream, so they only mean anything paired with the
+  # column they were derived from. Keying them by column name makes selecting a
+  # column and selecting its bounds a single, atomic act.
+  ts_bounds_tbl <- tibble::tibble(
+    ts_col = "TS_measured",
+    tStart = unname(max(tStart, 0.0)),
+    tEnd = unname(tEnd)
+  )
+
+  if (identical(site_info[["ts_col"]], "TS_linear")) {
+    substituted <- apply_ts_linear(ac_final, measured_final, site_info, gStart, gEnd)
+    ac_final[["TS_linear"]] <- substituted$ac[["TS"]]
+    measured_final[["TS_linear"]] <- substituted$nightNEE[["TS"]]
+    ts_bounds_tbl <- dplyr::bind_rows(
+      ts_bounds_tbl,
+      tibble::tibble(
+        ts_col = "TS_linear",
+        tStart = substituted$tStart,
+        tEnd = substituted$tEnd
+      )
+    )
+  }
+
+  # `TS` must still be the measured column on the way out of step 01. Every
+  # filter above ran on it, and the second step selects a variant explicitly;
+  # substituting here would make those filters describe data that no longer
+  # exists.
+  stopifnot(
+    identical(ac_final[["TS"]], ac_final[["TS_measured"]]),
+    identical(measured_final[["TS"]], measured_final[["TS_measured"]])
+  )
+
+  declared_ts <- site_info[["ts_col"]]
+  if (!declared_ts %in% ts_bounds_tbl[["ts_col"]]) {
+    stop(
+      name_site, " declares ts_col = ", shQuote(declared_ts),
+      ", which this step does not produce. Available: ",
+      paste(ts_bounds_tbl[["ts_col"]], collapse = ", "), "."
+    )
+  }
+
   feature_gs <- tibble::tibble(
     site_ID = name_site,
     gStart = gStart,
     gEnd = gEnd,
-    tStart = max(tStart, 0.0),
-    tEnd = tEnd,
+    # `unname()` because these arrive from `quantile()` still carrying its
+    # "2.5%"/"97.5%" names, which then differ from the same numbers in
+    # `ts_bounds` for no reason anyone would enjoy debugging.
+    tStart = unname(max(tStart, 0.0)),
+    tEnd = unname(tEnd),
     nyear = length(good_years)
   )
 
   list(
     ac = ac_final,
     nightNEE = measured_final,
-    feature_gs = feature_gs
+    feature_gs = feature_gs,
+    ts_bounds = ts_bounds_tbl
   )
 
 }

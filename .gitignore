@@ -55,3 +55,4 @@ _creds.toml
 
 # don't gitignore agent documentation, even though it's HTML
 !_agent-docs/*.html
+data-proc/ts-baseline-cache/

@@ -90,3 +90,31 @@ apply_ts_linear <- function(ac, nightNEE, site_info, gStart, gEnd) {
   bounds <- ts_bounds(ac$TS, ac$DOY, gStart, gEnd)
   list(ac = ac, nightNEE = nightNEE, tStart = bounds$tStart, tEnd = bounds$tEnd)
 }
+
+# Materialise the declared TS column as `TS`, which is the name the model
+# formulae and every downstream summary use. Selection happens in exactly one
+# place so that a table can never carry a `TS` that disagrees with the column
+# it was supposed to come from.
+resolve_ts_column <- function(dat, ts_col) {
+  if (!ts_col %in% names(dat)) {
+    stop(
+      "Requested TS column ", shQuote(ts_col), " is not present. Available: ",
+      paste(grep("^TS", names(dat), value = TRUE), collapse = ", "),
+      ". It has to be produced by `prep_nee_ac()`."
+    )
+  }
+  dat[["TS"]] <- dat[[ts_col]]
+  dat
+}
+
+# The bounds recorded for a TS column by `prep_nee_ac()`.
+ts_bounds_for <- function(ts_bounds, ts_col) {
+  row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]
+  if (nrow(row) != 1) {
+    stop(
+      "Expected exactly one bounds row for ", shQuote(ts_col), ", found ",
+      nrow(row), ". Available: ", paste(ts_bounds[["ts_col"]], collapse = ", "), "."
+    )
+  }
+  list(tStart = row[["tStart"]][[1]], tEnd = row[["tEnd"]][[1]])
+}

@@ -160,7 +160,10 @@ get_priors <- function(model_data, direct = FALSE) {
 }
 
 
-total_tas_site <- function(site_data, direct = FALSE) {
+# `ts_col` overrides the site's declared soil-temperature column, for
+# sensitivity runs that compare estimation methods against each other. Left
+# NULL it uses `site_info$ts_col`, which is the normal path.
+total_tas_site <- function(site_data, direct = FALSE, ts_col = NULL) {
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
   feature_gs <- site_data[["feature_gs"]]
@@ -172,8 +175,6 @@ total_tas_site <- function(site_data, direct = FALSE) {
 
   gStart <- feature_gs[["gStart"]]
   gEnd <- feature_gs[["gEnd"]]
-  tStart <- feature_gs[["tStart"]]
-  tEnd <- feature_gs[["tEnd"]]
 
   # TODO: Move this logic out of here
   if (SWC_use) {
@@ -193,18 +194,28 @@ total_tas_site <- function(site_data, direct = FALSE) {
     SWC_use <- TRUE
   }
 
-  # TODO: Move this logic out of here
-  if (identical(site_info[["ts_col"]], "TS_linear")) {
-    substituted <- apply_ts_linear(
-      ac, a_measure_night_complete, site_info, gStart, gEnd
+  # Soil temperature: choose a column, do not compute one. `prep_nee_ac()`
+  # produced every variant this site offers along with the growing-season
+  # bounds belonging to each, so the column and its bounds are selected
+  # together and cannot disagree.
+  # `_targets.R` sets `tar_cue("never")`, so a `site_data` object stored before
+  # step 01 started carrying these columns would be reused silently and fail
+  # somewhere less obvious. Say so here instead.
+  if (is.null(site_data[["ts_bounds"]])) {
+    stop(
+      name_site, ": this site_data was built before soil-temperature columns ",
+      "were carried explicitly, so it has no `ts_bounds`. Rebuild it with ",
+      "`prep_nee_ac()` -- and note that `tar_cue(\"never\")` in _targets.R means ",
+      "targets will not invalidate it on its own."
     )
-    ac <- substituted$ac
-    a_measure_night_complete <- substituted$nightNEE
-    # The bounds carried in `feature_gs` were derived from the measured TS just
-    # overwritten, so they have to be recomputed on the regressed scale.
-    tStart <- substituted$tStart
-    tEnd <- substituted$tEnd
   }
+
+  ts_col <- ts_col %||% site_info[["ts_col"]]
+  ac <- resolve_ts_column(ac, ts_col)
+  a_measure_night_complete <- resolve_ts_column(a_measure_night_complete, ts_col)
+  ts_range <- ts_bounds_for(site_data[["ts_bounds"]], ts_col)
+  tStart <- ts_range[["tStart"]]
+  tEnd <- ts_range[["tEnd"]]
 
   # calculate daily daytime NEE and rolling average
   # Is the data 30 minute or hourly? TODO: Check this logic!

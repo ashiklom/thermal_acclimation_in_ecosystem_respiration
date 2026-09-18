@@ -153,14 +153,80 @@ digest_table <- function(dat, prefix, cols) {
   out
 }
 
-rows <- list()
-for (name_site in sites) {
-  cat(sprintf("\n==== %s ====\n", name_site))
-  t0 <- Sys.time()
-  sd_ <- tryCatch(
+# Step 01 is slow (REddyProc dominates: 30-140s a site), and this script is
+# run repeatedly while the TS/SWC columns move. Its output is cached, keyed by
+# a digest of everything under R/ so that any change to the pipeline
+# invalidates the cache automatically rather than silently verifying stale
+# results -- which would defeat the entire point of the file.
+CACHE_DIR <- file.path("data-proc", "ts-baseline-cache")
+dir.create(CACHE_DIR, recursive = TRUE, showWarnings = FALSE)
+r_digest <- function() {
+  files <- sort(list.files("R", pattern = "[.]R$", full.names = TRUE))
+  paste(vapply(files, function(f) as.character(tools::md5sum(f)), ""), collapse = "")
+}
+CODE_KEY <- r_digest()
+
+cached_step01 <- function(name_site) {
+  path <- file.path(CACHE_DIR, paste0(name_site, ".rds"))
+  if (file.exists(path)) {
+    hit <- readRDS(path)
+    if (identical(hit$code_key, CODE_KEY)) return(hit$value)
+  }
+  value <- tryCatch(
     suppressWarnings(suppressMessages(prep_nee_ac(name_site))),
     error = function(e) structure(conditionMessage(e), class = "baseline_error")
   )
+  saveRDS(list(code_key = CODE_KEY, value = value), path)
+  value
+}
+
+# Does the pipeline's *selection* path reproduce the frozen oracle's
+# *substitution*? This is the check that the refactor is equivalent, and unlike
+# the digests above it is computed fresh on both sides in the same run.
+#
+# The comparison deliberately runs the oracle on the unmodified step-01 tables,
+# bypassing the SWC block. Both the oracle's substitution and the pipeline's
+# selection are row-wise, so they commute with the SWC block's row filter; the
+# frozen digests cover the combined path.
+selection_matches_oracle <- function(sd_, site_info, name_site) {
+  ts_col <- site_info[["ts_col"]]
+  fg <- sd_$feature_gs
+  ora <- original_ts_step02(
+    sd_$ac, sd_$nightNEE, name_site, fg$gStart, fg$gEnd, fg$tStart, fg$tEnd
+  )
+  sel_ac <- resolve_ts_column(sd_$ac, ts_col)
+  sel_night <- resolve_ts_column(sd_$nightNEE, ts_col)
+  rng <- ts_bounds_for(sd_$ts_bounds, ts_col)
+
+  same <- function(a, b) isTRUE(all.equal(a, b, tolerance = TOLERANCE))
+  checks <- c(
+    ac_TS = same(sel_ac$TS, ora$ac$TS),
+    night_TS = same(sel_night$TS, ora$nightNEE$TS),
+    tStart = same(rng$tStart, unname(ora$tStart)),
+    tEnd = same(rng$tEnd, unname(ora$tEnd)),
+    # Step 01 must hand over measured TS untouched, whatever variants it also
+    # produced; every filter it applied was computed on that column.
+    ts_is_measured = same(sd_$ac$TS, sd_$ac$TS_measured),
+    # And the measured bounds must still equal the ones feature_gs reports, so
+    # the default path is unchanged for the 82 sites that take it.
+    measured_bounds = same(
+      ts_bounds_for(sd_$ts_bounds, "TS_measured"),
+      list(tStart = fg$tStart, tEnd = fg$tEnd)
+    )
+  )
+  list(
+    ok = all(checks),
+    failed = paste(names(checks)[!checks], collapse = ","),
+    ts_col = ts_col
+  )
+}
+
+rows <- list()
+selection <- list()
+for (name_site in sites) {
+  cat(sprintf("\n==== %s ====\n", name_site))
+  t0 <- Sys.time()
+  sd_ <- cached_step01(name_site)
   if (inherits(sd_, "baseline_error")) {
     cat("  ERROR:", as.character(sd_), "\n")
     rows[[name_site]] <- tibble::tibble(
@@ -170,6 +236,18 @@ for (name_site in sites) {
     next
   }
   si <- get_site_info(name_site)
+
+  sel <- tryCatch(
+    selection_matches_oracle(sd_, si, name_site),
+    error = function(e) list(ok = FALSE, failed = paste("error:", conditionMessage(e)), ts_col = si$ts_col)
+  )
+  selection[[name_site]] <- tibble::tibble(
+    site_ID = name_site, ts_col = sel$ts_col, ok = sel$ok, failed = sel$failed
+  )
+  cat(sprintf(
+    "  selection vs oracle (%s): %s%s\n", sel$ts_col,
+    if (sel$ok) "match" else "MISMATCH", if (nzchar(sel$failed)) paste0(" [", sel$failed, "]") else ""
+  ))
 
   # Step-01 digest: catches any change to what step 01 produces, independently
   # of the step-02 manipulation applied on top.
@@ -213,10 +291,22 @@ for (name_site in sites) {
 report <- dplyr::bind_rows(rows) |> dplyr::arrange(.data$site_ID, .data$direct)
 outfile <- file.path("tests", "fixtures", "ts-swc-baseline.csv")
 
+sel_report <- dplyr::bind_rows(selection)
+selection_failed <- FALSE
+if (nrow(sel_report)) {
+  cat("\n============ SELECTION vs ORACLE ============\n")
+  print(as.data.frame(sel_report), row.names = FALSE)
+  selection_failed <- any(!sel_report$ok)
+  cat(sprintf(
+    "\n  %d of %d sites reproduce the oracle by column selection\n",
+    sum(sel_report$ok), nrow(sel_report)
+  ))
+}
+
 if (write_mode || !file.exists(outfile)) {
   readr::write_csv(report, outfile)
   cat("\n  WROTE baseline:", outfile, "(", nrow(report), "rows )\n")
-  quit(status = 0)
+  quit(status = if (selection_failed) 1 else 0)
 }
 
 # ------------------------------------------------------------- comparison
@@ -253,7 +343,7 @@ if (length(diffs) == 0) {
   if (length(missing)) {
     cat("  (not run this time: ", paste(unique(missing), collapse = ", "), ")\n", sep = "")
   }
-  quit(status = 0)
+  quit(status = if (selection_failed) 1 else 0)
 }
 print(as.data.frame(dplyr::bind_rows(diffs)), row.names = FALSE)
 cat(sprintf("\n  %d DIFFERENCES from baseline\n", length(diffs)))
