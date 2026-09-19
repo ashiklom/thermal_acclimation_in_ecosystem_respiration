@@ -54,7 +54,11 @@ skip_note <- function(what, why) {
 # target name as a bare symbol it can see.
 from_target <- function(path) {
   if (is.null(path) || !length(path) || !all(file.exists(path))) return(NULL)
-  read.csv(path)
+  out <- read.csv(path)
+  # A header-only CSV -- which a run scoped to one model writes for the other
+  # -- reads as zero rows of *logical* columns, and those cannot be bound to
+  # real ones. Treat it as absent, which is what it is.
+  if (!nrow(out)) NULL else out
 }
 or_null <- function(expr) tryCatch(expr, error = function(e) NULL)
 
@@ -169,10 +173,11 @@ if (is.null(outcome_total) || is.null(orig_total)) {
 } else {
   cmp <- bind_rows(
     outcome_total |> mutate(model = "total"),
-    outcome_direct |> mutate(model = "direct")
+    if (!is.null(outcome_direct)) outcome_direct |> mutate(model = "direct")
   ) |>
     left_join(
-      bind_rows(orig_total |> mutate(model = "total"), orig_direct |> mutate(model = "direct")),
+      bind_rows(orig_total |> mutate(model = "total"),
+                if (!is.null(orig_direct)) orig_direct |> mutate(model = "direct")),
       by = c("site_ID", "model"), suffix = c("", "_o")
     ) |>
     mutate(d_TAS = TAS - TAS_o,
