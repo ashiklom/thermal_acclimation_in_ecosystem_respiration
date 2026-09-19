@@ -195,6 +195,13 @@ DIR_WORLDCLIM_FUTURE <- file.path(DIR_RAWDATA, "Climate", "wc2.1_2.5m_tmin_2041-
 fetch_file <- function(url, dest) {
   dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
   part <- paste0(dest, ".part")
+  # R's default `timeout` is 60 s, which is a per-download wall clock, not an
+  # idle limit. The WorldClim zips are hundreds of megabytes and the GSOC
+  # raster is comparable, so on an ordinary connection they die at the minute
+  # mark with "download from '...' failed" -- as they did in the first
+  # end-to-end run. An hour is generous and only bounds a hung transfer.
+  old <- options(timeout = max(3600, getOption("timeout", 60)))
+  on.exit(options(old), add = TRUE)
   status <- utils::download.file(url, part, mode = "wb", quiet = TRUE)
   if (!identical(status, 0L) || !file.exists(part) || file.size(part) == 0) {
     unlink(part)
