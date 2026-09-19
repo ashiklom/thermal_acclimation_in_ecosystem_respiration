@@ -39,7 +39,10 @@ choose_ts_col <- function(recipe, site_data, site_info, fill = NULL) {
       if (fill_available(fill)) {
         list(ts_col = "TS_memfill",
              reason = paste0("screen verdict BAD: ", ts_flags(site_data),
-                             "; reconstructed by ", fill$method))
+                             "; reconstructed by ", fill$method,
+                             if (isTRUE(fill$degenerate)) {
+                               " [degenerate: the measured column is itself a regression on the predictors]"
+                             } else ""))
       } else {
         list(ts_col = "TS_linear",
              reason = paste0("screen verdict BAD: ", ts_flags(site_data),

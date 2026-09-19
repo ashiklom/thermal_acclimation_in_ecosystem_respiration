@@ -321,6 +321,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   ts_bounds_all <- site_data[["ts_bounds"]]
   fill_method <- NA_character_
   fill_cv_rmse <- NA_real_
+  fill_degenerate <- NA
 
   # The reconstructed column is attached here, not in step 01, because it is
   # produced by its own per-site target (`fill_soil_temp()`) and only a
@@ -344,6 +345,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     ts_bounds_all <- dplyr::bind_rows(ts_bounds_all, fill_rows)
     fill_method <- fill$method
     fill_cv_rmse <- fill$cv_rmse
+    fill_degenerate <- isTRUE(fill$degenerate)
   }
 
   ac <- resolve_ts_column(ac, ts_col)
@@ -473,6 +475,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     ts_flags = if (!is.null(ts_qc)) ts_qc$flags[[1]] else NA_character_,
     fill_method = fill_method,
     fill_cv_rmse = fill_cv_rmse,
+    fill_degenerate = fill_degenerate,
     season_strategy = recipe$season,
     bounds_strategy = recipe$bounds,
     bounds_reason = ts_range$reason,

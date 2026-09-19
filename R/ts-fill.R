@@ -400,10 +400,20 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
 
   bounds <- ts_bounds_rows(ac_ts, ac$DOY, gStart, gEnd, "TS_memfill")
 
+  # An out-of-fold RMSE indistinguishable from zero means the "measured"
+  # column is itself a deterministic function of the predictors -- which is
+  # exactly what step 01 leaves at the `fix_soil_temp()` sites, where
+  # TS_measured is already `lm(TS ~ TA + NETRAD)`. The fill then reproduces
+  # that regression perfectly and says nothing about soil. It is still
+  # returned (a recipe may still select it, and falling back to TS_linear
+  # would be no better), but it is labelled, and the label travels into
+  # `settings` so the report can show it.
+  best_rmse <- scores$rmse[scores$method == best]
   list(
     site_ID = name_site, status = "ok", method = best, blocking = blocking,
     cv = scores, ac_ts = ac_ts, night_ts = night_ts, ts_bounds = bounds,
-    cv_rmse = scores$rmse[scores$method == best],
+    cv_rmse = best_rmse,
+    degenerate = is.finite(best_rmse) && best_rmse < 1e-6,
     n_train = sum(!is.na(feats$TS))
   )
 }

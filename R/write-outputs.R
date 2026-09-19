@@ -90,6 +90,7 @@ collect_fill_summary <- function(...) {
       status = f[["status"]],
       method = f[["method"]] %||% NA_character_,
       cv_rmse = f[["cv_rmse"]] %||% NA_real_,
+      degenerate = f[["degenerate"]] %||% NA,
       blocking = f[["blocking"]] %||% NA_character_,
       n_train = f[["n_train"]] %||% NA_integer_
     )
