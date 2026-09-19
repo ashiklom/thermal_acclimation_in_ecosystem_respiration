@@ -76,8 +76,14 @@ read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_sw
 
 opt_int <- S7::new_property(S7::class_integer, default = NA_integer_)
 opt_num <- S7::new_property(S7::class_numeric, default = NA_real_)
+opt_chr <- S7::new_property(S7::class_character, default = NA_character_)
 
+# `status` records why a year produced no fit. Without it a skipped year is
+# indistinguishable from a failed one -- both arrive as a row of NAs -- and the
+# most useful comparison against the manuscript is exactly which years were
+# dropped and for which of the four reasons.
 Year_Result <- S7::new_class("Year_Result", properties = list(
+  status = opt_chr,
   nobsv = opt_int,
   extend_days = opt_int,
   alpha = opt_num,
@@ -319,6 +325,28 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
   nwindow <- max(round((gEnd - gStart + 1) / WINDOW_SIZE), 1)
 
+  # Every knob that decided the layout of this run, recorded alongside the
+  # numbers it produced. `outcome` reports only TAS and two fit statistics, so
+  # without this a difference between two runs cannot be attributed to the
+  # column selected, the bounds, the control year or the window count.
+  settings <- tibble::tibble(
+    site_ID = name_site,
+    model = if (direct) "direct" else "total",
+    ts_col = ts_col,
+    swc_col = if (is.na(swc_col)) NA_character_ else swc_col,
+    SWC_use = SWC_use,
+    gStart = gStart,
+    gEnd = gEnd,
+    tStart = tStart,
+    tEnd = tEnd,
+    dt = dt,
+    nobs_threshold = nobs_threshold,
+    window_size = WINDOW_SIZE,
+    nwindow = nwindow,
+    control_year = control_year,
+    nyear_available = length(years)
+  )
+
   window_results <- list()
   for (iwindow in seq_len(nwindow)) {
     message("########################################")
@@ -334,7 +362,14 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     )
   }
 
-  if (length(window_results) == 0) {
+  # NB: a skipped window used to `return(NULL)`, and assigning NULL to a list
+  # element *removes* it, so `length(window_results)` counted only the windows
+  # that produced something. Skips are now records, so the emptiness test has
+  # to ask the question directly or it would never fire.
+  fitted_windows <- Filter(
+    function(w) !is.null(w[["outcome_siteyear"]]), window_results
+  )
+  if (length(fitted_windows) == 0) {
     stop("No results produced, possibly because all windows were skipped.")
   }
 
@@ -342,6 +377,13 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     lapply(`[[`, "outcome_siteyear") |>
     dplyr::bind_rows() |>
     dplyr::mutate(site_ID = name_site, .before = 1)
+
+  window_skips <- window_results |>
+    lapply(`[[`, "skipped") |>
+    dplyr::bind_rows()
+  if (nrow(window_skips)) {
+    window_skips <- dplyr::mutate(window_skips, site_ID = name_site, .before = 1)
+  }
 
   ER_obs_pred <- window_results |>
     lapply(`[[`, "ER_obs_pred") |>
@@ -368,7 +410,12 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     TASp = mod_ar1_smry["TS", "p-value"]
   )
 
-  outcome
+  list(
+    outcome = outcome,
+    outcome_siteyear = window_results_df,
+    window_skips = window_skips,
+    settings = settings
+  )
 }
 
 
@@ -379,6 +426,23 @@ total_tas_window <- function(
   SWC_use, tStart, tEnd, gEnd,
   direct = FALSE
 ) {
+
+  # A skipped window used to `return(NULL)`, which vanished without trace --
+  # and, because assigning NULL to a list element *removes* it, without even
+  # leaving a gap in `window_results`. Skips are now reported.
+  window_skip <- function(reason, detail = NA_character_) {
+    list(
+      outcome_siteyear = NULL,
+      ER_obs_pred = NULL,
+      skipped = tibble::tibble(
+        window = paste(window_start, window_end, sep = "_"),
+        window_start = window_start,
+        window_end = window_end,
+        reason = reason,
+        detail = detail
+      )
+    )
+  }
 
   ac_yearly_window <- ac |>
     dplyr::filter(dplyr::between(.data$DOY, window_start, window_end)) |>
@@ -394,7 +458,11 @@ total_tas_window <- function(
 
   if (skip) {
     message("Skipping because TS is not in valid range.")
-    return(NULL)
+    return(window_skip(
+      "window_ts_out_of_range",
+      sprintf("mean TS %.3f outside [%.3f, %.3f]",
+              mean(ac_yearly_window$TS, na.rm = TRUE), max(tStart, 2.0), tEnd)
+    ))
   }
 
   model_data <- a_measure_night_complete |>
@@ -402,7 +470,10 @@ total_tas_window <- function(
 
   if (nrow(model_data) < 100) {
     message("Skipping because too few values in window (", nrow(model_data), ").")
-    return(NULL)
+    return(window_skip(
+      "window_too_few_obs",
+      sprintf("%d rows, need 100", nrow(model_data))
+    ))
   }
 
   # get reference temperature, SWC, and NEEday of each window.
@@ -476,6 +547,17 @@ total_tas_window <- function(
     )
 
     if (next_condition) {
+      # Report which of the four rules rejected the year. Evaluated in the same
+      # order as the condition above, so the reason names the first failure.
+      year_result@status <- if (nrow(data_subset) <= 25) {
+        "year_too_few_obs"
+      } else if (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) {
+        "year_tsref_outside_quantiles"
+      } else if (median(data_subset$NEE) < 0.2) {
+        "year_median_nee_too_low"
+      } else {
+        "year_mean_nee_too_low"
+      }
       year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = NULL)
       next
     }
@@ -510,6 +592,7 @@ total_tas_window <- function(
       ERref_control <- year_result@ERref
     }
 
+    year_result@status <- "fitted"
     year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = ER_obs_pred)
   } # end year loop
 
@@ -542,7 +625,11 @@ total_tas_window <- function(
     df_site_year_window <- df_site_year_window[-id.remove, ]
   }
 
-  list(outcome_siteyear = df_site_year_window, ER_obs_pred = ER_obs_pred_all)
+  list(
+    outcome_siteyear = df_site_year_window,
+    ER_obs_pred = ER_obs_pred_all,
+    skipped = NULL
+  )
 }
 
 fit_with_retry <- function(data_subset, priors, direct = FALSE) {
