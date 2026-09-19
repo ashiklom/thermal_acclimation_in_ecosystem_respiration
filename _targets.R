@@ -5,7 +5,14 @@ library(crew.cluster)
 
 tar_source()
 
-local <- crew_controller_local(workers = 10)
+# Each brms fit runs `N_CORES` chains in parallel, so the worker count has to be
+# divided by that or the machine is oversubscribed by the same factor. Measured
+# on the six-site sample with `workers = 10`: load average 60 on 18 cores, and
+# DE-RuC's total model took 11m24s against 330s when run on its own. Wall time
+# for the whole run was 49m54s, almost all of it contention.
+local <- crew_controller_local(
+  workers = max(1L, parallel::detectCores() %/% N_CORES)
+)
 slurm <- crew_controller_slurm(
   workers = 20,
   options_cluster = crew_options_slurm(
