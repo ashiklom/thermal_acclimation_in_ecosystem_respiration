@@ -240,7 +240,12 @@ if (!is.null(outcome) && nrow(outcome)) {
 Every choice a recipe made, as the fit recorded it. `ts_reason` is the strategy's
 own explanation; `ts_verdict`/`ts_flags` are the quality screen's; `fill_method`
 and `fill_cv_rmse` are the blocked cross-validation's winner and its out-of-fold
-error where a reconstruction was used.
+error where a reconstruction was used. `ts_measured_synthetic` marks the sites
+whose "measured" column is itself a reconstruction step 01 made (`estimate_Ts`,
+`SITES_TS_FROM_TA_*`, `SITES_TS_SYNTHETIC`): the recipes select downstream of
+those and cannot undo them, so at those sites every recipe but `noseason` fits
+the same column. `fill_truth_synthetic` says the same of the CV's truth, and
+`fill_degenerate` that the winner reproduced it to numerical zero.
 
 ```{r provenance}
 #| echo: false
@@ -249,7 +254,9 @@ if (is.null(settings)) skip_note("Provenance", "variant_settings_csv not built."
   settings |>
     filter(model == first(model)) |>   # choices are model-independent except swc
     select(site_ID, recipe_id, ts_col, ts_reason, ts_verdict, ts_flags,
-           fill_method, fill_cv_rmse, bounds_strategy, tStart, tEnd,
+           any_of("ts_measured_synthetic"),
+           fill_method, fill_cv_rmse, any_of(c("fill_degenerate", "fill_truth_synthetic")),
+           bounds_strategy, tStart, tEnd,
            window_gStart, window_gEnd, control_year, fit_profile) |>
     arrange(site_ID, recipe_id) |>
     knitr::kable(digits = 3) |> print()
