@@ -108,6 +108,53 @@ manuscript used. Its pre-2021 history would have to come from somewhere else
 (Drought-2018, or the European Fluxes Database). Everything else reconstructs to
 at least the original's year count.
 
+### Non-flux inputs
+
+Four datasets outside the flux archives feed the downstream analysis. Three now
+have downloaders and targets; one does not, and that is deliberate.
+
+| input | target | source |
+|---|---|---|
+| AmeriFlux BADM/BIF | `ameriflux_bif_file` | `amerifluxr::amf_download_bif()`, CC-BY-4.0 |
+| FAO GSOC v1.5.0 | `gsoc_file` | FAO Google Cloud bucket, ~760 MB |
+| WorldClim 2.1 tmin | `worldclim_files` | geodata.ucdavis.edu, ~4.8 GB |
+| MODIS EVI/NDVI/LAI/GPP | *none* | NASA AppEEARS — see below |
+
+Two details worth keeping. The BIF filename carries the date it was produced and
+arrives as `.xlsx`, so `03_01` discovers it by pattern rather than naming it —
+it used to hard-code a datestamp that no longer existed. And the GSOC raster is
+saved as `GSOCmap1.5.0.tif` rather than under FAO's own name because `03_01`
+indexes the extraction by layer name (`terra::extract(...)$GSOCmap1.5.0`), which
+terra derives from the file.
+
+The WorldClim baseline is the CRU-TS-downscaled **monthly series for 2000-2020**,
+not the 1970-2000 climatology that `wc2.1_2.5m_tmin.zip` holds. `04_01`'s glob
+accepts either, but its comment specifies 2000-2020, and substituting the
+climatology would shift every projected temperature change by the warming
+between the two baselines without any error being raised.
+
+### MODIS, and why it is not downloaded
+
+`03_01` uses NDVI, EVI, LAI, Fpar and GPP from three AppEEARS point extractions:
+
+```
+data-raw/towers-MOD13A2-061-results.csv     EVI, NDVI
+data-raw/towers-MOD15A2H-061-results.csv    Fpar, LAI
+data-raw/towers-MYD17A2HGF-061-results.csv  GPP
+```
+
+AppEEARS is not a file server. It needs an Earthdata Login and an asynchronous
+submit/poll/download cycle, and a request has to name the products, layers, the
+117 site coordinates and a date range. Rather than half-implement that, `03_01`
+emits `NA` for those five predictors when the tables are absent and says so.
+
+The knock-on is worth stating plainly: `03_02` calls `randomForest()` with the
+default `na.action = na.fail` and `LAI` is one of its five predictors, so the
+driver analysis cannot run until these are supplied. To fill the gap by hand,
+submit an AppEEARS *point* sample for the coordinates in `data-core/site_info.csv`
+over the study period for the three products above, request CSV output, and drop
+the results into `data-raw/` under the names shown.
+
 ---
 
 ## The monthly check

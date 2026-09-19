@@ -17,8 +17,8 @@ targets = {
 }
 
 download_aanet = {
-  description = "Download AA-Net data",
-  cmd = ["Rscript", "scripts/download-aanet.R"]
+  description = "Download the AmeriFlux BADM/BIF site metadata table",
+  cmd = ["Rscript", "-e", "targets::tar_source(); download_ameriflux_bif()"]
 }
 
 download_era5 = {
