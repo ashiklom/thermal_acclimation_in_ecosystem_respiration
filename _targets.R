@@ -65,7 +65,54 @@ site_targets <- tar_map(
   )
 )
 
+# Combine the per-site targets and write the files `workflows/` reads.
+#
+# Until now the DAG ended at in-memory objects, so `02_02` and `03_01` failed at
+# their first `read.csv`. Each writer is a `tar_file` target, so a downstream
+# consumer can depend on the file rather than on the directory happening to be
+# populated.
+outputs <- list(
+  tar_combine(outcome_temp_tbl, site_targets$site_tas_total,
+              command = collect_outcome(!!!.x)),
+  tar_combine(outcome_direct_tbl, site_targets$site_tas_direct,
+              command = collect_outcome(!!!.x)),
+  tar_combine(siteyear_total_tbl, site_targets$site_tas_total,
+              command = collect_outcome_siteyear(!!!.x)),
+  tar_combine(siteyear_direct_tbl, site_targets$site_tas_direct,
+              command = collect_outcome_siteyear(!!!.x)),
+  tar_combine(settings_tbl, site_targets$site_tas_total,
+              command = collect_settings(!!!.x)),
+  tar_combine(settings_direct_tbl, site_targets$site_tas_direct,
+              command = collect_settings(!!!.x)),
+  tar_combine(window_skips_tbl, site_targets$site_tas_total,
+              command = collect_window_skips(!!!.x)),
+  tar_combine(feature_gs_tbl, site_targets$site_data,
+              command = collect_feature_gs(!!!.x)),
+
+  tar_file(outcome_temp_csv,
+           write_result_csv(outcome_temp_tbl, file.path(DIR_ANALYSIS, "outcome_temp.csv"))),
+  tar_file(outcome_temp_water_gpp_csv,
+           write_result_csv(outcome_direct_tbl, file.path(DIR_ANALYSIS, "outcome_temp_water_gpp.csv"))),
+  tar_file(outcome_siteyear_temp_csv,
+           write_result_csv(siteyear_total_tbl, file.path(DIR_ANALYSIS, "outcome_siteyear_temp.csv"))),
+  tar_file(outcome_siteyear_temp_water_gpp_csv,
+           write_result_csv(siteyear_direct_tbl, file.path(DIR_ANALYSIS, "outcome_siteyear_temp_water_gpp.csv"))),
+  # Not manuscript outputs; the report reads them.
+  tar_file(run_settings_csv,
+           write_result_csv(dplyr::bind_rows(settings_tbl, settings_direct_tbl),
+                            file.path(DIR_ANALYSIS, "run_settings.csv"))),
+  tar_file(window_skips_csv,
+           write_result_csv(window_skips_tbl, file.path(DIR_ANALYSIS, "window_skips.csv"))),
+
+  tar_file(growing_season_features_csv,
+           write_result_csv(feature_gs_tbl, file.path(DIR_FEATURES, "growing_season_features.csv"))),
+  tar_file(respiration_csv, write_respiration_all(!!!rlang::syms(
+    paste0("site_data_", gsub("-", ".", values$site_name, fixed = TRUE))
+  )))
+)
+
 list(
   tar_file(site_info_file, SITE_INFO_CSV),
-  site_targets
+  site_targets,
+  outputs
 )
