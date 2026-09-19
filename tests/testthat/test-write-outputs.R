@@ -24,14 +24,17 @@ test_that("outcome tables match the manuscript's columns, in order", {
 })
 
 test_that("the two outcome tables share row order", {
-  # `02_02_compare_different_TAS.R:15-18` grafts the direct model's TAS onto the
-  # total model's table *by position*, with no join:
-  #     outcome$TAS <- outcome_temp_water_gpp$TAS
-  # If the files disagree on row order, every site silently receives another
-  # site's number and nothing downstream can detect it.
-  skip_if_not(file.exists(analysis_path("outcome_temp.csv")), "not written yet")
-  tot <- read.csv(analysis_path("outcome_temp.csv"))
-  dir <- read.csv(analysis_path("outcome_temp_water_gpp.csv"))
+  # `02_02` grafts the direct model's TAS onto the total model's table by
+  # position, so the two files must agree on row order. A run scoped to one
+  # model (THERMAL_MODELS=total) writes the other file as a header only, and
+  # there is then no order to compare; skip rather than compare a character
+  # column with an empty logical one.
+  ft <- file.path("data-proc", "analysis", "outcome_temp.csv")
+  fd <- file.path("data-proc", "analysis", "outcome_temp_water_gpp.csv")
+  skip_if_not(file.exists(ft) && file.exists(fd), "not written yet")
+  tot <- read.csv(ft)
+  dir <- read.csv(fd)
+  skip_if(nrow(tot) == 0 || nrow(dir) == 0, "one model was not in this run")
   expect_identical(tot$site_ID, dir$site_ID)
   expect_identical(tot$site_ID, sort(tot$site_ID))
 })

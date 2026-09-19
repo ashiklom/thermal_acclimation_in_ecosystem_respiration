@@ -201,9 +201,10 @@ re-running the same code unchanged.
 if (!is.null(outcome_total) && !is.null(orig_total)) {
   d <- bind_rows(
     outcome_total |> mutate(model = "total"),
-    outcome_direct |> mutate(model = "direct")
+    if (!is.null(outcome_direct)) outcome_direct |> mutate(model = "direct")
   ) |> left_join(
-    bind_rows(orig_total |> mutate(model = "total"), orig_direct |> mutate(model = "direct")),
+    bind_rows(orig_total |> mutate(model = "total"),
+              if (!is.null(orig_direct)) orig_direct |> mutate(model = "direct")),
     by = c("site_ID", "model"), suffix = c("", "_o"))
   ggplot(d, aes(TAS_o, TAS, colour = model)) +
     geom_abline(slope = 1, intercept = 0, linetype = 2, colour = "grey50") +
@@ -260,9 +261,14 @@ if (is.null(outcome_total) || nrow(outcome_total) < 3) {
             "Needs at least a few sites; this run has too few for the group statistics to mean anything.")
 } else {
   si <- read.csv(file.path("data-core", "site_info.csv"))
+  direct_cols <- if (!is.null(outcome_direct)) {
+    outcome_direct |> select(site_ID, TAS, TASp)
+  } else {
+    tibble::tibble(site_ID = outcome_total$site_ID, TAS = NA_real_, TASp = NA_real_)
+  }
   o <- outcome_total |>
     select(site_ID, TAS_tot = TAS, TAS_totp = TASp) |>
-    left_join(outcome_direct |> select(site_ID, TAS, TASp), by = "site_ID") |>
+    left_join(direct_cols, by = "site_ID") |>
     left_join(si |> select(site_ID, IGBP, Climate_class), by = "site_ID")
   cat(knitr::kable(o, digits = 4,
                    caption = "TAS by site, with vegetation and climate class."), sep = "\n")
