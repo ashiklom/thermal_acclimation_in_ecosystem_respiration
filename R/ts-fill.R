@@ -414,6 +414,11 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
     cv = scores, ac_ts = ac_ts, night_ts = night_ts, ts_bounds = bounds,
     cv_rmse = best_rmse,
     degenerate = is.finite(best_rmse) && best_rmse < 1e-6,
+    # The declared counterpart of `degenerate`: the CV truth is itself a
+    # reconstruction. DE-Akm shows why both are needed -- its TS_measured is
+    # `fix_soil_temp()`'s random forest, which `rf_ta_netrad` reproduces to
+    # 0.30 C rather than to zero, so the RMSE test alone does not fire.
+    truth_synthetic = ts_measured_is_synthetic(site_info),
     n_train = sum(!is.na(feats$TS))
   )
 }

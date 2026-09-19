@@ -43,20 +43,12 @@ step01_cached <- function(name_site, code_key = r_code_digest()) {
 
 # ---------------------------------------------------------------- site sets
 
-# Sites whose soil temperature is derived from air temperature inside
-# `prep_ameriflux()` rather than through any of the declared mechanisms.
-#
-# These are invisible to `site_info.csv`: both carry `estimate_Ts = "NO"` and
-# `ts_col = "TS_measured"`, and neither appears in `SITES_TS_FROM_TA_*`. The
-# manipulation is a bare `name_site ==` branch in `R/ameriflux.R:245-250`.
-#
-# US-Cwt's entire column is `TA * 0.64718 + 5.13873`, coefficients borrowed
-# from a nearby site of the same IGBP class; US-MBP's *gaps* are filled from
-# `TA * 0.3688005 + 5.8670273`. Neither can serve as a truth against which a
-# reconstruction from air temperature is scored -- the answer is one by
-# construction, and US-Cwt duly returns exactly 1.000 on every ratio in
-# `ts-linear-vs-measured.csv`, which is how the omission was noticed.
-SITES_TS_SYNTHETIC_AMERIFLUX <- c("US-Cwt", "US-MBP")
+# US-Cwt and US-MBP -- soil temperature built from air temperature by a bare
+# `name_site ==` branch in R/ameriflux.R, invisible to site_info.csv -- now live
+# in `SITES_TS_SYNTHETIC` in R/constants.R alongside GF-Guy, so the pipeline
+# and these scripts agree on what "synthetic" means. Kept under the old name
+# for the callers below.
+SITES_TS_SYNTHETIC_AMERIFLUX <- setdiff(SITES_TS_SYNTHETIC, "GF-Guy")
 
 # Sites whose soil temperature is genuinely measured: it is neither
 # reconstructed in step 01 (`estimate_Ts`, `SITES_TS_FROM_TA_*`,

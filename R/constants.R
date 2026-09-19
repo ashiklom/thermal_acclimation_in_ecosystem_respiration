@@ -90,6 +90,23 @@ SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 SITES_TS_FROM_TA_RECENT <- c("US-BZo")
 SITES_TS_FROM_TA_COLD <- c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")
 
+# Sites whose step-01 `TS_measured` is not a soil-temperature measurement by
+# any declared mechanism: GF-Guy has air temperature substituted so that all
+# tropical sites use bottom air temperature; US-Cwt's whole column is
+# `TA * 0.64718 + 5.13873` borrowed from a nearby site; US-MBP's gaps are
+# filled from `TA * 0.3688005 + 5.8670273`. All three are bare `name_site ==`
+# branches in the readers, invisible to site_info.csv. Together with
+# `estimate_Ts` and `SITES_TS_FROM_TA_*` this is the complete list of sites at
+# which a reconstruction scored against `TS_measured` is being scored against
+# another reconstruction -- which `fill_soil_temp()` records as
+# `truth_synthetic`.
+SITES_TS_SYNTHETIC <- c("GF-Guy", "US-Cwt", "US-MBP")
+
+ts_measured_is_synthetic <- function(site_info) {
+  isTRUE(site_info[["estimate_Ts"]]) ||
+    site_info[["site_ID"]] %in% c(SITES_TS_FROM_TA_RECENT, SITES_TS_FROM_TA_COLD, SITES_TS_SYNTHETIC)
+}
+
 # The development site sample: what `_targets.R` runs by default.
 #
 # Running every northern-hemisphere FLUXNET-family site end to end is not a

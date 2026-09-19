@@ -322,6 +322,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   fill_method <- NA_character_
   fill_cv_rmse <- NA_real_
   fill_degenerate <- NA
+  fill_truth_synthetic <- NA
 
   # The reconstructed column is attached here, not in step 01, because it is
   # produced by its own per-site target (`fill_soil_temp()`) and only a
@@ -346,6 +347,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     fill_method <- fill$method
     fill_cv_rmse <- fill$cv_rmse
     fill_degenerate <- isTRUE(fill$degenerate)
+    fill_truth_synthetic <- isTRUE(fill$truth_synthetic)
   }
 
   ac <- resolve_ts_column(ac, ts_col)
@@ -476,6 +478,11 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     fill_method = fill_method,
     fill_cv_rmse = fill_cv_rmse,
     fill_degenerate = fill_degenerate,
+    fill_truth_synthetic = fill_truth_synthetic,
+    # Whether the column this run treats as measured is a reconstruction
+    # step 01 made, whatever recipe is in force. The recipes select downstream
+    # of those reconstructions and cannot undo them (ts-variants.html, V4).
+    ts_measured_synthetic = ts_measured_is_synthetic(site_info),
     season_strategy = recipe$season,
     bounds_strategy = recipe$bounds,
     bounds_reason = ts_range$reason,
