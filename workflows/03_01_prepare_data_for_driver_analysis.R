@@ -19,7 +19,20 @@ site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 
 #--------------------------------------------SOIL DATA-------------------------------------
 # get measured soil carbon data from AmeriFlux BIF data
-BIF <- read.csv(file.path(dir_rawdata, 'AMF_AA-Net_BIF_CCBY4_20251017.csv'))
+# `amf_download_bif()` stamps the filename with the date it was produced and
+# ships .xlsx, so the path cannot be hard-coded -- it used to name a .csv with a
+# date that no longer exists. Take the newest BIF on disk and read it in
+# whichever format it arrived in. Fetched by the `ameriflux_bif` target.
+bif_files <- list.files(dir_rawdata, pattern = "^AMF_AA-Net_BIF_.*[.](xlsx|csv)$", full.names = TRUE)
+if (length(bif_files) == 0) {
+  stop("No AmeriFlux BIF table in ", dir_rawdata, ". Run `pixi run download_aanet`.")
+}
+bif_path <- bif_files[which.max(file.mtime(bif_files))]
+BIF <- if (grepl("[.]xlsx$", bif_path)) {
+  amerifluxr::amf_read_bif(bif_path)
+} else {
+  read.csv(bif_path)
+}
 BIF.site <- BIF %>% filter(SITE_ID %in% site_info$site_ID) %>% filter(VARIABLE=='SOIL_CHEM_C_ORG') %>% group_by(SITE_ID) %>% summarise(soc_obs = mean(as.numeric(DATAVALUE), na.rm=T), .groups = 'drop')     # 26 sites
 # the unit of SOIL_CHEM_C_ORG: g C kg soil-1
 
@@ -198,6 +211,34 @@ for (i in 1:length(files)) {
 cor(stat.climate[, c(2:14, 18)])
 
 #---------------------------------------------------SPECTRAL DATA------------------------------------------------
+# MODIS EVI/NDVI/LAI/Fpar/GPP come from NASA AppEEARS point extractions. Those
+# need an Earthdata login and an asynchronous submit/poll/download cycle, and
+# this repo has no client for them -- see docs/data-provenance.md for the exact
+# request to submit by hand.
+#
+# When the tables are absent the spectral predictors are emitted as NA rather
+# than aborting, so the soil, climate and TAS halves of this script still
+# produce `acclimation_data.csv`. Be aware of the knock-on: `03_02` calls
+# `randomForest()` with the default `na.action = na.fail`, and LAI is one of
+# its five predictors, so it cannot run until these tables are supplied.
+modis_files <- file.path(dir_rawdata, c(
+  "towers-MOD13A2-061-results.csv",    # EVI, NDVI
+  "towers-MOD15A2H-061-results.csv",   # Fpar, LAI
+  "towers-MYD17A2HGF-061-results.csv"  # GPP
+))
+modis_available <- all(file.exists(modis_files))
+
+if (!modis_available) {
+  message(
+    "03_01: MODIS spectral tables not found; EVI/NDVI/LAI/GPP will be NA.\n",
+    "  missing: ",
+    paste(basename(modis_files[!file.exists(modis_files)]), collapse = ", ")
+  )
+  data.spectral <- data.frame(
+    ID = site_info$site_ID,
+    EVI = NA_real_, NDVI = NA_real_, Fpar = NA_real_, LAI = NA_real_, GPP = NA_real_
+  )
+} else {
 # Take a look at spectral data
 file1    <- read.csv(file.path(dir_rawdata, 'towers-MOD13A2-061-results.csv'))  ##EVI and NDVI
 
@@ -274,6 +315,7 @@ corrplot(cor(data.spectral.tower[, 2:9]),
          sig.level = 0.05,
          type = "upper" # show only upper side
 )
+}
 # LAI, GPP are strongly related to NEE_day; try to use this. 
 
 #--------------------------------combine soil, climate, spectral, and thermal response strength data together-------------

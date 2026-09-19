@@ -5,14 +5,19 @@ library(crew.cluster)
 
 tar_source()
 
-# Each brms fit runs `N_CORES` chains in parallel, so the worker count has to be
-# divided by that or the machine is oversubscribed by the same factor. Measured
-# on the six-site sample with `workers = 10`: load average 60 on 18 cores, and
-# DE-RuC's total model took 11m24s against 330s when run on its own. Wall time
-# for the whole run was 49m54s, almost all of it contention.
-local <- crew_controller_local(
-  workers = max(1L, parallel::detectCores() %/% N_CORES)
-)
+# Each brms fit runs `N_CORES` chains in parallel, so `workers * N_CORES` is the
+# peak thread demand. But a fit is not 4-cores-busy for its whole life -- much
+# of a target is serial R work -- so sizing workers at cores/N_CORES leaves the
+# machine idle and costs wall time. Measured on the six-site sample, 18 cores:
+#
+#   workers=10  load avg 60  sum of target times 223.0 min  wall 49.9 min
+#   workers=4   load avg 13  sum of target times 154.0 min  wall 59.8 min
+#
+# So 4 made each fit 31% faster and the whole run 20% slower: 12 targets over 4
+# workers is three scheduling waves, where 10 ran nearly all at once. 8 is the
+# midpoint and is *not yet benchmarked* -- worth timing the next time a full
+# run happens anyway.
+local <- crew_controller_local(workers = 8)
 slurm <- crew_controller_slurm(
   workers = 20,
   options_cluster = crew_options_slurm(
@@ -60,7 +65,81 @@ site_targets <- tar_map(
   )
 )
 
+# Combine the per-site targets and write the files `workflows/` reads.
+#
+# Until now the DAG ended at in-memory objects, so `02_02` and `03_01` failed at
+# their first `read.csv`. Each writer is a `tar_file` target, so a downstream
+# consumer can depend on the file rather than on the directory happening to be
+# populated.
+outputs <- list(
+  tar_combine(outcome_temp_tbl, site_targets$site_tas_total,
+              command = collect_outcome(!!!.x)),
+  tar_combine(outcome_direct_tbl, site_targets$site_tas_direct,
+              command = collect_outcome(!!!.x)),
+  tar_combine(siteyear_total_tbl, site_targets$site_tas_total,
+              command = collect_outcome_siteyear(!!!.x)),
+  tar_combine(siteyear_direct_tbl, site_targets$site_tas_direct,
+              command = collect_outcome_siteyear(!!!.x)),
+  tar_combine(settings_tbl, site_targets$site_tas_total,
+              command = collect_settings(!!!.x)),
+  tar_combine(settings_direct_tbl, site_targets$site_tas_direct,
+              command = collect_settings(!!!.x)),
+  tar_combine(window_skips_tbl, site_targets$site_tas_total,
+              command = collect_window_skips(!!!.x)),
+  tar_combine(feature_gs_tbl, site_targets$site_data,
+              command = collect_feature_gs(!!!.x)),
+
+  tar_file(outcome_temp_csv,
+           write_result_csv(outcome_temp_tbl, file.path(DIR_ANALYSIS, "outcome_temp.csv"))),
+  tar_file(outcome_temp_water_gpp_csv,
+           write_result_csv(outcome_direct_tbl, file.path(DIR_ANALYSIS, "outcome_temp_water_gpp.csv"))),
+  tar_file(outcome_siteyear_temp_csv,
+           write_result_csv(siteyear_total_tbl, file.path(DIR_ANALYSIS, "outcome_siteyear_temp.csv"))),
+  tar_file(outcome_siteyear_temp_water_gpp_csv,
+           write_result_csv(siteyear_direct_tbl, file.path(DIR_ANALYSIS, "outcome_siteyear_temp_water_gpp.csv"))),
+  # Not manuscript outputs; the report reads them.
+  tar_file(run_settings_csv,
+           write_result_csv(dplyr::bind_rows(settings_tbl, settings_direct_tbl),
+                            file.path(DIR_ANALYSIS, "run_settings.csv"))),
+  tar_file(window_skips_csv,
+           write_result_csv(window_skips_tbl, file.path(DIR_ANALYSIS, "window_skips.csv"))),
+
+  tar_file(growing_season_features_csv,
+           write_result_csv(feature_gs_tbl, file.path(DIR_FEATURES, "growing_season_features.csv"))),
+  tar_file(respiration_csv, write_respiration_all(!!!rlang::syms(
+    paste0("site_data_", gsub("-", ".", values$site_name, fixed = TRUE))
+  )))
+)
+
+# External inputs the downstream `workflows/` scripts need. Each downloader
+# returns quietly when the data is already on disk, so these are cheap to keep
+# in the graph -- the cost is re-hashing ~4.8 GB of raster on each run, which is
+# a few seconds and buys proper invalidation if a file is replaced.
+#
+# MODIS/AppEEARS is deliberately absent: it needs an Earthdata login and an
+# asynchronous task, and `03_01` degrades to NA spectral predictors without it.
+# See docs/data-provenance.md.
+external <- list(
+  tar_file(ameriflux_bif_file, download_ameriflux_bif()),
+  tar_file(gsoc_file, download_gsoc()),
+  tar_file(worldclim_files, download_worldclim())
+)
+
+# The run report. `tar_quarto()` scans the document for `tar_read`/`tar_load`
+# calls and makes each one a dependency, so the report re-renders whenever the
+# results it describes change rather than going quietly stale.
+#
+# It depends on the pipeline's own outputs only. The `workflows/` scripts are
+# still run by hand, so the sections that describe them guard on the file being
+# present and render an explicit skip when it is not.
+report <- list(
+  tar_quarto(run_report, path = "reports/pipeline-report.qmd", quiet = FALSE)
+)
+
 list(
   tar_file(site_info_file, SITE_INFO_CSV),
-  site_targets
+  external,
+  site_targets,
+  outputs,
+  report
 )

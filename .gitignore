@@ -56,3 +56,8 @@ _creds.toml
 # don't gitignore agent documentation, even though it's HTML
 !_agent-docs/*.html
 data-proc/ts-baseline-cache/
+
+# Rendered run report: a build artefact of the `run_report` target, ~1.4 MB of
+# self-contained HTML that changes on every run.
+reports/*.html
+reports/*_files/

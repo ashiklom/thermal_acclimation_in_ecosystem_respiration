@@ -1,0 +1,374 @@
+---
+title: "Thermal acclimation pipeline — run report"
+subtitle: "Diagnostics for the `targets` run that produced this document"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    embed-resources: true
+    df-print: kable
+execute:
+  warning: false
+  message: false
+# Paths below are written relative to the project root, which is also where the
+# pipeline writes. Without this, knitr would resolve them against reports/.
+knitr:
+  opts_knit:
+    root.dir: ".."
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(ggplot2)
+library(targets)
+
+# The report reads the CSVs the pipeline wrote. It never refits a model: every
+# number here is a lookup, so rendering is fast and cannot disagree with the
+# run it describes.
+PROC <- file.path("data-proc", "analysis")
+FEATURES <- file.path("data-proc", "features")
+ORIG <- "data-proc-original"
+
+# Sampler noise floor, measured over four identical runs of DE-RuC (both
+# models). No seed is set anywhere in the fitting path, so a TAS difference
+# smaller than this means nothing.
+TAS_NOISE <- 3e-4
+
+have <- function(path) file.exists(path)
+read_if <- function(path) if (have(path)) read.csv(path) else NULL
+
+# Sections whose inputs are missing say so instead of erroring. A subset run
+# legitimately cannot produce some of them, and a silent gap in a report is
+# worse than a loud one.
+skip_note <- function(what, why) {
+  cat(sprintf("::: {.callout-warning}\n## %s not available\n\n%s\n:::\n\n", what, why))
+}
+
+# Pipeline outputs are reached through `tar_read()` rather than by path.
+# `tar_quarto()` scans this document for literal `tar_read(name)` calls and
+# turns each into a dependency edge, so changing the pipeline re-renders the
+# report. Reading the same files by name would leave it silently stale -- and
+# `tar_read_raw()` does not work here either, because the scanner needs the
+# target name as a bare symbol it can see.
+from_target <- function(path) {
+  if (is.null(path) || !length(path) || !all(file.exists(path))) return(NULL)
+  read.csv(path)
+}
+or_null <- function(expr) tryCatch(expr, error = function(e) NULL)
+
+outcome_total <- from_target(or_null(tar_read(outcome_temp_csv)))
+outcome_direct <- from_target(or_null(tar_read(outcome_temp_water_gpp_csv)))
+siteyear_total <- from_target(or_null(tar_read(outcome_siteyear_temp_csv)))
+run_settings <- from_target(or_null(tar_read(run_settings_csv)))
+window_skips <- from_target(or_null(tar_read(window_skips_csv)))
+feature_gs <- from_target(or_null(tar_read(growing_season_features_csv)))
+acclimation <- read_if(file.path(PROC, "acclimation_data.csv"))
+tmin_future <- read_if(file.path(PROC, "Tmin_month_ssp245_wc.csv"))
+future_er <- read_if(file.path(PROC, "acclimation_data_future_ssp245.csv"))
+varimp <- read_if(file.path(PROC, "varImp_plot.csv"))
+
+orig_total <- read_if(file.path(ORIG, "outcome_temp.csv"))
+orig_direct <- read_if(file.path(ORIG, "outcome_temp_water_gpp.csv"))
+orig_feat <- if (have(file.path(ORIG, "growing_season_feature_AmeriFlux.csv"))) {
+  bind_rows(
+    read.csv(file.path(ORIG, "growing_season_feature_AmeriFlux.csv")),
+    read.csv(file.path(ORIG, "growing_season_feature_EuropFlux.csv"))
+  )
+} else NULL
+
+sites <- if (!is.null(outcome_total)) outcome_total$site_ID else character()
+```
+
+## Run metadata
+
+```{r meta}
+#| echo: false
+git <- function(args) tryCatch(system2("git", args, stdout = TRUE), error = function(e) NA_character_)
+tibble::tibble(
+  item = c("Rendered", "Sites in run", "Scope (THERMAL_SITES)", "Git commit",
+           "Git branch", "Working tree", "R", "cmdstan"),
+  value = c(
+    format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
+    if (length(sites)) paste(sites, collapse = ", ") else "none",
+    Sys.getenv("THERMAL_SITES", "dev (default)"),
+    paste(git(c("rev-parse", "--short", "HEAD")), collapse = ""),
+    paste(git(c("rev-parse", "--abbrev-ref", "HEAD")), collapse = ""),
+    if (length(git(c("status", "--porcelain")))) "modified" else "clean",
+    paste0(R.version$major, ".", R.version$minor),
+    tryCatch(as.character(cmdstanr::cmdstan_version()), error = function(e) "unavailable")
+  )
+)
+```
+
+::: {.callout-important}
+## This is a subset run
+
+The pipeline runs a **six-site development sample** by default, chosen to be cheap
+and to cover every code branch — not to be representative of the 117-site
+analysis. Almost nothing below is comparable to the manuscript on its own terms:
+site-level numbers are, aggregate and cross-site statistics are not. Set
+`THERMAL_SITES=all` for the full list.
+:::
+
+## External inputs
+
+```{r external}
+#| echo: false
+ext <- tibble::tribble(
+  ~input,                         ~path,
+  "Site declarations",            file.path("data-core", "site_info.csv"),
+  "ERA5-Land soil water",         file.path("data-raw", "ERA5_daily_swc.csv"),
+  "AmeriFlux BADM/BIF",           NA_character_,
+  "FAO GSOC v1.5.0",              file.path("data-raw", "GSOCmap1.5.0.tif"),
+  "WorldClim tmin (baseline)",    file.path("data-raw", "Climate", "wc2.1_2.5m_tmin"),
+  "WorldClim tmin (2041-2060)",   file.path("data-raw", "Climate", "wc2.1_2.5m_tmin_2041-2060"),
+  "MODIS EVI/NDVI (AppEEARS)",    file.path("data-raw", "towers-MOD13A2-061-results.csv"),
+  "MODIS Fpar/LAI (AppEEARS)",    file.path("data-raw", "towers-MOD15A2H-061-results.csv"),
+  "MODIS GPP (AppEEARS)",         file.path("data-raw", "towers-MYD17A2HGF-061-results.csv")
+)
+bif <- list.files("data-raw", pattern = "^AMF_AA-Net_BIF_.*[.](xlsx|csv)$", full.names = TRUE)
+ext$path[ext$input == "AmeriFlux BADM/BIF"] <- if (length(bif)) bif[[1]] else "data-raw/AMF_AA-Net_BIF_*"
+ext |>
+  mutate(present = ifelse(file.exists(path), "yes", "**no**"),
+         note = ifelse(grepl("MODIS", input),
+                       "no downloader; needs an Earthdata login and an async AppEEARS task", "")) |>
+  select(input, present, note, path)
+```
+
+## Step 01 — data preparation
+
+```{r step01}
+#| echo: false
+if (is.null(feature_gs)) {
+  skip_note("Step-01 features", "`data-proc/features/growing_season_features.csv` was not written.")
+} else {
+  tbl <- feature_gs
+  if (!is.null(orig_feat)) {
+    tbl <- tbl |>
+      left_join(orig_feat, by = "site_ID", suffix = c("", "_orig")) |>
+      mutate(d_gStart = gStart - gStart_orig, d_gEnd = gEnd - gEnd_orig,
+             d_nyear = nyear - nyear_orig) |>
+      select(site_ID, gStart, gStart_orig, d_gStart, gEnd, gEnd_orig, d_gEnd,
+             tStart, tEnd, nyear, nyear_orig, d_nyear)
+  }
+  knitr::kable(tbl, digits = 3,
+               caption = "Growing season and qualifying years, against the manuscript's features.")
+}
+```
+
+## Step 02 — thermal response strength
+
+### Site-level TAS against the manuscript
+
+```{r tas}
+#| echo: false
+if (is.null(outcome_total) || is.null(orig_total)) {
+  skip_note("TAS comparison", "The pipeline's outcome tables or the frozen oracle are missing.")
+} else {
+  cmp <- bind_rows(
+    outcome_total |> mutate(model = "total"),
+    outcome_direct |> mutate(model = "direct")
+  ) |>
+    left_join(
+      bind_rows(orig_total |> mutate(model = "total"), orig_direct |> mutate(model = "direct")),
+      by = c("site_ID", "model"), suffix = c("", "_o")
+    ) |>
+    mutate(d_TAS = TAS - TAS_o,
+           `x noise` = round(abs(d_TAS) / TAS_NOISE),
+           sign_flip = sign(TAS) != sign(TAS_o),
+           sig_flip = (TASp < 0.05) != (TASp_o < 0.05)) |>
+    arrange(model, site_ID) |>
+    select(site_ID, model, TAS, TAS_o, d_TAS, `x noise`, TASp, TASp_o, sign_flip, sig_flip)
+  knitr::kable(cmp, digits = 4)
+}
+```
+
+The `x noise` column is the difference in units of the measured sampler-noise
+floor (`r TAS_NOISE`, from four identical re-runs of one site). **No seed is set
+anywhere in the fitting path**, so anything at 1× is indistinguishable from
+re-running the same code unchanged.
+
+```{r tas-plot}
+#| echo: false
+#| fig-height: 3.5
+if (!is.null(outcome_total) && !is.null(orig_total)) {
+  d <- bind_rows(
+    outcome_total |> mutate(model = "total"),
+    outcome_direct |> mutate(model = "direct")
+  ) |> left_join(
+    bind_rows(orig_total |> mutate(model = "total"), orig_direct |> mutate(model = "direct")),
+    by = c("site_ID", "model"), suffix = c("", "_o"))
+  ggplot(d, aes(TAS_o, TAS, colour = model)) +
+    geom_abline(slope = 1, intercept = 0, linetype = 2, colour = "grey50") +
+    geom_hline(yintercept = 0, linewidth = .2) + geom_vline(xintercept = 0, linewidth = .2) +
+    geom_point(size = 2.5) +
+    ggrepel::geom_text_repel(aes(label = site_ID), size = 2.8, show.legend = FALSE) +
+    labs(x = "TAS, manuscript", y = "TAS, this run",
+         title = "Points off the diagonal differ from the manuscript") +
+    theme_minimal()
+}
+```
+
+### Run settings
+
+```{r settings}
+#| echo: false
+if (is.null(run_settings)) skip_note("Run settings", "`run_settings.csv` was not written.") else
+  knitr::kable(run_settings, digits = 3,
+               caption = "The choices that shaped each fit: selected columns, bounds, window layout.")
+```
+
+### Skipped windows and rejected years
+
+```{r skips}
+#| echo: false
+if (is.null(window_skips) || nrow(window_skips) == 0) {
+  cat("No windows were skipped.\n\n")
+} else {
+  knitr::kable(window_skips, caption = "Windows that produced no fit, and why.")
+}
+```
+
+```{r year-status}
+#| echo: false
+if (is.null(siteyear_total) || !"status" %in% names(siteyear_total)) {
+  skip_note("Year status", "`outcome_siteyear_temp.csv` has no `status` column.")
+} else {
+  siteyear_total |> count(site_ID, status) |>
+    tidyr::pivot_wider(names_from = status, values_from = n, values_fill = 0) |>
+    knitr::kable(caption = "Per-site tally of fitted vs rejected growing years.")
+}
+```
+
+## Cross-site comparison (from `02_02`)
+
+```{r compare}
+#| echo: false
+#| output: asis
+# `output: asis` because this block emits both a table and a note. A `kable()`
+# that is not the last value of a chunk is not auto-printed, and printing it in
+# a normal chunk would render the markdown verbatim rather than as a table.
+if (is.null(outcome_total) || nrow(outcome_total) < 3) {
+  skip_note("Cross-site comparison",
+            "Needs at least a few sites; this run has too few for the group statistics to mean anything.")
+} else {
+  si <- read.csv(file.path("data-core", "site_info.csv"))
+  o <- outcome_total |>
+    select(site_ID, TAS_tot = TAS, TAS_totp = TASp) |>
+    left_join(outcome_direct |> select(site_ID, TAS, TASp), by = "site_ID") |>
+    left_join(si |> select(site_ID, IGBP, Climate_class), by = "site_ID")
+  cat(knitr::kable(o, digits = 4,
+                   caption = "TAS by site, with vegetation and climate class."), sep = "\n")
+  cat("\n\n**Note:** `02_02`'s published statistics are all `df = 116`, i.e. exactly the ",
+      "117-site set, and its vegetation- and climate-class t-tests need at least two ",
+      "sites per group. With ", nrow(o), " sites they are not reproducible and are ",
+      "deliberately not attempted here -- running `02_02` directly on this subset ",
+      "stops at the first such group.\n\n", sep = "")
+}
+```
+
+## Driver data (from `03_01`)
+
+```{r drivers}
+#| echo: false
+if (is.null(acclimation)) {
+  skip_note("Driver data", "`acclimation_data.csv` was not produced — run `workflows/03_01_...R`.")
+} else {
+  cov <- acclimation |>
+    summarise(across(everything(), ~ sum(!is.na(.x)))) |>
+    tidyr::pivot_longer(everything(), names_to = "column", values_to = "n_present") |>
+    mutate(n_rows = nrow(acclimation), complete = n_present == n_rows)
+  knitr::kable(cov, caption = "Column coverage in acclimation_data.csv (NA columns mean a missing input).")
+}
+```
+
+```{r modis-note}
+#| echo: false
+#| output: asis
+if (!is.null(acclimation) && all(is.na(acclimation$LAI))) {
+  skip_note("Spectral predictors",
+            paste("EVI, NDVI, LAI and GPP are entirely NA because the MODIS/AppEEARS",
+                  "tables are absent. `03_02` calls `randomForest()` with",
+                  "`na.action = na.fail` and LAI is one of its five predictors, so the",
+                  "driver analysis below cannot run until they are supplied."))
+}
+```
+
+## Driver analysis (from `03_02`)
+
+```{r drivers-rf}
+#| echo: false
+#| output: asis
+n_sites <- if (!is.null(acclimation)) nrow(acclimation) else 0
+enough_sites <- n_sites >= 51
+predictors_ok <- !is.null(acclimation) &&
+  all(c("ELEV", "MATA", "LAI", "SOC", "warm_rate") %in% names(acclimation)) &&
+  !any(vapply(acclimation[c("ELEV", "MATA", "LAI", "SOC", "warm_rate")],
+              function(x) all(is.na(x)), logical(1)))
+
+if (!is.null(varimp)) {
+  cat("Variable importance, as written by `03_02`:\n\n")
+  print(knitr::kable(varimp, digits = 4))
+} else {
+  reasons <- c(
+    if (!enough_sites) sprintf(
+      "`partialPlot()` uses `n.pt = min(n_unique, 51)` but `03_02` assigns the result into fixed 51-row blocks, so it needs at least 51 distinct values per predictor. This run has %d sites.", n_sites),
+    if (!predictors_ok) "One or more predictors are entirely NA (see the spectral note above); `randomForest()` defaults to `na.action = na.fail`."
+  )
+  skip_note("Driver analysis", paste(reasons, collapse = "\n\n"))
+}
+```
+
+## Future respiration (from `04_01` / `04_02`)
+
+```{r future}
+#| echo: false
+if (is.null(tmin_future)) {
+  skip_note("Future temperature change",
+            "`Tmin_month_ssp245_wc.csv` not produced — `04_01` needs the WorldClim rasters.")
+} else {
+  # `04_01` computes this for every site in site_info.csv, not just the ones
+  # the pipeline ran -- it needs only coordinates. Restricted here so the table
+  # describes this run; the CSV on disk still holds all 117.
+  tmin_future |>
+    filter(site_ID %in% sites) |>
+    tidyr::pivot_longer(starts_with("Tmin"), names_to = "month", values_to = "dTmin") |>
+    group_by(site_ID) |>
+    summarise(mean_dTmin = mean(dTmin, na.rm = TRUE),
+              min_dTmin = min(dTmin, na.rm = TRUE),
+              max_dTmin = max(dTmin, na.rm = TRUE), .groups = "drop") |>
+    knitr::kable(digits = 3, caption = "Projected monthly minimum-temperature change, 2041-2060 vs baseline (SSP2-4.5).")
+}
+```
+
+```{r future-er}
+#| echo: false
+if (is.null(future_er)) {
+  skip_note("Future respiration", "`acclimation_data_future_ssp245.csv` not produced — run `workflows/04_02_...R`.")
+} else {
+  # Seeded from the 117-row site table, so every site outside this run carries
+  # the zero it was initialised with. Dropping them avoids a table of numbers
+  # that look real and are not.
+  future_er |>
+    filter(site_ID %in% sites) |>
+    select(site_ID, TAS_tot, TSmin_c, NEE_night_mod_p, NEE_night_mod_f, NEE_night_mod_fa) |>
+    knitr::kable(digits = 4,
+                 caption = "Present vs future nighttime respiration, with (`_fa`) and without (`_f`) thermal acclimation.")
+}
+```
+
+## Caveats
+
+- **Subset run.** Any statistic that pools across sites is not comparable to the
+  manuscript, whose published numbers are all computed on exactly 117 sites.
+- **No sampler seed.** `predict_soil_temp()` takes a `seed` argument that its only
+  caller omits, and nothing seeds the Stan fits. Re-running moves TAS by roughly
+  `r TAS_NOISE`; the random-forest soil-temperature branch is non-deterministic
+  run to run.
+- **Missing MODIS.** The spectral predictors have no downloader in this repo.
+- **`02_02` grafts by position.** It assigns the direct model's TAS onto the total
+  model's table by row position rather than by `site_ID`. The writers sort both
+  tables on `site_ID` so that this is safe; do not change that without changing
+  `02_02`.

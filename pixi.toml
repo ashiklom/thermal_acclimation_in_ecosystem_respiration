@@ -17,8 +17,8 @@ targets = {
 }
 
 download_aanet = {
-  description = "Download AA-Net data",
-  cmd = ["Rscript", "scripts/download-aanet.R"]
+  description = "Download the AmeriFlux BADM/BIF site metadata table",
+  cmd = ["Rscript", "-e", "targets::tar_source(); download_ameriflux_bif()"]
 }
 
 download_era5 = {
@@ -110,6 +110,10 @@ r-targets = ">=1.12.0,<2"
 r-tarchetypes = ">=0.14.1,<0.15"
 "r-crew.cluster" = ">=0.4.0,<0.5"
 r-testthat = ">=3.3.1,<4"
+r-insight = ">=1.5.4"
+quarto = ">=1.9.38,<2"
+r-quarto = ">=1.5.1,<2"
+r-ggrepel = ">=0.9.8,<0.10"
 
 [pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }

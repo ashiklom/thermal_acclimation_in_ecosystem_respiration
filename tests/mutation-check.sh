@@ -205,6 +205,17 @@ add "year rejection: obs-count boundary off by one" \
     'if (nrow(data_subset) <= 25) {' \
     'if (nrow(data_subset) < 25) {'
 
+add "outcome tables written unsorted" \
+    R/write-outputs.R \
+    'dplyr::bind_rows(lapply(list(...), `[[`, "outcome")) |>
+    dplyr::arrange(.data$site_ID)' \
+    'dplyr::bind_rows(lapply(list(...), `[[`, "outcome"))'
+add "growing-season features silently deduplicated away" \
+    R/write-outputs.R \
+    'dplyr::bind_rows(lapply(list(...), `[[`, "feature_gs")) |>
+    dplyr::arrange(.data$site_ID)' \
+    'dplyr::bind_rows(lapply(list(...), `[[`, "feature_gs"))[1, ]'
+
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do
   if ! python3 - "${FILES[$i]}" "${FROM[$i]}" "${TO[$i]}" <<'PY'
