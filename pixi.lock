@@ -376,7 +376,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-httr-1.4.8-r45hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-ids-1.0.1-r45hc72bb7e_5.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-inline-0.3.21-r45hc72bb7e_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/r-insight-1.5.2-r45hc72bb7e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-insight-1.5.4-r45hacb3a79_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-iterators-1.0.14-r45hc72bb7e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-jquerylib-0.1.4-r45hc72bb7e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-knitr-1.51-r45hc72bb7e_0.conda
@@ -571,7 +571,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-httr-1.4.8-r45hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-ids-1.0.1-r45hc72bb7e_5.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-inline-0.3.21-r45hc72bb7e_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/r-insight-1.5.2-r45hc72bb7e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-insight-1.5.4-r45hacb3a79_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-iterators-1.0.14-r45hc72bb7e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-jquerylib-0.1.4-r45hc72bb7e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-knitr-1.51-r45hc72bb7e_0.conda
@@ -6712,17 +6712,17 @@ packages:
   run_exports: {}
   size: 140019
   timestamp: 1757514153775
-- conda: https://conda.anaconda.org/conda-forge/noarch/r-insight-1.5.2-r45hc72bb7e_0.conda
-  sha256: 4e92222dbec542aee2a36ebb4edef2848f19ab4b1b72e8fa96af989f41ad4726
-  md5: 09f923ccac6c139e198c140b46d18a54
+- conda: https://conda.anaconda.org/conda-forge/noarch/r-insight-1.5.4-r45hacb3a79_0.conda
+  sha256: 3ca46b516f3763b6f825bc007ce2197c41075686e5cd0d2abc53e977591a14b7
+  md5: 53f51895e38412f598a89a973ed8586d
   depends:
   - r-base >=4.5,<4.6.0a0
   license: GPL-3.0-only
   license_family: GPL3
   purls: []
   run_exports: {}
-  size: 2510677
-  timestamp: 1782683120478
+  size: 2533670
+  timestamp: 1788633928424
 - conda: https://conda.anaconda.org/conda-forge/noarch/r-iterators-1.0.14-r45hc72bb7e_4.conda
   sha256: c90d0faa668d2753db9da9458ca085891a3030c6537f5675fe0c1a1b5af2103c
   md5: 7746a41a4cb97cec59db2d5a2cac0701
@@ -9705,7 +9705,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/psutil?source=hash-mapping
+  - pkg:pypi/psutil?source=compressed-mapping
   run_exports: {}
   size: 239792
   timestamp: 1788190053472
