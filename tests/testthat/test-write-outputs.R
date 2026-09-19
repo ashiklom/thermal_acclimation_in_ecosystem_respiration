@@ -40,11 +40,19 @@ test_that("growing_season_features covers every site in the run", {
   # This table had no producer anywhere in the repo, and the copy on disk held 8
   # sites, so `04_02` failed with `integer(0)` bounds for everything else.
   # `load_growing_season_features()` checks only that the file exists.
+  #
+  # "The run" is the run that wrote the files, not this process's default
+  # scope: THERMAL_SITES may well have been set differently when the pipeline
+  # ran. The settings table is written by the same run, so it is the record
+  # of which sites that was.
   f <- file.path("data-proc", "features", "growing_season_features.csv")
+  s <- file.path("data-proc", "analysis", "variant_settings.csv")
   skip_if_not(file.exists(f), "not written yet")
+  skip_if_not(file.exists(s), "variant_settings.csv not written yet")
   feats <- read.csv(f)
+  run_sites <- unique(read.csv(s)$site_ID)
   expect_true(all(c("site_ID", "gStart", "gEnd", "tStart", "tEnd", "nyear") %in% names(feats)))
-  expect_true(all(pipeline_sites() %in% feats$site_ID))
+  expect_true(all(run_sites %in% feats$site_ID))
   expect_false(any(duplicated(feats$site_ID)))
   expect_false(any(is.na(feats$gStart) | is.na(feats$gEnd)))
 })
