@@ -5,14 +5,19 @@ library(crew.cluster)
 
 tar_source()
 
-# Each brms fit runs `N_CORES` chains in parallel, so the worker count has to be
-# divided by that or the machine is oversubscribed by the same factor. Measured
-# on the six-site sample with `workers = 10`: load average 60 on 18 cores, and
-# DE-RuC's total model took 11m24s against 330s when run on its own. Wall time
-# for the whole run was 49m54s, almost all of it contention.
-local <- crew_controller_local(
-  workers = max(1L, parallel::detectCores() %/% N_CORES)
-)
+# Each brms fit runs `N_CORES` chains in parallel, so `workers * N_CORES` is the
+# peak thread demand. But a fit is not 4-cores-busy for its whole life -- much
+# of a target is serial R work -- so sizing workers at cores/N_CORES leaves the
+# machine idle and costs wall time. Measured on the six-site sample, 18 cores:
+#
+#   workers=10  load avg 60  sum of target times 223.0 min  wall 49.9 min
+#   workers=4   load avg 13  sum of target times 154.0 min  wall 59.8 min
+#
+# So 4 made each fit 31% faster and the whole run 20% slower: 12 targets over 4
+# workers is three scheduling waves, where 10 ran nearly all at once. 8 is the
+# midpoint and is *not yet benchmarked* -- worth timing the next time a full
+# run happens anyway.
+local <- crew_controller_local(workers = 8)
 slurm <- crew_controller_slurm(
   workers = 20,
   options_cluster = crew_options_slurm(
