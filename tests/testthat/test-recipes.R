@@ -200,3 +200,73 @@ test_that("the stuck-value test exempts the zero curtain", {
   y <- c(rep(4.0, 2000), 5 + sin(seq_len(2000) / 20))
   expect_gt(stuck_stats(y)[["frac"]], 0.4)
 })
+
+
+# ------------------------------------------- the TS_memfill path, end to end
+#
+# None of the six development sites earns a BAD verdict, so in a dev run the
+# `memory_fill` recipes select the measured column at every site and the code
+# that attaches `TS_memfill` never executes. It is exercised here instead,
+# with the verdict forced, on the structure-only path -- which is everything
+# except the Stan call, and the Stan call is column-agnostic.
+
+test_that("memory_fill attaches TS_memfill when the verdict is BAD, and falls back without a fill", {
+  skip_if(is.na(product_file("DE-RuC", "FLUXNET")), "DE-RuC not downloaded")
+  si <- get_site_info("DE-RuC")
+  sd_ <- suppressWarnings(suppressMessages(prep_nee_ac(si)))
+  # A deliberately cheap fill: the plumbing is the point, not the skill.
+  fill <- suppressWarnings(suppressMessages(
+    fill_soil_temp(sd_, si, max_train = 3000, num_trees = 20)
+  ))
+  expect_identical(fill$status, "ok")
+  expect_length(fill$ac_ts, nrow(sd_$ac))
+  expect_length(fill$night_ts, nrow(sd_$nightNEE))
+  expect_false(fill$truth_synthetic)   # DE-RuC's soil temperature is measured
+  expect_setequal(fill$ts_bounds$definition, c("halfhourly", "climatology"))
+
+  bad <- sd_
+  bad$ts_qc$verdict <- "BAD"
+  bad$ts_qc$flags <- "airlike"
+
+  r <- suppressWarnings(suppressMessages(
+    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill_hh"), fill = fill)
+  ))
+  st <- r$settings
+  expect_identical(st$ts_col, "TS_memfill")
+  expect_identical(st$fill_method, fill$method)
+  expect_false(st$fill_degenerate)
+  expect_match(st$ts_reason, "reconstructed by")
+  expect_identical(st$bounds_strategy, "halfhourly")
+  expect_equal(st$tStart, fill$ts_bounds$tStart[fill$ts_bounds$definition == "halfhourly"])
+  expect_equal(st$tEnd, fill$ts_bounds$tEnd[fill$ts_bounds$definition == "halfhourly"])
+  expect_gt(sum(r$outcome_siteyear$status == "not_fitted"), 0)
+
+  # `native` for the reconstructed column is the half-hourly definition.
+  r_native <- suppressWarnings(suppressMessages(
+    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = fill)
+  ))
+  expect_equal(r_native$settings$tStart, st$tStart)
+
+  # No fill: fall back to the regression, and say so.
+  r2 <- suppressWarnings(suppressMessages(
+    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = NULL)
+  ))
+  expect_identical(r2$settings$ts_col, "TS_linear")
+  expect_match(r2$settings$ts_reason, "fell back")
+
+  # screen_best with a BAD verdict is the regression too.
+  r3 <- suppressWarnings(suppressMessages(
+    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("screened"))
+  ))
+  expect_identical(r3$settings$ts_col, "TS_linear")
+  expect_match(r3$settings$ts_reason, "airlike")
+
+  # A mismatched fill is refused rather than misaligned.
+  short <- fill
+  short$ac_ts <- short$ac_ts[-1]
+  expect_error(
+    suppressWarnings(suppressMessages(
+      total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = short)
+    ))
+  )
+})
