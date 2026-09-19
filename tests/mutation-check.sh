@@ -176,10 +176,34 @@ add "structure-only years left without a status" \
     R/total_tas.R \
     'year_result@status <- "not_fitted"' \
     'year_result@status <- NA_character_'
-add "skipped years left without a reason" \
+add "year rejection: obs-count rule never fires" \
     R/total_tas.R \
-    'year_result@status <- if (nrow(data_subset) <= 25) {' \
-    'year_result@status <- if (FALSE) {'
+    'if (nrow(data_subset) <= 25) {
+    return("year_too_few_obs")' \
+    'if (FALSE) {
+    return("year_too_few_obs")'
+add "year rejection: TSref range rule never fires" \
+    R/total_tas.R \
+    'if (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) {
+    return("year_tsref_outside_quantiles")' \
+    'if (FALSE) {
+    return("year_tsref_outside_quantiles")'
+add "year rejection: median NEE rule never fires" \
+    R/total_tas.R \
+    'if (median(data_subset$NEE) < 0.2) {
+    return("year_median_nee_too_low")' \
+    'if (FALSE) {
+    return("year_median_nee_too_low")'
+add "year rejection: mean NEE rule never fires" \
+    R/total_tas.R \
+    'if (mean(data_subset$NEE) < 0.2) {
+    return("year_mean_nee_too_low")' \
+    'if (FALSE) {
+    return("year_mean_nee_too_low")'
+add "year rejection: obs-count boundary off by one" \
+    R/total_tas.R \
+    'if (nrow(data_subset) <= 25) {' \
+    'if (nrow(data_subset) < 25) {'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do

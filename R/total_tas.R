@@ -95,6 +95,32 @@ Year_Result <- S7::new_class("Year_Result", properties = list(
   ERref = opt_num
 ))
 
+# Which of the four year-level rules rejects a subset, or NA if none does.
+#
+# The order is the order the original tested them in, so the name returned is
+# the *first* failure -- a year can breach more than one. Extracted from the
+# loop so that each branch can be exercised on its own: written inline as a
+# `||` chain beside a parallel `if/else` naming the reason, a mutation that
+# misattributed a rejection still produced a plausible reason and the suite
+# could not tell. The mutation check found exactly that hole.
+year_rejection <- function(data_subset, TSref) {
+  ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
+  if (nrow(data_subset) <= 25) {
+    return("year_too_few_obs")             # ensure enough observations
+  }
+  if (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) {
+    return("year_tsref_outside_quantiles") # ensure enough temperature range
+  }
+  if (median(data_subset$NEE) < 0.2) {
+    return("year_median_nee_too_low")      # ensure nighttime NEE is positive
+  }
+  if (mean(data_subset$NEE) < 0.2) {
+    return("year_mean_nee_too_low")
+  }
+  NA_character_
+}
+
+
 year_result_df <- S7::new_generic("year_result_df", "year_result")
 S7::method(year_result_df, Year_Result) <- function(year_result) {
   tibble::tibble(!!!S7::props(year_result))
@@ -559,30 +585,10 @@ total_tas_window <- function(
     year_result@nobsv <- nrow(data_subset)
     year_result@extend_days <- as.integer(extend_days)
 
-    # ensure enough observations
-    ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
-    next_condition <- (
-      # ensure enough observations
-      (nrow(data_subset) <= 25) ||
-        # ensure enough temperature range
-        (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) ||
-        # ensure nighttime NEE is positive
-        (median(data_subset$NEE) < 0.2) ||
-        (mean(data_subset$NEE) < 0.2)
-    )
+    rejection <- year_rejection(data_subset, TSref)
 
-    if (next_condition) {
-      # Report which of the four rules rejected the year. Evaluated in the same
-      # order as the condition above, so the reason names the first failure.
-      year_result@status <- if (nrow(data_subset) <= 25) {
-        "year_too_few_obs"
-      } else if (!dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])) {
-        "year_tsref_outside_quantiles"
-      } else if (median(data_subset$NEE) < 0.2) {
-        "year_median_nee_too_low"
-      } else {
-        "year_mean_nee_too_low"
-      }
+    if (!is.na(rejection)) {
+      year_result@status <- rejection
       year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = NULL)
       next
     }

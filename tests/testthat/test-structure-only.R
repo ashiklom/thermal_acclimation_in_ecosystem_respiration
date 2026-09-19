@@ -71,3 +71,48 @@ test_that("settings record the choices that shaped the run", {
   expect_true(tot$settings$nwindow >= 1)
   expect_equal(nrow(tot$settings), 1L)
 })
+
+# `year_rejection()` names which rule dropped a growing year. Asserting only
+# that the answer is *one of* the four names is not enough -- the mutation
+# check proved it, by misattributing a rejection and surviving. Each branch is
+# therefore driven to fire on its own, with the others held satisfied.
+make_subset <- function(n = 200, ts = seq(5, 25, length.out = n), nee = 3) {
+  tibble::tibble(TS = ts, NEE = rep_len(nee, n))
+}
+
+test_that("year_rejection accepts a subset that breaks no rule", {
+  expect_true(is.na(year_rejection(make_subset(), TSref = 15)))
+})
+
+test_that("year_rejection names the rule that fired", {
+  # too few observations: 25 is the boundary, and it is `<=`
+  expect_equal(year_rejection(make_subset(n = 25), 15), "year_too_few_obs")
+  expect_true(is.na(year_rejection(make_subset(n = 26), 15)))
+
+  # reference temperature outside the 2.5/97.5 range of the subset
+  expect_equal(year_rejection(make_subset(), TSref = 40),
+               "year_tsref_outside_quantiles")
+  expect_equal(year_rejection(make_subset(), TSref = -10),
+               "year_tsref_outside_quantiles")
+
+  # median nighttime NEE below 0.2, with the mean held above it by outliers
+  skewed <- c(rep(0, 150), rep(40, 50))
+  expect_gt(mean(skewed), 0.2)
+  expect_lt(median(skewed), 0.2)
+  expect_equal(year_rejection(make_subset(nee = skewed), 15),
+               "year_median_nee_too_low")
+
+  # mean below 0.2 while the median clears it -- the rule the `||` chain
+  # reaches last, and the one a misattribution is most likely to swallow
+  low_mean <- c(rep(0.3, 150), rep(-0.3, 50))
+  expect_gt(median(low_mean), 0.2)
+  expect_lt(mean(low_mean), 0.2)
+  expect_equal(year_rejection(make_subset(nee = low_mean), 15),
+               "year_mean_nee_too_low")
+})
+
+test_that("year_rejection reports the first failure when several apply", {
+  # 20 rows *and* a reference temperature miles outside the range: the
+  # observation count is tested first, so that is what should be reported.
+  expect_equal(year_rejection(make_subset(n = 20), TSref = 99), "year_too_few_obs")
+})
