@@ -164,6 +164,23 @@ add "unknown THERMAL_SITES falls back silently" \
     'stop("THERMAL_SITES must be \"dev\" or \"all\", not ", shQuote(scope), ".")' \
     'return(handled)'
 
+add "structure-only run reports a fitted outcome" \
+    R/total_tas.R \
+    '    return(list(
+      outcome = NULL,
+      outcome_siteyear = window_results_df,' \
+    '    return(list(
+      outcome = window_results_df,
+      outcome_siteyear = window_results_df,'
+add "structure-only years left without a status" \
+    R/total_tas.R \
+    'year_result@status <- "not_fitted"' \
+    'year_result@status <- NA_character_'
+add "skipped years left without a reason" \
+    R/total_tas.R \
+    'year_result@status <- if (nrow(data_subset) <= 25) {' \
+    'year_result@status <- if (FALSE) {'
+
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do
   if ! python3 - "${FILES[$i]}" "${FROM[$i]}" "${TO[$i]}" <<'PY'

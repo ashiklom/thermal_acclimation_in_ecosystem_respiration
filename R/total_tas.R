@@ -180,8 +180,21 @@ get_priors <- function(model_data, direct = FALSE) {
 # the model is fitted on, for sensitivity runs that compare estimation methods
 # or measured-versus-reanalysis soil water against each other. Left NULL they
 # resolve to the site's declaration, which is the normal path.
+# `fit = FALSE` walks the same window and year loop but performs no model
+# fitting at all -- no `gsl_nls` warm start, no `brm`, no `gls`. What comes back
+# is the structural half of the run: which windows survived, which years were
+# kept or rejected and why, how far each window had to be extended, how many
+# observations it ended up with, and the growing-season soil temperature each
+# year contributed.
+#
+# The point is that it is the *same* loop rather than a transcription of it. A
+# separate reimplementation of the layout rules would only ever prove that the
+# two agreed with each other. This runs in seconds instead of minutes, and
+# because none of those quantities depends on the sampler, two runs of it are
+# bit-identical -- so a difference against the manuscript is a real difference
+# and not noise.
 total_tas_site <- function(site_data, site_info, direct = FALSE,
-                           ts_col = NULL, swc_col = NULL) {
+                           ts_col = NULL, swc_col = NULL, fit = TRUE) {
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
   feature_gs <- site_data[["feature_gs"]]
@@ -358,7 +371,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
       ac, ac_day, a_measure_night_complete,
       window_start, window_end, nwindow, nobs_threshold, control_year,
       SWC_use, tStart, tEnd, gEnd,
-      direct = direct
+      direct = direct, fit = fit
     )
   }
 
@@ -388,6 +401,18 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   ER_obs_pred <- window_results |>
     lapply(`[[`, "ER_obs_pred") |>
     dplyr::bind_rows()
+
+  if (!fit) {
+    # No ERref, so no lnRatio, so nothing for `gls` to regress. `outcome` is
+    # NULL rather than a row of NAs, so that a structure-only result cannot be
+    # mistaken for a fitted one further downstream.
+    return(list(
+      outcome = NULL,
+      outcome_siteyear = window_results_df,
+      window_skips = window_skips,
+      settings = settings
+    ))
+  }
 
   fit_stats <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)
 
@@ -424,7 +449,7 @@ total_tas_window <- function(
   ac, ac_day, a_measure_night_complete,
   window_start, window_end, nwindow, nobs_threshold, control_year,
   SWC_use, tStart, tEnd, gEnd,
-  direct = FALSE
+  direct = FALSE, fit = TRUE
 ) {
 
   # A skipped window used to `return(NULL)`, which vanished without trace --
@@ -487,7 +512,7 @@ total_tas_window <- function(
     data_ref[["SWC"]] <- mean(ac$SWC[keep(ac)], na.rm = TRUE)
   }
 
-  priors <- get_priors(model_data, direct = direct)
+  priors <- if (fit) get_priors(model_data, direct = direct) else NULL
 
   ERref_control <- NA
 
@@ -562,6 +587,17 @@ total_tas_window <- function(
       next
     }
 
+    if (!fit) {
+      # Everything above this line is layout: window extension, the year
+      # rejection rules, the observation count. Everything below is the model.
+      year_result@status <- "not_fitted"
+      year_result@TS <- ac_yearly_window |>
+        dplyr::filter(.data$growing_year == iyear) |>
+        dplyr::pull("TS")
+      year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = NULL)
+      next
+    }
+
     mod <- fit_with_retry(data_subset, priors, direct)
 
     # Extract model results
@@ -608,6 +644,14 @@ total_tas_window <- function(
   ER_obs_pred_all <- year_results |>
     lapply(`[[`, "ER_obs_pred") |>
     dplyr::bind_rows()
+
+  if (!fit) {
+    return(list(
+      outcome_siteyear = df_site_year_window,
+      ER_obs_pred = NULL,
+      skipped = NULL
+    ))
+  }
 
   # if no data in a control year during this window, use average ER across years as the reference conditions
   if (is.na(ERref_control)) {
