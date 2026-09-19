@@ -30,7 +30,7 @@ suppressMessages({
 })
 tar_source()
 source("scripts/ts-rework-common.R")
-source("scripts/ts-fill-methods.R")
+# Methods, blockings and the scorer are in R/ts-fill.R, loaded by tar_source().
 
 args <- commandArgs(trailingOnly = TRUE)
 sites <- parse_sites_arg(args, measured_ts_sites())
@@ -45,11 +45,7 @@ stopifnot(all(blockings %in% names(TS_FILL_BLOCKINGS)))
 # that a 20-year half-hourly record does not make the random forest the
 # bottleneck. The cap is applied inside each fold, after the held-out block is
 # removed, so it cannot leak.
-subsample <- function(train, n, seed) {
-  if (nrow(train) <= n) return(train)
-  set.seed(seed)
-  train[sort(sample(nrow(train), n)), , drop = FALSE]
-}
+subsample <- subsample_rows
 
 site_cv <- function(name_site) {
   message("==== ", name_site, " ====")
