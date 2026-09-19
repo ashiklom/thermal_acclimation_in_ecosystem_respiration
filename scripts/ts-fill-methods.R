@@ -189,6 +189,10 @@ blocks_season <- function(dat) {
   # Contiguous three-month blocks within a year. Leaving out a whole season
   # asks the question the snow-covered and frozen periods actually pose: can
   # the model reach a regime it never saw in that year?
+  #
+  # NB this is by far the most expensive scheme -- four folds per year, so a
+  # 25-year record is 100 folds against `year`'s 25 -- and it is not in
+  # `TS_FILL_BLOCKINGS` for that reason. Ask for it explicitly, on a subset.
   split(seq_len(nrow(dat)), paste(dat$YEAR, (dat$MONTH - 1) %/% 3))
 }
 
