@@ -33,20 +33,68 @@ write_result_csv <- function(dat, path) {
 # There is no join. If the two files disagree on row order every site silently
 # receives another site's number, and nothing downstream can detect it. Sorting
 # both on the same key is what makes that safe.
+# The results now carry `recipe_id` and `model`, so every collector sorts on
+# them too. `dplyr::any_of()` keeps the collectors valid for a result built
+# before those columns existed.
 collect_outcome <- function(...) {
   dplyr::bind_rows(lapply(list(...), `[[`, "outcome")) |>
-    dplyr::arrange(.data$site_ID)
+    dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))
 }
 
 collect_outcome_siteyear <- function(...) {
   dplyr::bind_rows(lapply(list(...), `[[`, "outcome_siteyear")) |>
-    dplyr::relocate(dplyr::any_of(OUTCOME_SITEYEAR_COLS)) |>
-    dplyr::arrange(.data$site_ID, .data$window, .data$growing_year)
+    dplyr::relocate(dplyr::any_of(c("site_ID", "recipe_id", "model"))) |>
+    dplyr::relocate(dplyr::any_of(setdiff(OUTCOME_SITEYEAR_COLS, "site_ID")),
+                    .after = dplyr::any_of(c("site_ID", "recipe_id", "model"))) |>
+    dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model", "window", "growing_year"))))
 }
 
 collect_settings <- function(...) {
   dplyr::bind_rows(lapply(list(...), `[[`, "settings")) |>
-    dplyr::arrange(.data$site_ID, .data$model)
+    dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))
+}
+
+# The manuscript-layout subset: the `original` recipe, one model, and none of
+# the columns the variant grid added. This is what the `workflows/` scripts
+# read, and their column contract predates recipes. A run that omits the
+# `original` recipe yields an empty table here, which is the honest result.
+original_only <- function(tbl, model = NULL, drop = c("recipe_id", "fit_profile")) {
+  if (!"recipe_id" %in% names(tbl)) return(tbl)
+  out <- dplyr::filter(tbl, .data$recipe_id == "original")
+  if (!is.null(model) && "model" %in% names(out)) {
+    out <- dplyr::filter(out, .data$model == .env$model)
+    drop <- c(drop, "model")
+  }
+  dplyr::select(out, -dplyr::any_of(drop))
+}
+
+# Soil-temperature quality verdicts, one row per site.
+collect_ts_qc <- function(...) {
+  dplyr::bind_rows(lapply(list(...), `[[`, "ts_qc")) |>
+    dplyr::arrange(.data$site_ID)
+}
+
+# The blocked-CV table behind each site's fill choice: one row per method.
+collect_fill_cv <- function(...) {
+  parts <- Filter(function(f) !is.null(f[["cv"]]), list(...))
+  if (!length(parts)) return(tibble::tibble(site_ID = character(), method = character()))
+  dplyr::bind_rows(lapply(parts, `[[`, "cv")) |>
+    dplyr::arrange(.data$site_ID, .data$rmse)
+}
+
+# What each site's fill decided, including the sites where it could not.
+collect_fill_summary <- function(...) {
+  dplyr::bind_rows(lapply(list(...), function(f) {
+    tibble::tibble(
+      site_ID = f[["site_ID"]],
+      status = f[["status"]],
+      method = f[["method"]] %||% NA_character_,
+      cv_rmse = f[["cv_rmse"]] %||% NA_real_,
+      blocking = f[["blocking"]] %||% NA_character_,
+      n_train = f[["n_train"]] %||% NA_integer_
+    )
+  })) |>
+    dplyr::arrange(.data$site_ID)
 }
 
 collect_window_skips <- function(...) {

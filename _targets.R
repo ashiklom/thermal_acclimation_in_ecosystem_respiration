@@ -39,75 +39,159 @@ tar_option_set(
   controller = if (grepl("ycrc.yale.edu", fqdn, fixed = TRUE)) slurm else local
 )
 
-# Use static branching to get informative target names, and to have finer
-# control over which sites I run while developing.
-# https://books.ropensci.org/targets/static.html
+# ----------------------------------------------------------------- the grid
 #
-# `pipeline_sites()` returns the six-site development sample by default and the
-# full list under THERMAL_SITES=all. See `DEV_SITES` in R/constants.R for what
-# each of the six is there to cover.
-values <- tibble::tibble(site_name = pipeline_sites())
-message("Pipeline sites (", nrow(values), "): ", paste(values$site_name, collapse = ", "))
+# Three dimensions, each scoped by an environment variable so that a run can
+# be as small as one site x one recipe x one model on a laptop or the whole
+# grid on the cluster, from the same file:
+#
+#   THERMAL_SITES    dev (default) | all | DE-Tha,SE-Nor,...
+#   THERMAL_RECIPES  dev (default) | all | original,memfill,...
+#   THERMAL_MODELS   total,direct (default) | total | direct
+#   THERMAL_FIT      full (default) | fast   -- see fit_settings()
+#
+# `fast` shrinks the sampler so the entire pipeline can be exercised end to
+# end in minutes. Its TAS values are smoke-test artefacts; the settings table
+# and the report both say so.
+sites <- pipeline_sites()
+recipes <- pipeline_recipes()
+models <- pipeline_models()
+FIT_PROFILE <- Sys.getenv("THERMAL_FIT", "full")
+fit_settings(FIT_PROFILE) # fail here, by name, rather than inside every fit target
 
+message(
+  "Pipeline grid: ", length(sites), " site(s) x ", length(recipes), " recipe(s) x ",
+  length(models), " model(s) = ", length(sites) * length(recipes) * length(models),
+  " fits; fit profile ", FIT_PROFILE
+)
+message("  sites:   ", paste(sites, collapse = ", "))
+message("  recipes: ", paste(recipes, collapse = ", "))
+
+# Step 01 is shared across recipes. Every recipe in the registry today has the
+# same prep key, so one `site_data` per site serves all of them; this is the
+# assertion that keeps that true. When a recipe with a different prep key is
+# added (a `computed` year qualification, say), `site_data` has to be mapped
+# over `crossing(site, prep_key)` and the fit grid pointed at the matching one
+# -- the shape is the same as `site_fill` below, and this stop() names the spot.
+prep_keys <- unique(vapply(recipes, function(r) recipe_prep_key(get_recipe(r)), ""))
+if (length(prep_keys) != 1) {
+  stop(
+    "The recipes in this run have ", length(prep_keys), " distinct prep keys (",
+    paste(prep_keys, collapse = "; "), "). site_data is built once per site; ",
+    "see the comment above this check in _targets.R for what to change."
+  )
+}
+
+sanitize <- function(x) gsub("-", ".", x, fixed = TRUE)
+
+# Per-site, recipe-independent: the declaration, the download, step 01, and
+# the soil-temperature reconstruction the `memory_fill` recipes read.
 site_targets <- tar_map(
-  values = values,
+  values = tibble::tibble(site_name = sites),
   # One read of the site declaration per site, threaded into every stage that
   # needs it. It depends on `site_info_file`, so editing site_info.csv
   # invalidates exactly the sites whose row could have changed.
   tar_target(site_info, get_site_info(site_name, path = site_info_file)),
   tar_target(site_dl, download_site(site_info), format = "file"),
   tar_target(site_data, {site_dl; prep_nee_ac(site_info)}, format = "qs"),
-  tar_target(site_tas_total, total_tas_site(site_data, site_info), format = "qs"),
+  tar_target(site_fill, fill_soil_temp(site_data, site_info), format = "qs")
+)
+
+# One target per recipe, read from the registry file so that editing a row
+# invalidates exactly the fits made under it.
+recipe_targets <- tar_map(
+  values = tibble::tibble(recipe_id = recipes),
+  tar_target(recipe, get_recipe(recipe_id, path = recipes_file))
+)
+
+# The fits: sites x recipes x models. The per-site inputs are referenced as
+# symbols built from the site name, the same device `write_respiration_all()`
+# already relies on, so a fit target depends on exactly its own site's data.
+grid <- tidyr::crossing(site_name = sites, recipe_id = recipes, model = models) |>
+  dplyr::mutate(
+    site_data_sym = rlang::syms(paste0("site_data_", sanitize(.data$site_name))),
+    site_info_sym = rlang::syms(paste0("site_info_", sanitize(.data$site_name))),
+    site_fill_sym = rlang::syms(paste0("site_fill_", sanitize(.data$site_name))),
+    recipe_sym = rlang::syms(paste0("recipe_", .data$recipe_id)),
+    direct = .data$model == "direct",
+    fit_profile = FIT_PROFILE
+  )
+
+fit_targets <- tar_map(
+  values = grid,
+  names = c("site_name", "recipe_id", "model"),
   tar_target(
-    site_tas_direct,
-    total_tas_site(site_data, site_info, direct = TRUE),
+    site_tas,
+    total_tas_site(
+      site_data_sym, site_info_sym,
+      direct = direct, recipe = recipe_sym, fill = site_fill_sym,
+      fit_profile = fit_profile
+    ),
     format = "qs"
   )
 )
 
-# Combine the per-site targets and write the files `workflows/` reads.
+# ------------------------------------------------------------- collectors
 #
-# Until now the DAG ended at in-memory objects, so `02_02` and `03_01` failed at
-# their first `read.csv`. Each writer is a `tar_file` target, so a downstream
-# consumer can depend on the file rather than on the directory happening to be
-# populated.
-outputs <- list(
-  tar_combine(outcome_temp_tbl, site_targets$site_tas_total,
-              command = collect_outcome(!!!.x)),
-  tar_combine(outcome_direct_tbl, site_targets$site_tas_direct,
-              command = collect_outcome(!!!.x)),
-  tar_combine(siteyear_total_tbl, site_targets$site_tas_total,
-              command = collect_outcome_siteyear(!!!.x)),
-  tar_combine(siteyear_direct_tbl, site_targets$site_tas_direct,
-              command = collect_outcome_siteyear(!!!.x)),
-  tar_combine(settings_tbl, site_targets$site_tas_total,
-              command = collect_settings(!!!.x)),
-  tar_combine(settings_direct_tbl, site_targets$site_tas_direct,
-              command = collect_settings(!!!.x)),
-  tar_combine(window_skips_tbl, site_targets$site_tas_total,
-              command = collect_window_skips(!!!.x)),
-  tar_combine(feature_gs_tbl, site_targets$site_data,
-              command = collect_feature_gs(!!!.x)),
+# Everything is combined once, over the whole grid, with `recipe_id` and
+# `model` as columns. The manuscript-layout files the `workflows/` scripts
+# read are the `original` recipe's slice of those tables, so they keep their
+# names and their column contract.
+tas_all <- fit_targets$site_tas
 
+combined <- list(
+  tar_combine(variant_outcome_tbl, tas_all, command = collect_outcome(!!!.x)),
+  tar_combine(variant_siteyear_tbl, tas_all, command = collect_outcome_siteyear(!!!.x)),
+  tar_combine(variant_settings_tbl, tas_all, command = collect_settings(!!!.x)),
+  tar_combine(variant_window_skips_tbl, tas_all, command = collect_window_skips(!!!.x)),
+  tar_combine(feature_gs_tbl, site_targets$site_data, command = collect_feature_gs(!!!.x)),
+  tar_combine(ts_qc_tbl, site_targets$site_data, command = collect_ts_qc(!!!.x)),
+  tar_combine(fill_cv_tbl, site_targets$site_fill, command = collect_fill_cv(!!!.x)),
+  tar_combine(fill_summary_tbl, site_targets$site_fill, command = collect_fill_summary(!!!.x))
+)
+
+outputs <- list(
+  # -- the variant grid, in full --
+  tar_file(variant_outcome_csv,
+           write_result_csv(variant_outcome_tbl, file.path(DIR_ANALYSIS, "variant_outcome.csv"))),
+  tar_file(variant_siteyear_csv,
+           write_result_csv(variant_siteyear_tbl, file.path(DIR_ANALYSIS, "variant_siteyear.csv"))),
+  tar_file(variant_settings_csv,
+           write_result_csv(variant_settings_tbl, file.path(DIR_ANALYSIS, "variant_settings.csv"))),
+  tar_file(variant_window_skips_csv,
+           write_result_csv(variant_window_skips_tbl, file.path(DIR_ANALYSIS, "variant_window_skips.csv"))),
+  tar_file(ts_qc_csv,
+           write_result_csv(ts_qc_tbl, file.path(DIR_ANALYSIS, "ts_qc.csv"))),
+  tar_file(fill_cv_csv,
+           write_result_csv(fill_cv_tbl, file.path(DIR_ANALYSIS, "fill_cv.csv"))),
+  tar_file(fill_summary_csv,
+           write_result_csv(fill_summary_tbl, file.path(DIR_ANALYSIS, "fill_summary.csv"))),
+
+  # -- the manuscript layout: the `original` recipe only --
   tar_file(outcome_temp_csv,
-           write_result_csv(outcome_temp_tbl, file.path(DIR_ANALYSIS, "outcome_temp.csv"))),
+           write_result_csv(original_only(variant_outcome_tbl, "total"),
+                            file.path(DIR_ANALYSIS, "outcome_temp.csv"))),
   tar_file(outcome_temp_water_gpp_csv,
-           write_result_csv(outcome_direct_tbl, file.path(DIR_ANALYSIS, "outcome_temp_water_gpp.csv"))),
+           write_result_csv(original_only(variant_outcome_tbl, "direct"),
+                            file.path(DIR_ANALYSIS, "outcome_temp_water_gpp.csv"))),
   tar_file(outcome_siteyear_temp_csv,
-           write_result_csv(siteyear_total_tbl, file.path(DIR_ANALYSIS, "outcome_siteyear_temp.csv"))),
+           write_result_csv(original_only(variant_siteyear_tbl, "total"),
+                            file.path(DIR_ANALYSIS, "outcome_siteyear_temp.csv"))),
   tar_file(outcome_siteyear_temp_water_gpp_csv,
-           write_result_csv(siteyear_direct_tbl, file.path(DIR_ANALYSIS, "outcome_siteyear_temp_water_gpp.csv"))),
-  # Not manuscript outputs; the report reads them.
+           write_result_csv(original_only(variant_siteyear_tbl, "direct"),
+                            file.path(DIR_ANALYSIS, "outcome_siteyear_temp_water_gpp.csv"))),
+  # Not manuscript outputs; the run report reads them.
   tar_file(run_settings_csv,
-           write_result_csv(dplyr::bind_rows(settings_tbl, settings_direct_tbl),
+           write_result_csv(original_only(variant_settings_tbl),
                             file.path(DIR_ANALYSIS, "run_settings.csv"))),
   tar_file(window_skips_csv,
-           write_result_csv(window_skips_tbl, file.path(DIR_ANALYSIS, "window_skips.csv"))),
+           write_result_csv(original_only(variant_window_skips_tbl),
+                            file.path(DIR_ANALYSIS, "window_skips.csv"))),
 
   tar_file(growing_season_features_csv,
            write_result_csv(feature_gs_tbl, file.path(DIR_FEATURES, "growing_season_features.csv"))),
   tar_file(respiration_csv, write_respiration_all(!!!rlang::syms(
-    paste0("site_data_", gsub("-", ".", values$site_name, fixed = TRUE))
+    paste0("site_data_", sanitize(sites))
   )))
 )
 
@@ -125,21 +209,26 @@ external <- list(
   tar_file(worldclim_files, download_worldclim())
 )
 
-# The run report. `tar_quarto()` scans the document for `tar_read`/`tar_load`
-# calls and makes each one a dependency, so the report re-renders whenever the
+# Two reports. `tar_quarto()` scans each document for `tar_read`/`tar_load`
+# calls and makes each one a dependency, so a report re-renders whenever the
 # results it describes change rather than going quietly stale.
 #
-# It depends on the pipeline's own outputs only. The `workflows/` scripts are
-# still run by hand, so the sections that describe them guard on the file being
-# present and render an explicit skip when it is not.
-report <- list(
-  tar_quarto(run_report, path = "reports/pipeline-report.qmd", quiet = FALSE)
+#   run_report      the `original` recipe's run, against the manuscript.
+#   variant_report  every recipe against `original` and against the
+#                   manuscript oracle, with per-site provenance.
+reports <- list(
+  tar_quarto(run_report, path = "reports/pipeline-report.qmd", quiet = FALSE),
+  tar_quarto(variant_report, path = "reports/variant-comparison.qmd", quiet = FALSE)
 )
 
 list(
   tar_file(site_info_file, SITE_INFO_CSV),
+  tar_file(recipes_file, RECIPES_CSV),
   external,
   site_targets,
+  recipe_targets,
+  fit_targets,
+  combined,
   outputs,
-  report
+  reports
 )

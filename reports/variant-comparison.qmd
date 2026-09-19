@@ -1,0 +1,399 @@
+---
+title: "Thermal acclimation — methodology variants"
+subtitle: "Every recipe against `original`, and `original` against the manuscript"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    embed-resources: true
+    df-print: kable
+    fig-width: 9
+    fig-height: 5.5
+execute:
+  warning: false
+  message: false
+knitr:
+  opts_knit:
+    root.dir: ".."
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(targets)
+
+# Every table here is a lookup of what the pipeline wrote; nothing is refitted,
+# so rendering is fast and cannot disagree with the run it describes.
+#
+# Outputs are reached through literal `tar_read()` calls: `tar_quarto()` scans
+# this file for them and makes each a dependency, so the report re-renders when
+# the results change rather than going quietly stale.
+from_target <- function(path) {
+  if (is.null(path) || !length(path) || !all(file.exists(path))) return(NULL)
+  out <- read.csv(path, stringsAsFactors = FALSE)
+  if (!nrow(out)) NULL else out
+}
+or_null <- function(expr) tryCatch(expr, error = function(e) NULL)
+
+outcome  <- from_target(or_null(tar_read(variant_outcome_csv)))
+settings <- from_target(or_null(tar_read(variant_settings_csv)))
+siteyear <- from_target(or_null(tar_read(variant_siteyear_csv)))
+skips    <- from_target(or_null(tar_read(variant_window_skips_csv)))
+ts_qc    <- from_target(or_null(tar_read(ts_qc_csv)))
+fill_cv  <- from_target(or_null(tar_read(fill_cv_csv)))
+fill_sum <- from_target(or_null(tar_read(fill_summary_csv)))
+feats    <- from_target(or_null(tar_read(growing_season_features_csv)))
+recipes  <- from_target(or_null(tar_read(recipes_file)))
+
+ORIG <- "data-proc-original"
+read_if <- function(path) if (file.exists(path)) read.csv(path) else NULL
+orig_total  <- read_if(file.path(ORIG, "outcome_temp.csv"))
+orig_direct <- read_if(file.path(ORIG, "outcome_temp_water_gpp.csv"))
+
+# Sampler noise floor: measured over identical repeated runs (reports/
+# pipeline-report.qmd, and the replicate runs in ts-rework.html, F8). A TAS
+# difference smaller than this means nothing.
+TAS_NOISE <- 3e-4
+
+skip_note <- function(what, why) {
+  cat(sprintf("::: {.callout-warning}\n## %s not available\n\n%s\n:::\n\n", what, why))
+}
+
+# Recipes get their colour from their position in the registry, never from
+# their rank in a particular table, so a recipe is the same colour in every
+# figure and a filter that drops one never repaints the survivors. Five
+# categorical slots from the validated reference palette, in its fixed order.
+RECIPE_ORDER <- if (!is.null(recipes)) recipes$recipe_id else unique(settings$recipe_id)
+PALETTE <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948")
+recipe_cols <- setNames(PALETTE[seq_along(RECIPE_ORDER)], RECIPE_ORDER)
+INK <- "#16181d"; INK2 <- "#4a5058"; GRID <- "#e2e5ea"
+
+theme_report <- function() {
+  theme_minimal(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(colour = GRID, linewidth = 0.4),
+      axis.title = element_text(colour = INK2),
+      axis.text = element_text(colour = INK),
+      strip.text = element_text(colour = INK, face = "bold", hjust = 0),
+      legend.position = "top",
+      legend.title = element_blank(),
+      plot.title.position = "plot"
+    )
+}
+
+fast_run <- !is.null(settings) && any(settings$fit_profile == "fast")
+n_sites <- if (!is.null(settings)) length(unique(settings$site_ID)) else 0
+```
+
+```{r fast-callout}
+#| echo: false
+#| results: asis
+if (fast_run) cat(
+"::: {.callout-important}\n## This run used the `fast` fit profile\n\n",
+"Some or all fits were made with fewer chains and iterations than the manuscript's ",
+"configuration (`fit_settings(\"fast\")`). Every TAS below is a **smoke-test artefact** ",
+"that shows the pipeline runs end to end; none of the numbers is a result. ",
+"Re-run with `THERMAL_FIT=full` for anything you intend to read.\n:::\n\n")
+if (n_sites > 0 && n_sites < 20) cat(
+"::: {.callout-note}\n## Subset run\n\n",
+sprintf("%d site(s) in this run. Site-level comparisons are meaningful; ", n_sites),
+"cross-site summaries are not. `THERMAL_SITES=all` runs every site the pipeline handles.\n:::\n\n")
+```
+
+## Run metadata
+
+```{r meta}
+#| echo: false
+git <- function(args) tryCatch(system2("git", args, stdout = TRUE), error = function(e) NA_character_)
+tibble::tibble(
+  item = c("Rendered", "Sites", "Recipes", "Models", "Fit profile(s)",
+           "Git commit", "Git branch", "Working tree"),
+  value = c(
+    format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
+    if (!is.null(settings)) paste(sort(unique(settings$site_ID)), collapse = ", ") else "none",
+    if (!is.null(settings)) paste(unique(settings$recipe_id), collapse = ", ") else "none",
+    if (!is.null(settings)) paste(unique(settings$model), collapse = ", ") else "none",
+    if (!is.null(settings)) paste(unique(settings$fit_profile), collapse = ", ") else "none",
+    paste(git(c("rev-parse", "--short", "HEAD")), collapse = ""),
+    paste(git(c("rev-parse", "--abbrev-ref", "HEAD")), collapse = ""),
+    if (length(git(c("status", "--porcelain")))) "modified" else "clean"
+  )
+)
+```
+
+## The recipes
+
+A recipe is a named set of choices, one strategy per axis. The axes and what
+each strategy does are documented in `docs/recipes.md`; the registry is
+`data-core/recipes.csv`, and adding a variant is one row there.
+
+```{r recipes}
+#| echo: false
+if (is.null(recipes)) skip_note("Recipe registry", "recipes_file target not built.") else
+  recipes |> select(recipe_id, ts, season, bounds, swc, year_qc, description)
+```
+
+## `original` against the manuscript oracle
+
+The `original` recipe is the manuscript's logic. Its TAS should match
+`data-proc-original/` to within sampler noise; a larger difference is a real
+difference between this code and the code the manuscript was made with.
+
+```{r oracle}
+#| echo: false
+#| results: asis
+orig_run <- if (!is.null(outcome)) filter(outcome, recipe_id == "original") else NULL
+if (is.null(orig_run) || !nrow(orig_run)) {
+  skip_note("Oracle comparison", "The `original` recipe is not in this run (THERMAL_RECIPES).")
+} else if (is.null(orig_total)) {
+  skip_note("Oracle comparison", "data-proc-original/outcome_temp.csv not found.")
+} else {
+  ref <- bind_rows(
+    mutate(orig_total, model = "total"),
+    if (!is.null(orig_direct)) mutate(orig_direct, model = "direct")
+  ) |> select(site_ID, model, TAS_manuscript = TAS, TASp_manuscript = TASp)
+  cmp <- orig_run |>
+    select(site_ID, model, fit_profile, TAS, TASp) |>
+    inner_join(ref, by = c("site_ID", "model")) |>
+    mutate(
+      delta = TAS - TAS_manuscript,
+      delta_over_noise = round(abs(delta) / TAS_NOISE, 1),
+      agrees = ifelse(abs(delta) <= TAS_NOISE, "yes", "**no**")
+    ) |>
+    arrange(model, site_ID)
+  if (!nrow(cmp)) {
+    skip_note("Oracle comparison", "No site in this run appears in the manuscript's outcome tables.")
+  } else {
+    cat(sprintf("%d of %d site-model pairs agree with the manuscript to within the sampler noise floor (%.0e).\n\n",
+                sum(cmp$agrees == "yes"), nrow(cmp), TAS_NOISE))
+    if (fast_run) cat("Under the `fast` profile disagreement is expected and says nothing.\n\n")
+    print(knitr::kable(cmp, digits = 5))
+  }
+}
+```
+
+## TAS across recipes
+
+For every site and model, the thermal-response strength under each recipe, the
+change against `original`, and how many sampler-noise floors that change is.
+A sign flip or a crossing of $p = 0.05$ is called out.
+
+```{r tas-table}
+#| echo: false
+#| results: asis
+if (is.null(outcome)) {
+  skip_note("TAS comparison", "variant_outcome_csv not built.")
+} else {
+  base <- outcome |> filter(recipe_id == "original") |>
+    select(site_ID, model, TAS_original = TAS, TASp_original = TASp)
+  cmp_all <- outcome |>
+    left_join(base, by = c("site_ID", "model")) |>
+    mutate(
+      delta = TAS - TAS_original,
+      x_noise = round(abs(delta) / TAS_NOISE, 1),
+      sign_flip = !is.na(TAS_original) & sign(TAS) != sign(TAS_original) & recipe_id != "original",
+      sig_change = !is.na(TASp_original) & ((TASp < 0.05) != (TASp_original < 0.05)),
+      note = paste0(ifelse(sign_flip, "sign flip; ", ""),
+                    ifelse(sig_change, "p crosses 0.05; ", ""))
+    )
+  wide <- cmp_all |>
+    select(site_ID, model, recipe_id, TAS) |>
+    pivot_wider(names_from = recipe_id, values_from = TAS) |>
+    arrange(model, site_ID)
+  cat("### TAS by recipe (wide)\n\n")
+  print(knitr::kable(wide, digits = 5))
+  cat("\n\n### Change against `original`\n\n")
+  cmp_all |>
+    filter(recipe_id != "original") |>
+    select(site_ID, model, recipe_id, TAS, TASp, TAS_original, delta, x_noise, note) |>
+    arrange(model, site_ID, recipe_id) |>
+    knitr::kable(digits = 5) |> print()
+}
+```
+
+```{r tas-plot}
+#| echo: false
+#| fig-cap: "TAS by recipe. One point per recipe; the grey bar spans the recipes at each site. Recipes keep their colour across every figure."
+if (!is.null(outcome) && nrow(outcome)) {
+  d <- outcome |>
+    mutate(recipe_id = factor(recipe_id, levels = RECIPE_ORDER),
+           site_ID = factor(site_ID, levels = rev(sort(unique(site_ID)))))
+  rng <- d |> summarise(lo = min(TAS), hi = max(TAS), .by = c(site_ID, model))
+  ggplot(d, aes(y = site_ID)) +
+    geom_segment(data = rng, aes(x = lo, xend = hi, yend = site_ID),
+                 colour = GRID, linewidth = 2, lineend = "round") +
+    geom_vline(xintercept = 0, colour = INK2, linewidth = 0.4) +
+    geom_point(aes(x = TAS, colour = recipe_id), size = 3) +
+    facet_wrap(~ model, scales = "free_x") +
+    scale_colour_manual(values = recipe_cols, drop = FALSE) +
+    labs(x = "TAS (slope of log respiration ratio on window soil temperature)", y = NULL) +
+    theme_report()
+}
+```
+
+## Provenance: what each recipe did at each site, and why
+
+Every choice a recipe made, as the fit recorded it. `ts_reason` is the strategy's
+own explanation; `ts_verdict`/`ts_flags` are the quality screen's; `fill_method`
+and `fill_cv_rmse` are the blocked cross-validation's winner and its out-of-fold
+error where a reconstruction was used.
+
+```{r provenance}
+#| echo: false
+#| results: asis
+if (is.null(settings)) skip_note("Provenance", "variant_settings_csv not built.") else {
+  settings |>
+    filter(model == first(model)) |>   # choices are model-independent except swc
+    select(site_ID, recipe_id, ts_col, ts_reason, ts_verdict, ts_flags,
+           fill_method, fill_cv_rmse, bounds_strategy, tStart, tEnd,
+           window_gStart, window_gEnd, control_year, fit_profile) |>
+    arrange(site_ID, recipe_id) |>
+    knitr::kable(digits = 3) |> print()
+  cat("\n\nSoil water by model (the one model-dependent choice):\n\n")
+  settings |> select(site_ID, recipe_id, model, swc_col, swc_reason) |>
+    distinct() |> arrange(site_ID, recipe_id, model) |> knitr::kable() |> print()
+}
+```
+
+## Structure: what each recipe fitted
+
+Before any number, a recipe changes *which* (window × year) cells are fitted
+and which year is the control. These are exact — the same loop the fits run.
+
+```{r structure}
+#| echo: false
+#| results: asis
+if (is.null(siteyear)) skip_note("Structure", "variant_siteyear_csv not built.") else {
+  cells <- siteyear |>
+    summarise(
+      n_cells = sum(!is.na(alpha) | status %in% c("fitted", "not_fitted")),
+      n_rejected = sum(!status %in% c("fitted", "not_fitted")),
+      .by = c(site_ID, recipe_id, model)
+    )
+  ctrl <- settings |> select(site_ID, recipe_id, model, control_year, nwindow)
+  ctrl_orig <- ctrl |> filter(recipe_id == "original") |>
+    select(site_ID, model, control_year_original = control_year)
+  cells |>
+    left_join(ctrl, by = c("site_ID", "recipe_id", "model")) |>
+    left_join(ctrl_orig, by = c("site_ID", "model")) |>
+    mutate(control_changed = ifelse(control_year != control_year_original, "**yes**", "")) |>
+    arrange(site_ID, model, recipe_id) |>
+    knitr::kable() |> print()
+  if (!is.null(skips) && nrow(skips)) {
+    cat("\n\nWindow skips by reason:\n\n")
+    skips |> count(recipe_id, model, reason) |> pivot_wider(names_from = reason, values_from = n, values_fill = 0) |>
+      knitr::kable() |> print()
+  }
+}
+```
+
+## Is season detection redundant? The `noseason` test
+
+The hypothesis: push the whole year through and the fit-stage guards (soil
+temperature below 2 °C, too few observations, non-positive respiration) will
+discard the same windows season detection would have. If that were true, the
+cells `noseason` fits would lie almost entirely inside the detected season.
+
+```{r noseason}
+#| echo: false
+#| results: asis
+ns <- if (!is.null(siteyear)) filter(siteyear, recipe_id == "noseason") else NULL
+if (is.null(ns) || !nrow(ns)) {
+  skip_note("noseason test", "The `noseason` recipe is not in this run.")
+} else if (is.null(feats)) {
+  skip_note("noseason test", "growing_season_features_csv not built.")
+} else {
+  w <- ns |>
+    filter(status %in% c("fitted", "not_fitted")) |>
+    mutate(w_start = as.numeric(sub("_.*", "", window)),
+           w_end = as.numeric(sub(".*_", "", window))) |>
+    left_join(select(feats, site_ID, gStart, gEnd), by = "site_ID") |>
+    mutate(where = case_when(
+      w_end < gStart | w_start > gEnd ~ "entirely outside the detected season",
+      w_start >= gStart & w_end <= gEnd ~ "entirely inside",
+      TRUE ~ "straddles a boundary"
+    ))
+  tab <- w |> count(site_ID, model, where) |>
+    group_by(site_ID, model) |> mutate(share = round(n / sum(n), 3)) |> ungroup()
+  print(knitr::kable(tab))
+  outside <- tab |> filter(where == "entirely outside the detected season")
+  if (nrow(outside)) cat(sprintf(
+    "\n\nAcross this run, **%.0f%%** of the cells `noseason` fitted lie entirely outside the detected growing season. ",
+    100 * sum(outside$n) / sum(tab$n)),
+    "If the hypothesis held, this would be close to zero. The out-of-season cells that survive are those the guards do not remove: ",
+    "shoulder-season windows with soil above 2 °C and positive nighttime respiration.\n\n")
+  cat("\n\nWhat this test does *not* change: the detected season still sets the year gap scan and the control year. ",
+      "A fully season-free variant needs a replacement rule for both; see `docs/recipes.md`.\n\n")
+}
+```
+
+## The soil-temperature reconstruction each site would use
+
+Blocked cross-validation (leave-one-year-out) of every candidate method at each
+site. The winner is the method a `memory_fill` recipe attaches as `TS_memfill`
+wherever the quality screen fails the measured column. `lm_ta_pos` is the
+pipeline's pre-existing `TS ~ TA` default, scored on the same folds.
+
+```{r fill}
+#| echo: false
+#| results: asis
+if (is.null(fill_sum)) skip_note("Fill", "fill_summary_csv not built.") else {
+  cat("### Decision per site\n\n")
+  print(knitr::kable(fill_sum, digits = 3))
+  if (!is.null(fill_cv)) {
+    cat("\n\n### Cross-validation table\n\n")
+    fill_cv |>
+      select(site_ID, method, rmse, cell_mean_rmse, within_sd_ratio,
+             across_year_spread_ratio, amp_inflation, lag_pred_h) |>
+      arrange(site_ID, rmse) |>
+      knitr::kable(digits = 3) |> print()
+  }
+}
+```
+
+```{r fill-plot}
+#| echo: false
+#| fig-cap: "Out-of-fold RMSE by method and site. Lower is better; the incumbent `lm_ta_pos` is marked."
+if (!is.null(fill_cv) && nrow(fill_cv)) {
+  d <- fill_cv |> mutate(incumbent = method == "lm_ta_pos")
+  ggplot(d, aes(x = rmse, y = reorder(method, -rmse))) +
+    geom_col(aes(fill = incumbent), width = 0.6) +
+    facet_wrap(~ site_ID) +
+    scale_fill_manual(values = c(`FALSE` = "#2a78d6", `TRUE` = "#eb6834"),
+                      labels = c(`FALSE` = "candidate", `TRUE` = "incumbent (TS ~ TA)")) +
+    labs(x = "out-of-fold RMSE (°C), leave-one-year-out", y = NULL) +
+    theme_report()
+}
+```
+
+## Soil-temperature quality screen
+
+The verdict the `screen_best` and `memory_fill` strategies branch on, per site,
+with the diagnostics behind it. `amp_ratio` is the diurnal amplitude of soil
+temperature over that of air (buried soil damps; near 1 is not soil);
+`lag_unwrapped` is the phase lag in hours (soil lags air; zero is not soil).
+
+```{r tsqc}
+#| echo: false
+#| results: asis
+if (is.null(ts_qc)) skip_note("TS quality", "ts_qc_csv not built.") else {
+  ts_qc |> select(site_ID, verdict, flags, coverage, amp_ratio, lag_unwrapped,
+                  stuck_frac, mean_offset, n) |>
+    knitr::kable(digits = 3) |> print()
+}
+```
+
+## How to read this
+
+- `original` is the manuscript. Everything else is a *variant* and is judged
+  against it, and `original` is judged against `data-proc-original/`.
+- A TAS difference below the noise floor (`r format(TAS_NOISE)`) is not a
+  difference. The replicate runs in `ts-rework.html` (F8) measured this floor
+  at between $10^{-5}$ and $6 \times 10^{-4}$.
+- A recipe's number is only as trustworthy as the choice behind it, which is
+  why the provenance table sits next to the results rather than in an appendix.
+- Under the `fast` profile nothing here is a result.
