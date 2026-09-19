@@ -1,0 +1,6 @@
+recipe_id,ts,season,bounds,swc,year_qc,description
+original,site_info,detect,native,site_info,site_info,"Exactly the manuscript logic: soil temperature and soil water as declared in site_info.csv, detected growing season, each column's own bounds definition. Must reproduce the frozen oracle."
+screened,screen_best,detect,native,site_info,site_info,"Measured soil temperature wherever the quality screen passes it; the TS ~ TA regression only where it fails. Isolates the effect of no longer discarding good sensors (finding F10)."
+memfill,memory_fill,detect,native,site_info,site_info,"As screened, but a failed sensor is reconstructed by the blocked-CV-selected memory model (finding F12) instead of TS ~ TA."
+memfill_hh,memory_fill,detect,halfhourly,site_info,site_info,"As memfill, with one bounds definition -- half-hourly percentiles -- for every column, removing the inconsistency in finding F4."
+noseason,site_info,whole_year,native,site_info,site_info,"As original, but the 14-day windows tile the whole year. Season detection still sets the year gap scan and the control year; see the documented future work for a fully season-free variant."

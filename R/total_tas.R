@@ -128,12 +128,32 @@ S7::method(year_result_df, Year_Result) <- function(year_result) {
 
 ################################################################################
 
+# How hard the sampler works. `full` is the manuscript's configuration and the
+# only one whose numbers mean anything. `fast` exists so that the whole
+# pipeline -- every recipe, every collector, the report -- can be exercised end
+# to end on a laptop in minutes rather than hours; a TAS produced under it is a
+# smoke-test artefact and the settings row says so.
+#
+# Threaded as an argument rather than read from an environment variable inside
+# the fit, so that it is part of the target command: changing it invalidates
+# exactly the fits, and a store cannot mix profiles without saying so.
+fit_settings <- function(profile = "full") {
+  switch(
+    profile,
+    full = list(profile = "full", prior_iter = 2000, iter = 1000, chains = 4,
+                retry = TRUE, retry_iter = 4000),
+    fast = list(profile = "fast", prior_iter = 500, iter = 400, chains = 2,
+                retry = FALSE, retry_iter = NA_real_),
+    stop("Unknown fit profile ", shQuote(profile), "; expected \"full\" or \"fast\".")
+  )
+}
+
 adjust_prior <- function(priors, nlpar, p1, p2, family = "normal") {
   priors$prior[priors$nlpar == nlpar] <- sprintf("%s(%f, %f)", family, p1, p2)
   priors
 }
 
-get_priors <- function(model_data, direct = FALSE) {
+get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
   # Start with default prior
   priors <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
     brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) +
@@ -180,9 +200,9 @@ get_priors <- function(model_data, direct = FALSE) {
     brm_frmu,
     prior = priors,
     data = model_data,
-    iter = 2000,
-    cores = N_CORES,
-    chains = 4,
+    iter = fs$prior_iter,
+    cores = min(N_CORES, fs$chains),
+    chains = fs$chains,
     backend = "cmdstanr",
     control = list(adapt_delta = 0.95, max_treedepth = 15),
     refresh = 0
@@ -219,8 +239,19 @@ get_priors <- function(model_data, direct = FALSE) {
 # because none of those quantities depends on the sampler, two runs of it are
 # bit-identical -- so a difference against the manuscript is a real difference
 # and not noise.
+# `recipe` names the methodology; every choice below is resolved through
+# R/strategies.R from it. Left NULL it is the manuscript's, so every existing
+# caller keeps its meaning. `ts_col`/`swc_col` still override the recipe for
+# ad-hoc sensitivity runs. `fill` is the site's `fill_soil_temp()` result and
+# is only read by a `memory_fill` recipe. `fit_profile` is documented at
+# `fit_settings()`.
 total_tas_site <- function(site_data, site_info, direct = FALSE,
-                           ts_col = NULL, swc_col = NULL, fit = TRUE) {
+                           ts_col = NULL, swc_col = NULL, fit = TRUE,
+                           recipe = NULL, fill = NULL, fit_profile = "full") {
+  recipe <- recipe %||% original_recipe()
+  validate_recipe(recipe)
+  fs <- fit_settings(fit_profile)
+
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
   feature_gs <- site_data[["feature_gs"]]
@@ -248,7 +279,12 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   # why it cannot be a single column in site_info.csv: the direct model needs
   # soil water, so a site with none measured falls back to ERA5-Land, while the
   # total model does not use soil water at all and therefore needs no fallback.
-  swc_col <- swc_col %||% default_swc_col(site_info, direct)
+  swc_choice <- if (is.null(swc_col)) {
+    choose_swc_col(recipe, site_info, direct)
+  } else {
+    list(swc_col = swc_col, reason = "swc_col argument")
+  }
+  swc_col <- swc_choice$swc_col
   if (!is.na(swc_col)) {
     ac <- resolve_swc_column(ac, swc_col, name_site)
     a_measure_night_complete <- resolve_swc_column(a_measure_night_complete, swc_col, name_site)
@@ -276,12 +312,53 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     )
   }
 
-  ts_col <- ts_col %||% site_info[["ts_col"]]
+  ts_choice <- if (is.null(ts_col)) {
+    choose_ts_col(recipe, site_data, site_info, fill)
+  } else {
+    list(ts_col = ts_col, reason = "ts_col argument")
+  }
+  ts_col <- ts_choice$ts_col
+  ts_bounds_all <- site_data[["ts_bounds"]]
+  fill_method <- NA_character_
+  fill_cv_rmse <- NA_real_
+
+  # The reconstructed column is attached here, not in step 01, because it is
+  # produced by its own per-site target (`fill_soil_temp()`) and only a
+  # `memory_fill` recipe reads it. Its rows align with `site_data` by
+  # construction -- the fill was computed from the same tables -- and that is
+  # asserted rather than assumed. Its native bounds definition is the
+  # half-hourly one, like the other reconstructed column's.
+  if (identical(ts_col, "TS_memfill")) {
+    if (!fill_available(fill)) {
+      stop(name_site, ": recipe selected TS_memfill but no usable fill was supplied (",
+           fill_status(fill), ").")
+    }
+    stopifnot(
+      length(fill$ac_ts) == nrow(ac),
+      length(fill$night_ts) == nrow(a_measure_night_complete)
+    )
+    ac[["TS_memfill"]] <- fill$ac_ts
+    a_measure_night_complete[["TS_memfill"]] <- fill$night_ts
+    fill_rows <- fill$ts_bounds
+    fill_rows$native <- fill_rows$definition == "halfhourly"
+    ts_bounds_all <- dplyr::bind_rows(ts_bounds_all, fill_rows)
+    fill_method <- fill$method
+    fill_cv_rmse <- fill$cv_rmse
+  }
+
   ac <- resolve_ts_column(ac, ts_col)
   a_measure_night_complete <- resolve_ts_column(a_measure_night_complete, ts_col)
-  ts_range <- ts_bounds_for(site_data[["ts_bounds"]], ts_col)
+  ts_range <- choose_bounds(recipe, ts_bounds_all, ts_col)
   tStart <- ts_range[["tStart"]]
   tEnd <- ts_range[["tEnd"]]
+
+  # The span the windows tile. Under `whole_year` only this changes: the
+  # detected `gStart`/`gEnd` above still choose the control year, because that
+  # choice needs a season to be defined over and a season-free rule for it is
+  # documented, not implemented.
+  win <- choose_window_season(recipe, feature_gs)
+  wStart <- win[["gStart"]]
+  wEnd <- win[["gEnd"]]
 
   # calculate daily daytime NEE and rolling average
   # Is the data 30 minute or hourly? TODO: Check this logic!
@@ -362,20 +439,25 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   }
 
   # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
-  nwindow <- max(round((gEnd - gStart + 1) / WINDOW_SIZE), 1)
+  nwindow <- max(round((wEnd - wStart + 1) / WINDOW_SIZE), 1)
 
   # Every knob that decided the layout of this run, recorded alongside the
   # numbers it produced. `outcome` reports only TAS and two fit statistics, so
   # without this a difference between two runs cannot be attributed to the
   # column selected, the bounds, the control year or the window count.
+  ts_qc <- site_data[["ts_qc"]]
   settings <- tibble::tibble(
     site_ID = name_site,
+    recipe_id = recipe$recipe_id,
     model = if (direct) "direct" else "total",
+    fit_profile = fs$profile,
     ts_col = ts_col,
     swc_col = if (is.na(swc_col)) NA_character_ else swc_col,
     SWC_use = SWC_use,
     gStart = gStart,
     gEnd = gEnd,
+    window_gStart = wStart,
+    window_gEnd = wEnd,
     tStart = tStart,
     tEnd = tEnd,
     dt = dt,
@@ -383,21 +465,33 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     window_size = WINDOW_SIZE,
     nwindow = nwindow,
     control_year = control_year,
-    nyear_available = length(years)
+    nyear_available = length(years),
+    # Provenance: which strategy made each choice, and why.
+    ts_strategy = recipe$ts,
+    ts_reason = ts_choice$reason,
+    ts_verdict = if (!is.null(ts_qc)) ts_qc$verdict[[1]] else NA_character_,
+    ts_flags = if (!is.null(ts_qc)) ts_qc$flags[[1]] else NA_character_,
+    fill_method = fill_method,
+    fill_cv_rmse = fill_cv_rmse,
+    season_strategy = recipe$season,
+    bounds_strategy = recipe$bounds,
+    bounds_reason = ts_range$reason,
+    swc_strategy = recipe$swc,
+    swc_reason = swc_choice$reason
   )
 
   window_results <- list()
   for (iwindow in seq_len(nwindow)) {
     message("########################################")
     message(iwindow, " of ", nwindow)
-    window_start <- gStart + WINDOW_SIZE * (iwindow - 1)
-    window_end <- min(gStart + WINDOW_SIZE * iwindow, gEnd)
+    window_start <- wStart + WINDOW_SIZE * (iwindow - 1)
+    window_end <- min(wStart + WINDOW_SIZE * iwindow, wEnd)
     window_name <- paste(window_start, window_end, sep = "_")
     window_results[[window_name]] <- total_tas_window(
       ac, ac_day, a_measure_night_complete,
       window_start, window_end, nwindow, nobs_threshold, control_year,
-      SWC_use, tStart, tEnd, gEnd,
-      direct = direct, fit = fit
+      SWC_use, tStart, tEnd, wEnd,
+      direct = direct, fit = fit, fs = fs
     )
   }
 
@@ -412,16 +506,20 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     stop("No results produced, possibly because all windows were skipped.")
   }
 
+  model_name <- if (direct) "direct" else "total"
   window_results_df <- window_results |>
     lapply(`[[`, "outcome_siteyear") |>
     dplyr::bind_rows() |>
-    dplyr::mutate(site_ID = name_site, .before = 1)
+    dplyr::mutate(site_ID = name_site, recipe_id = recipe$recipe_id, model = model_name,
+                  .before = 1)
 
   window_skips <- window_results |>
     lapply(`[[`, "skipped") |>
     dplyr::bind_rows()
   if (nrow(window_skips)) {
-    window_skips <- dplyr::mutate(window_skips, site_ID = name_site, .before = 1)
+    window_skips <- dplyr::mutate(window_skips, site_ID = name_site,
+                                  recipe_id = recipe$recipe_id, model = model_name,
+                                  .before = 1)
   }
 
   ER_obs_pred <- window_results |>
@@ -452,6 +550,9 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
 
   outcome <- tibble::tibble(
     site_ID = name_site,
+    recipe_id = recipe$recipe_id,
+    model = if (direct) "direct" else "total",
+    fit_profile = fs$profile,
     RMSE = fit_stats[["RMSE"]],
     R2 = fit_stats[["Rsquared"]],
     control_year = control_year,
@@ -475,7 +576,7 @@ total_tas_window <- function(
   ac, ac_day, a_measure_night_complete,
   window_start, window_end, nwindow, nobs_threshold, control_year,
   SWC_use, tStart, tEnd, gEnd,
-  direct = FALSE, fit = TRUE
+  direct = FALSE, fit = TRUE, fs = fit_settings("full")
 ) {
 
   # A skipped window used to `return(NULL)`, which vanished without trace --
@@ -538,7 +639,7 @@ total_tas_window <- function(
     data_ref[["SWC"]] <- mean(ac$SWC[keep(ac)], na.rm = TRUE)
   }
 
-  priors <- if (fit) get_priors(model_data, direct = direct) else NULL
+  priors <- if (fit) get_priors(model_data, direct = direct, fs = fs) else NULL
 
   ERref_control <- NA
 
@@ -604,7 +705,7 @@ total_tas_window <- function(
       next
     }
 
-    mod <- fit_with_retry(data_subset, priors, direct)
+    mod <- fit_with_retry(data_subset, priors, direct, fs = fs)
 
     # Extract model results
     ER_obs_pred <- data_subset |>
@@ -682,14 +783,14 @@ total_tas_window <- function(
   )
 }
 
-fit_with_retry <- function(data_subset, priors, direct = FALSE) {
+fit_with_retry <- function(data_subset, priors, direct = FALSE, fs = fit_settings("full")) {
   brm_args <- list(
     if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,
     prior = priors,
     data = data_subset,
-    iter = 1000,
-    cores = N_CORES,
-    chains = 4,
+    iter = fs$iter,
+    cores = min(N_CORES, fs$chains),
+    chains = fs$chains,
     backend = "cmdstanr",
     control = list(adapt_delta = 0.90, max_treedepth = 15),
     refresh = 0
@@ -705,9 +806,9 @@ fit_with_retry <- function(data_subset, priors, direct = FALSE) {
   }
 
   # if brm models fail or have divergent transitions, try another time
-  if (failed_brm) {
+  if (failed_brm && isTRUE(fs$retry)) {
     brm_args2 <- modifyList(brm_args, list(
-      iter = 4000,
+      iter = fs$retry_iter,
       control = list(adapt_delta = 0.98, max_treedepth = 15)
     ))
     mod <- do.call(function(...) try(brms::brm(...)), brm_args2)

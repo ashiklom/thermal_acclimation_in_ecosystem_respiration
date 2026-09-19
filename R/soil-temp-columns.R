@@ -130,13 +130,64 @@ resolve_ts_column <- function(dat, ts_col) {
   dat
 }
 
+# The day-of-year-climatology definition of the bounds: average each DOY over
+# the years present, keep the DOYs inside the growing season, take the
+# 2.5/97.5 percentiles of *those* means. Averaging removes the diurnal and
+# interannual variance before the quantile is taken, so this band is much
+# narrower than `ts_bounds()`' half-hourly one on the same data -- finding F4.
+ts_bounds_climatology <- function(ts, doy, gStart, gEnd) {
+  in_gs <- dplyr::between(doy, gStart, gEnd) & !is.na(ts)
+  clim <- tapply(ts[in_gs], doy[in_gs], mean)
+  list(
+    tStart = unname(quantile(clim, 0.025, na.rm = TRUE)),
+    tEnd = unname(quantile(clim, 0.975, na.rm = TRUE))
+  )
+}
+
+# Both definitions for one column, as rows of the `ts_bounds` table. Neither
+# row is `native`: the native rows are the manuscript's own numbers and are
+# written by `prep_nee_ac()` directly, because one of them (the measured
+# column's) is not a pure function of the column -- it carries the 0 C floor
+# and, at three sites, the 2 C truncation.
+ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
+  hh <- ts_bounds(ts, doy, gStart, gEnd)
+  cl <- ts_bounds_climatology(ts, doy, gStart, gEnd)
+  tibble::tibble(
+    ts_col = ts_col,
+    definition = c("halfhourly", "climatology"),
+    native = FALSE,
+    tStart = c(hh$tStart, cl$tStart),
+    tEnd = c(hh$tEnd, cl$tEnd)
+  )
+}
+
 # The bounds recorded for a TS column by `prep_nee_ac()`.
-ts_bounds_for <- function(ts_bounds, ts_col) {
-  row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]
+#
+# With no `definition`, the column's *native* row: the one the manuscript used
+# for it. That is what every pre-existing caller means, and it is what keeps
+# tests/ts-swc-baseline.R's oracle comparison meaningful. With a `definition`,
+# the row computed under that definition, so a recipe can apply one definition
+# to every column.
+ts_bounds_for <- function(ts_bounds, ts_col, definition = NULL) {
+  has_def <- "definition" %in% names(ts_bounds)
+  row <- if (is.null(definition)) {
+    if (has_def) {
+      ts_bounds[ts_bounds[["ts_col"]] == ts_col & ts_bounds[["native"]], ]
+    } else {
+      ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]
+    }
+  } else {
+    if (!has_def) {
+      stop("This ts_bounds table predates bounds definitions; rebuild the site_data target.")
+    }
+    ts_bounds[ts_bounds[["ts_col"]] == ts_col & ts_bounds[["definition"]] == definition, ]
+  }
   if (nrow(row) != 1) {
     stop(
-      "Expected exactly one bounds row for ", shQuote(ts_col), ", found ",
-      nrow(row), ". Available: ", paste(ts_bounds[["ts_col"]], collapse = ", "), "."
+      "Expected exactly one bounds row for ", shQuote(ts_col),
+      if (!is.null(definition)) paste0(" under the ", shQuote(definition), " definition"),
+      ", found ", nrow(row), ". Available: ",
+      paste(unique(ts_bounds[["ts_col"]]), collapse = ", "), "."
     )
   }
   list(tStart = row[["tStart"]][[1]], tEnd = row[["tEnd"]][[1]])

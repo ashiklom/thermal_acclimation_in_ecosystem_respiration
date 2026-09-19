@@ -138,7 +138,19 @@ pipeline_sites <- function(scope = Sys.getenv("THERMAL_SITES", "dev"),
 
   if (identical(scope, "all")) return(handled)
   if (!identical(scope, "dev")) {
-    stop("THERMAL_SITES must be \"dev\" or \"all\", not ", shQuote(scope), ".")
+    # An explicit comma-separated list, for running a hand-picked subset
+    # without editing DEV_SITES.
+    wanted <- trimws(strsplit(scope, ",")[[1]])
+    unknown <- setdiff(wanted, handled)
+    if (length(unknown)) {
+      stop(
+        "THERMAL_SITES names ", length(unknown), " site(s) this pipeline does not ",
+        "handle: ", paste(shQuote(unknown), collapse = ", "),
+        ". Use \"dev\", \"all\", or a comma-separated list of northern-hemisphere, ",
+        "non-AmeriFlux-BASE site IDs."
+      )
+    }
+    return(wanted)
   }
 
   # A typo in DEV_SITES would otherwise produce a pipeline whose targets each

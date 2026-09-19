@@ -222,8 +222,20 @@ prep_fluxnet_family <- function(site_info) {
 # `get_good_years()` and `total_tas_site()` between them re-parsed the CSV
 # three times per site, and nothing prevented two of those reads from
 # straddling an edit to it.
-prep_nee_ac <- function(site_info) {
+# `recipe` carries the methodology choices. Only the axes in
+# `RECIPE_PREP_AXES` matter here -- every other axis is resolved in
+# `total_tas_site()`, and this function produces every candidate column and
+# both bounds definitions so that it can. Two recipes with the same
+# `recipe_prep_key()` therefore share one result of this function, which is
+# what keeps a sites x recipes grid affordable.
+prep_nee_ac <- function(site_info, recipe = original_recipe()) {
   name_site <- site_info[["site_ID"]]
+
+  # The one prep axis has one strategy. This is where a `computed` year
+  # qualification would branch; see docs/recipes.md for what it needs.
+  if (!identical(recipe$year_qc, "site_info")) {
+    stop("year_qc strategy ", shQuote(recipe$year_qc), " is not implemented in prep_nee_ac().")
+  }
 
   # Both readers return `list(ac =, dt =, ...)`. The AmeriFlux one also returns
   # the growing season it detected, because the u-star filtering it ran already
@@ -361,10 +373,21 @@ prep_nee_ac <- function(site_info) {
   # window-skip test downstream, so they only mean anything paired with the
   # column they were derived from. Keying them by column name makes selecting a
   # column and selecting its bounds a single, atomic act.
-  ts_bounds_tbl <- tibble::tibble(
-    ts_col = "TS_measured",
-    tStart = unname(max(tStart, 0.0)),
-    tEnd = unname(tEnd)
+  # The *native* row for the measured column is the manuscript's own number:
+  # percentiles of the day-of-year climatology from `detect_growing_season()`,
+  # floored at 0 C and, at the SITES_TS_MIN_2C sites, at 2 C. It is not a pure
+  # function of the column, which is why it is written here rather than by
+  # `ts_bounds_rows()`. The two non-native rows are the consistent
+  # definitions a recipe can select instead (finding F4).
+  ts_bounds_tbl <- dplyr::bind_rows(
+    tibble::tibble(
+      ts_col = "TS_measured",
+      definition = "climatology",
+      native = TRUE,
+      tStart = unname(max(tStart, 0.0)),
+      tEnd = unname(tEnd)
+    ),
+    ts_bounds_rows(ac_final[["TS_measured"]], ac_final[["DOY"]], gStart, gEnd, "TS_measured")
   )
 
   # `TS_linear` is built at *every* site, not only the 35 that select it.
@@ -400,14 +423,15 @@ prep_nee_ac <- function(site_info) {
   if (!is.null(substituted)) {
     ac_final[["TS_linear"]] <- substituted$ac[["TS"]]
     measured_final[["TS_linear"]] <- substituted$nightNEE[["TS"]]
-    ts_bounds_tbl <- dplyr::bind_rows(
-      ts_bounds_tbl,
-      tibble::tibble(
-        ts_col = "TS_linear",
-        tStart = substituted$tStart,
-        tEnd = substituted$tEnd
-      )
-    )
+    # The regressed column's native definition is the half-hourly one -- the
+    # manuscript computed it with `ts_bounds()` -- so that row is native and
+    # the climatology row is the alternative.
+    linear_rows <- ts_bounds_rows(ac_final[["TS_linear"]], ac_final[["DOY"]], gStart, gEnd, "TS_linear")
+    stopifnot(isTRUE(all.equal(
+      linear_rows$tStart[linear_rows$definition == "halfhourly"], substituted$tStart
+    )))
+    linear_rows$native <- linear_rows$definition == "halfhourly"
+    ts_bounds_tbl <- dplyr::bind_rows(ts_bounds_tbl, linear_rows)
   }
 
   # `TS` must still be the measured column on the way out of step 01. Every
@@ -473,11 +497,18 @@ prep_nee_ac <- function(site_info) {
     nyear = length(good_years)
   )
 
+  # Quality of the column a run will treat as measured, as this function
+  # leaves it -- after the site-specific column choices above. The verdict is
+  # what the `screen_best` and `memory_fill` strategies branch on.
+  ts_qc <- ts_quality(ac_final, ts_col = "TS_measured", ta_col = "TA") |>
+    dplyr::mutate(site_ID = name_site, .before = 1)
+
   list(
     ac = ac_final,
     nightNEE = measured_final,
     feature_gs = feature_gs,
-    ts_bounds = ts_bounds_tbl
+    ts_bounds = ts_bounds_tbl,
+    ts_qc = ts_qc
   )
 
 }
