@@ -79,6 +79,34 @@ The fields are as follows:
     -   Estimates the effects of *total* thermal responses on future (2041-2060) ecosystem respiration at all sites.
     -   Exports 1 csv file containing projected future nighttime ecosystem respiration, with and without considering thermal response strength (acclimation_data_future_ssp245.csv).
 
+## Running the `targets` pipeline
+
+The pipeline in `_targets.R` produces the thermal-response estimates under
+several **methodology recipes** side by side — the manuscript's logic
+(`original`) and the variants derived from the soil-temperature analysis — and
+compares them in `reports/variant-comparison.qmd`. See `docs/recipes.md` for
+what a recipe is and how to add one.
+
+Every dimension of the run is an environment variable:
+
+```
+THERMAL_SITES    dev (default) | all | DE-Tha,SE-Nor,...
+THERMAL_RECIPES  dev (default) | all | original,memfill,...
+THERMAL_MODELS   total,direct (default) | total | direct
+THERMAL_FIT      full (default) | fast
+```
+
+```bash
+# smoke test, minutes: two sites, every recipe, total model, shrunken sampler
+THERMAL_SITES=DE-RuC,DE-Hte THERMAL_RECIPES=all THERMAL_MODELS=total THERMAL_FIT=fast pixi run targets
+
+# the full grid, on the cluster (submit.sh sets these)
+THERMAL_SITES=all THERMAL_RECIPES=all pixi run targets
+```
+
+`THERMAL_FIT=fast` exists to prove the pipeline runs end to end; its TAS values
+are not results and the reports say so. Rendered reports land in `reports/`.
+
 ## How to reproduce the workflow:
 
 1.  Download all following raw data required for this project (All data have been uploaded on Zenodo with DOI: 10.5281/zenodo.18095996; please use data from the most recent release to match script updates).
