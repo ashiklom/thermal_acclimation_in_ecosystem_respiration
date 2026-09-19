@@ -81,10 +81,33 @@ ts_bounds <- function(ts, doy, gStart, gEnd) {
   )
 }
 
+# The fitting domain to use for a site's `TS_linear` column.
+#
+# `TS_linear` is now built at *every* site, not just the 35 that select it, so
+# that measured and regressed soil temperature can be compared anywhere. That
+# splits the domain question in two:
+#
+#   * A site that *declares* `ts_col = "TS_linear"` must also declare its
+#     domain. The declaration is returned unchanged -- NA included -- so that
+#     `ts_fit_data()` still rejects it. Silently defaulting here would let a
+#     half-filled site_info row through and change that site's coefficients
+#     without a word.
+#   * Anywhere else the column is a diagnostic: nothing selects it unless a
+#     sensitivity run names it. A missing declaration is expected rather than
+#     an error, and the default is `"ac"`, which is what 34 of the 35 declared
+#     sites use (US-Tw1 is the only `"night"`).
+ts_linear_domain_for <- function(site_info) {
+  domain <- site_info[["ts_linear_domain"]]
+  if (identical(site_info[["ts_col"]], "TS_linear")) {
+    return(domain)
+  }
+  if (length(domain) == 1 && !is.na(domain)) domain else "ac"
+}
+
 # Substitute the TS ~ TA regression for measured soil temperature in both
 # tables, and recompute the bounds on the new scale.
 apply_ts_linear <- function(ac, nightNEE, site_info, gStart, gEnd) {
-  mod <- ts_ta_model(ts_fit_data(ac, nightNEE, site_info[["ts_linear_domain"]]))
+  mod <- ts_ta_model(ts_fit_data(ac, nightNEE, ts_linear_domain_for(site_info)))
   nightNEE$TS <- overlay_ts(nightNEE$TS, predict_ts_from_ta(mod, nightNEE$TA))
   ac$TS <- overlay_ts(ac$TS, predict_ts_from_ta(mod, ac$TA))
   bounds <- ts_bounds(ac$TS, ac$DOY, gStart, gEnd)

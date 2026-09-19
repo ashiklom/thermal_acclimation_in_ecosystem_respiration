@@ -363,8 +363,37 @@ prep_nee_ac <- function(site_info) {
     tEnd = unname(tEnd)
   )
 
-  if (identical(site_info[["ts_col"]], "TS_linear")) {
-    substituted <- apply_ts_linear(ac_final, measured_final, site_info, gStart, gEnd)
+  # `TS_linear` is built at *every* site, not only the 35 that select it.
+  #
+  # The reason is that the substitution it performs is the largest unmeasured
+  # assumption in this analysis -- at 35 sites "soil temperature" is a linear
+  # function of air temperature -- and the only way to size the effect is to
+  # fit sites that have good measured soil temperature *both* ways and compare.
+  # That comparison needs the column to exist at sites that do not use it.
+  #
+  # Building it changes nothing about what a normal run fits: `ts_col` still
+  # comes from site_info.csv, `resolve_ts_column()` still selects by name, and
+  # the assertion below still requires `TS` to leave step 01 as the measured
+  # column. The extra column is inert until something asks for it by name.
+  declared_linear <- identical(site_info[["ts_col"]], "TS_linear")
+  substituted <- tryCatch(
+    apply_ts_linear(ac_final, measured_final, site_info, gStart, gEnd),
+    error = function(e) {
+      # A site that *selects* TS_linear cannot proceed without it. A site that
+      # only gets it as a diagnostic can: an un-fittable regression (no
+      # overlapping TA and TS, say) means the comparison is unavailable there,
+      # not that the site is broken.
+      if (declared_linear) {
+        stop(
+          name_site, " declares ts_col = \"TS_linear\" but the TS ~ TA fit ",
+          "failed: ", conditionMessage(e)
+        )
+      }
+      message("  TS_linear diagnostic unavailable (", conditionMessage(e), ")")
+      NULL
+    }
+  )
+  if (!is.null(substituted)) {
     ac_final[["TS_linear"]] <- substituted$ac[["TS"]]
     measured_final[["TS_linear"]] <- substituted$nightNEE[["TS"]]
     ts_bounds_tbl <- dplyr::bind_rows(

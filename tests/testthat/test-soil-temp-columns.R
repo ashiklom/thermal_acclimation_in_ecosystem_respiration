@@ -157,6 +157,53 @@ test_that("an undeclared or unknown fit domain fails by name", {
   expect_error(ts_fit_data(f$ac, f$night, "whole_record"), "Unknown ts_linear_domain")
 })
 
+# ------------------------------- the domain resolver for the diagnostic column
+
+test_that("a declared TS_linear site's domain is passed through untouched", {
+  # Including NA. `TS_linear` is now built at every site, so the resolver is
+  # what stands between a half-filled site_info row and a silent default: a
+  # site that *selects* the column and forgets to say which rows to fit on
+  # must still reach `ts_fit_data()`'s error, not quietly get "ac".
+  expect_equal(
+    ts_linear_domain_for(list(ts_col = "TS_linear", ts_linear_domain = "night")),
+    "night"
+  )
+  expect_equal(
+    ts_linear_domain_for(list(ts_col = "TS_linear", ts_linear_domain = "ac")),
+    "ac"
+  )
+  expect_true(is.na(
+    ts_linear_domain_for(list(ts_col = "TS_linear", ts_linear_domain = NA_character_))
+  ))
+})
+
+test_that("a diagnostic TS_linear column defaults to the ac domain", {
+  # At a site that selects measured soil temperature the column is inert
+  # unless a sensitivity run names it, so a missing declaration is expected
+  # rather than an error. "ac" is what 34 of the 35 declared sites use.
+  expect_equal(
+    ts_linear_domain_for(list(ts_col = "TS_measured", ts_linear_domain = NA_character_)),
+    "ac"
+  )
+  # An explicit declaration still wins, so a measured-TS site can be pinned to
+  # the nighttime domain for a comparison without editing this function.
+  expect_equal(
+    ts_linear_domain_for(list(ts_col = "TS_measured", ts_linear_domain = "night")),
+    "night"
+  )
+})
+
+test_that("every site in site_info resolves to a usable domain", {
+  si <- get_site_info()
+  domains <- vapply(seq_len(nrow(si)), function(i) ts_linear_domain_for(si[i, ]), "")
+  expect_true(all(domains %in% c("ac", "night")))
+  # The declared sites keep exactly the domains the CSV gives them, and every
+  # other site gets the default.
+  declared <- si$ts_col == "TS_linear"
+  expect_equal(domains[declared], si$ts_linear_domain[declared])
+  expect_true(all(domains[!declared] == "ac"))
+})
+
 # ------------------------------------- the shared TS ~ TA fit, step-01 form
 
 test_that("the consolidated fit reproduces the inline lm it replaced", {
