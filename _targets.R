@@ -18,8 +18,11 @@ tar_source()
 # midpoint and is *not yet benchmarked* -- worth timing the next time a full
 # run happens anyway.
 local <- crew_controller_local(workers = 8)
+# Worker count is a knob because the full grid's cost is near one 12 h window
+# at 20 workers -- see ts-variants.html "Running it" for the arithmetic. It is
+# read here, at pipeline definition, and does not enter any target's command.
 slurm <- crew_controller_slurm(
-  workers = 20,
+  workers = as.integer(Sys.getenv("THERMAL_SLURM_WORKERS", "20")),
   options_cluster = crew_options_slurm(
     time_minutes = 12*60,
     n_tasks = 4,
