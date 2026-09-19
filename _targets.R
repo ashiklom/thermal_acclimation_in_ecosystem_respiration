@@ -125,9 +125,21 @@ external <- list(
   tar_file(worldclim_files, download_worldclim())
 )
 
+# The run report. `tar_quarto()` scans the document for `tar_read`/`tar_load`
+# calls and makes each one a dependency, so the report re-renders whenever the
+# results it describes change rather than going quietly stale.
+#
+# It depends on the pipeline's own outputs only. The `workflows/` scripts are
+# still run by hand, so the sections that describe them guard on the file being
+# present and render an explicit skip when it is not.
+report <- list(
+  tar_quarto(run_report, path = "reports/pipeline-report.qmd", quiet = FALSE)
+)
+
 list(
   tar_file(site_info_file, SITE_INFO_CSV),
   external,
   site_targets,
-  outputs
+  outputs,
+  report
 )

@@ -11,12 +11,18 @@ format:
 execute:
   warning: false
   message: false
+# Paths below are written relative to the project root, which is also where the
+# pipeline writes. Without this, knitr would resolve them against reports/.
+knitr:
+  opts_knit:
+    root.dir: ".."
 ---
 
 ```{r setup}
 #| include: false
 library(dplyr)
 library(ggplot2)
+library(targets)
 
 # The report reads the CSVs the pipeline wrote. It never refits a model: every
 # number here is a lookup, so rendering is fast and cannot disagree with the
@@ -40,12 +46,24 @@ skip_note <- function(what, why) {
   cat(sprintf("::: {.callout-warning}\n## %s not available\n\n%s\n:::\n\n", what, why))
 }
 
-outcome_total <- read_if(file.path(PROC, "outcome_temp.csv"))
-outcome_direct <- read_if(file.path(PROC, "outcome_temp_water_gpp.csv"))
-siteyear_total <- read_if(file.path(PROC, "outcome_siteyear_temp.csv"))
-run_settings <- read_if(file.path(PROC, "run_settings.csv"))
-window_skips <- read_if(file.path(PROC, "window_skips.csv"))
-feature_gs <- read_if(file.path(FEATURES, "growing_season_features.csv"))
+# Pipeline outputs are reached through `tar_read()` rather than by path.
+# `tar_quarto()` scans this document for literal `tar_read(name)` calls and
+# turns each into a dependency edge, so changing the pipeline re-renders the
+# report. Reading the same files by name would leave it silently stale -- and
+# `tar_read_raw()` does not work here either, because the scanner needs the
+# target name as a bare symbol it can see.
+from_target <- function(path) {
+  if (is.null(path) || !length(path) || !all(file.exists(path))) return(NULL)
+  read.csv(path)
+}
+or_null <- function(expr) tryCatch(expr, error = function(e) NULL)
+
+outcome_total <- from_target(or_null(tar_read(outcome_temp_csv)))
+outcome_direct <- from_target(or_null(tar_read(outcome_temp_water_gpp_csv)))
+siteyear_total <- from_target(or_null(tar_read(outcome_siteyear_temp_csv)))
+run_settings <- from_target(or_null(tar_read(run_settings_csv)))
+window_skips <- from_target(or_null(tar_read(window_skips_csv)))
+feature_gs <- from_target(or_null(tar_read(growing_season_features_csv)))
 acclimation <- read_if(file.path(PROC, "acclimation_data.csv"))
 tmin_future <- read_if(file.path(PROC, "Tmin_month_ssp245_wc.csv"))
 future_er <- read_if(file.path(PROC, "acclimation_data_future_ssp245.csv"))
@@ -228,6 +246,10 @@ if (is.null(siteyear_total) || !"status" %in% names(siteyear_total)) {
 
 ```{r compare}
 #| echo: false
+#| output: asis
+# `output: asis` because this block emits both a table and a note. A `kable()`
+# that is not the last value of a chunk is not auto-printed, and printing it in
+# a normal chunk would render the markdown verbatim rather than as a table.
 if (is.null(outcome_total) || nrow(outcome_total) < 3) {
   skip_note("Cross-site comparison",
             "Needs at least a few sites; this run has too few for the group statistics to mean anything.")
@@ -237,10 +259,13 @@ if (is.null(outcome_total) || nrow(outcome_total) < 3) {
     select(site_ID, TAS_tot = TAS, TAS_totp = TASp) |>
     left_join(outcome_direct |> select(site_ID, TAS, TASp), by = "site_ID") |>
     left_join(si |> select(site_ID, IGBP, Climate_class), by = "site_ID")
-  knitr::kable(o, digits = 4, caption = "TAS by site, with vegetation and climate class.")
-  cat("\n\n**Note:** `02_02`'s published t-tests are all `df = 116`, i.e. exactly the ",
-      "117-site set. With ", nrow(o), " sites those statistics are not reproducible ",
-      "and are deliberately not attempted here.\n\n", sep = "")
+  cat(knitr::kable(o, digits = 4,
+                   caption = "TAS by site, with vegetation and climate class."), sep = "\n")
+  cat("\n\n**Note:** `02_02`'s published statistics are all `df = 116`, i.e. exactly the ",
+      "117-site set, and its vegetation- and climate-class t-tests need at least two ",
+      "sites per group. With ", nrow(o), " sites they are not reproducible and are ",
+      "deliberately not attempted here -- running `02_02` directly on this subset ",
+      "stops at the first such group.\n\n", sep = "")
 }
 ```
 
@@ -304,7 +329,11 @@ if (is.null(tmin_future)) {
   skip_note("Future temperature change",
             "`Tmin_month_ssp245_wc.csv` not produced — `04_01` needs the WorldClim rasters.")
 } else {
+  # `04_01` computes this for every site in site_info.csv, not just the ones
+  # the pipeline ran -- it needs only coordinates. Restricted here so the table
+  # describes this run; the CSV on disk still holds all 117.
   tmin_future |>
+    filter(site_ID %in% sites) |>
     tidyr::pivot_longer(starts_with("Tmin"), names_to = "month", values_to = "dTmin") |>
     group_by(site_ID) |>
     summarise(mean_dTmin = mean(dTmin, na.rm = TRUE),
@@ -319,7 +348,11 @@ if (is.null(tmin_future)) {
 if (is.null(future_er)) {
   skip_note("Future respiration", "`acclimation_data_future_ssp245.csv` not produced — run `workflows/04_02_...R`.")
 } else {
+  # Seeded from the 117-row site table, so every site outside this run carries
+  # the zero it was initialised with. Dropping them avoids a table of numbers
+  # that look real and are not.
   future_er |>
+    filter(site_ID %in% sites) |>
     select(site_ID, TAS_tot, TSmin_c, NEE_night_mod_p, NEE_night_mod_f, NEE_night_mod_fa) |>
     knitr::kable(digits = 4,
                  caption = "Present vs future nighttime respiration, with (`_fa`) and without (`_f`) thermal acclimation.")
