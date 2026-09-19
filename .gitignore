@@ -61,3 +61,6 @@ data-proc/ts-baseline-cache/
 # self-contained HTML that changes on every run.
 reports/*.html
 reports/*_files/
+
+# SLURM controller logs (submit.sh)
+/_logs/

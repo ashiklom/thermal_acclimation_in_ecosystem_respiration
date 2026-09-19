@@ -14,15 +14,20 @@ high-quality nighttime subset). Both carry every variant the site offers:
 | column | source |
 |---|---|
 | `TS_measured` | soil temperature as step 01 established it — measured, or reconstructed per site (see below) |
-| `TS_linear` | a `TS ~ TA` regression, present only at sites declaring `ts_col = "TS_linear"` |
+| `TS_linear` | a `TS ~ TA` regression, built at **every** site (inert unless a recipe or an override selects it) |
+| `TS_memfill` | the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `total_tas_site()` under a `memory_fill` recipe, not present in step 01's output |
 | `TS` | the column a run selected; equal to `TS_measured` on the way out of step 01 |
 | `SWC_measured` | soil water from the flux tower, in **percent** |
 | `SWC_era5` | soil water from ERA5-Land reanalysis, rescaled to percent on read |
 | `SWC` | the column a run selected |
 
-`ts_bounds` is a third element of the returned list: one row per available `TS`
-column, carrying the 2.5/97.5 percentiles of growing-season soil temperature
-for *that column*.
+`ts_bounds` is a third element of the returned list: for every available `TS`
+column, the 2.5/97.5 percentiles of growing-season soil temperature under
+**both** definitions (`definition` = `climatology` or `halfhourly`), with the
+row the manuscript used for that column flagged `native`.
+`ts_bounds_for(ts_bounds, ts_col)` returns the native row; with a `definition`
+it returns that one. `ts_qc` is a fourth element: the quality verdict on
+`TS_measured` that the `screen_best`/`memory_fill` recipe strategies branch on.
 
 ## Why bounds travel with the column
 
@@ -39,9 +44,21 @@ occupied. The effect is not subtle: at US-Kon the bounds move from
 substitution. Keying the bounds by column name makes choosing a column and
 choosing its bounds one act instead of two.
 
+**Most of that US-Kon move is not the substitution.** The measured column's
+native bounds are percentiles of the *day-of-year climatology* (from
+`detect_growing_season()`); the regressed column's are percentiles of the raw
+*half-hourly* values (`ts_bounds()`). Applying the half-hourly definition to
+the measured column at 44 sites, the admissible band widens from 10.0 to
+16.7 °C before the column changes at all (`ts-rework.html`, F4). That is why
+`ts_bounds` now carries both definitions for every column: a recipe with
+`bounds = halfhourly` or `climatology` applies one definition throughout, and
+`bounds = native` reproduces the manuscript.
+
 ## Which column a run uses
 
-Soil temperature is a per-site property, declared in `site_info.csv`:
+The choice is made by the run's **recipe** (`docs/recipes.md`). Under the
+`original` recipe — and whenever `total_tas_site()` is called without one —
+soil temperature is a per-site property, declared in `site_info.csv`:
 
 - `ts_col` — `TS_measured` (82 sites) or `TS_linear` (35 sites).
 - `ts_linear_domain` — the rows the regression is fitted on: `ac` (34 sites,
