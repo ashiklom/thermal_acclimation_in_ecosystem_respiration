@@ -330,7 +330,11 @@ prep_nee_ac <- function(site_info) {
     "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE",
     "NEE", "NEE_uStar_f", "TA", "TS", "SWC", "SW_IN", "daytime"
   )
-  ac_optional <- c("NEE_QC", "GPP_DT")
+  # `NETRAD` is optional because only some products and some AmeriFlux BASE
+  # files carry it. It is carried so that reconstructions driven by radiation
+  # can be scored against air-temperature-only ones without re-reading the raw
+  # record; nothing in the current model formulae reads it.
+  ac_optional <- c("NEE_QC", "GPP_DT", "NETRAD")
 
   ac_final <- ac |>
     dplyr::filter(dplyr::between(.data$YEAR, iStart, iEnd)) |>

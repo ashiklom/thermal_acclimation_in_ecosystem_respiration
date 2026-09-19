@@ -225,6 +225,24 @@ prep_ustar_df <- function(a, site_info) {
     ac$TA <- a[[site_info$TA]]
   }
 
+  # Net radiation, where the BASE file has it. `fix_soil_temp()` already reads
+  # it -- the random-forest branch is `TS ~ TA + NETRAD` -- but it reads it
+  # from the raw record and throws it away again, so nothing downstream of
+  # step 01 can use or evaluate it. Carrying it forward is what lets the
+  # radiation-driven reconstructions be cross-validated against the
+  # air-temperature-only ones on equal terms.
+  #
+  # The declared column wins; a bare `NETRAD` is the fallback, because most
+  # BASE files that have net radiation call it that and only the five sites
+  # that needed a disambiguated replicate say so in site_info.csv.
+  netrad_column <- site_info[["netrad_column"]]
+  if (is.na(netrad_column) && "NETRAD" %in% names(a)) {
+    netrad_column <- "NETRAD"
+  }
+  if (!is.na(netrad_column) && netrad_column %in% names(a)) {
+    ac$NETRAD <- a[[netrad_column]]
+  }
+
   # soil temperature TS
   # TODO: Implement
   if (site_info$estimate_Ts) {
