@@ -148,34 +148,34 @@ parse_toml <- function(path) {
 # Which sites the pipeline builds targets for.
 #
 # `"dev"` (the default) is the small representative sample in `DEV_SITES`;
-# `"all"` is every site the FLUXNET-family reader handles. The full list is
-# matched by substring because `source` is a `+`-separated provenance list
-# (e.g. "WW2020+FLUXNET+ICOS"); see `FLUX_PRODUCTS` in R/constants.R.
+# `"all"` is every site in site_info.csv. Both readers are in scope: AmeriFlux
+# BASE and the FLUXNET-family products alike, in either hemisphere.
+#
+# Scope is not a claim that every site will succeed. A site whose raw data is
+# not on disk, or which needs a reader branch that is still a `stop()` (see
+# the `estimate_Ts` sites in `prep_ustar_df()`), fails as its own target under
+# `error = "continue"` and is reported by the run report. That is deliberately
+# a per-site failure rather than a silent exclusion from the grid, so that the
+# gap is visible in the results rather than only in this function.
 #
 # This is called while the pipeline is being *constructed*, because `tar_map()`
 # needs the site names in order to generate target names. So it cannot itself
 # be a target, and reads site_info.csv directly.
 pipeline_sites <- function(scope = Sys.getenv("THERMAL_SITES", "dev"),
                            site_info = get_site_info()) {
-  handled <- site_info |>
-    dplyr::filter(
-      !grepl("AmeriFlux_BASE", .data$source, fixed = TRUE),
-      .data$LAT > 0
-    ) |>
-    dplyr::pull("site_ID")
+  known <- site_info[["site_ID"]]
 
-  if (identical(scope, "all")) return(handled)
+  if (identical(scope, "all")) return(known)
   if (!identical(scope, "dev")) {
     # An explicit comma-separated list, for running a hand-picked subset
     # without editing DEV_SITES.
     wanted <- trimws(strsplit(scope, ",")[[1]])
-    unknown <- setdiff(wanted, handled)
+    unknown <- setdiff(wanted, known)
     if (length(unknown)) {
       stop(
-        "THERMAL_SITES names ", length(unknown), " site(s) this pipeline does not ",
-        "handle: ", paste(shQuote(unknown), collapse = ", "),
-        ". Use \"dev\", \"all\", or a comma-separated list of northern-hemisphere, ",
-        "non-AmeriFlux-BASE site IDs."
+        "THERMAL_SITES names ", length(unknown), " site(s) that are not in ",
+        SITE_INFO_CSV, ": ", paste(shQuote(unknown), collapse = ", "),
+        ". Use \"dev\", \"all\", or a comma-separated list of site IDs."
       )
     }
     return(wanted)
@@ -184,12 +184,11 @@ pipeline_sites <- function(scope = Sys.getenv("THERMAL_SITES", "dev"),
   # A typo in DEV_SITES would otherwise produce a pipeline whose targets each
   # fail separately at download time, and under `error = "continue"` that looks
   # much like a data problem.
-  unknown <- setdiff(DEV_SITES, handled)
+  unknown <- setdiff(DEV_SITES, known)
   if (length(unknown)) {
     stop(
-      "DEV_SITES names ", length(unknown), " site(s) this pipeline does not ",
-      "handle: ", paste(shQuote(unknown), collapse = ", "),
-      ". They have to be northern-hemisphere and not AmeriFlux BASE."
+      "DEV_SITES names ", length(unknown), " site(s) that are not in ",
+      SITE_INFO_CSV, ": ", paste(shQuote(unknown), collapse = ", "), "."
     )
   }
   DEV_SITES

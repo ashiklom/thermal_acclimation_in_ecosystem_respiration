@@ -16,23 +16,27 @@ test_that("pipeline_sites() defaults to the development sample", {
   expect_identical(pipeline_sites(), DEV_SITES) # THERMAL_SITES unset
 })
 
-test_that("pipeline_sites('all') is a superset that still excludes AmeriFlux", {
+test_that("pipeline_sites('all') is every declared site, both readers, both hemispheres", {
   all_sites <- pipeline_sites(scope = "all")
+  info <- get_site_info()
+  expect_setequal(all_sites, info$site_ID)
   expect_true(all(DEV_SITES %in% all_sites))
-  expect_true(length(all_sites) > length(DEV_SITES))
 
-  info <- get_site_info() |> dplyr::filter(.data$site_ID %in% all_sites)
-  expect_false(any(grepl("AmeriFlux_BASE", info$source, fixed = TRUE)))
-  expect_true(all(info$LAT > 0))
+  # The two exclusions this function used to carry. They are gone, and their
+  # absence is the point: an AmeriFlux or southern-hemisphere site that cannot
+  # be built should fail as its own target, visibly, not vanish from the grid.
+  scoped <- info |> dplyr::filter(.data$site_ID %in% all_sites)
+  expect_true(any(grepl("AmeriFlux_BASE", scoped$source, fixed = TRUE)))
+  expect_true(any(scoped$LAT < 0))
 })
 
 test_that("an unrecognised scope is an error, not a silent empty pipeline", {
   expect_error(pipeline_sites(scope = "six"), "THERMAL_SITES")
 })
 
-test_that("a DEV_SITES entry the pipeline cannot handle is caught", {
-  # US-Kon is AmeriFlux BASE, AU-Tum is southern hemisphere. Either one would
-  # otherwise produce targets that each fail on their own at download time.
+test_that("a DEV_SITES entry that is not a declared site is caught", {
+  # Otherwise it would produce targets that each fail on their own at download
+  # time, which under `error = "continue"` looks much like a data problem.
   fake <- get_site_info() |> dplyr::filter(.data$site_ID != DEV_SITES[[1]])
   expect_error(pipeline_sites(scope = "dev", site_info = fake), DEV_SITES[[1]])
 })
@@ -77,3 +81,4 @@ test_that("the sample covers both soil-temperature estimation methods", {
 test_that("the sample covers the special growing-season cut-off", {
   expect_true(any(DEV_SITES %in% SITES_GS_NEE_ZERO))
 })
+
