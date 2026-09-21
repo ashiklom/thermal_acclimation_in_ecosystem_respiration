@@ -155,15 +155,9 @@ prep_fluxnet_family <- function(site_info) {
   a$YEAR <- lubridate::year(a$TIMESTAMP)
   a$MONTH <- lubridate::month(a$TIMESTAMP)
   a$DAY <- lubridate::day(a$TIMESTAMP)
-  a$DOY <- lubridate::yday(a$TIMESTAMP)
+  a$DOY <- wrap_growing_doy(lubridate::yday(a$TIMESTAMP), growing_year_start(site_info))
   a$HOUR <- lubridate::hour(a$TIMESTAMP)
   a$MINUTE <- lubridate::minute(a$TIMESTAMP)
-
-  if (site_info[["LAT"]] < 0) {
-    # TODO: Work out the southern hemisphere logic
-    stop("southern hemisphere sites not implemented yet")
-    a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
-  }
 
   if (name_site == "CZ-Stn") {
     # use TS of second layer because the first layer is incomplete
@@ -323,7 +317,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
   }
 
   measured_final <- measured |>
-    dplyr::mutate(growing_year = dplyr::if_else(.data$DOY <= 366, .data$YEAR, .data$YEAR - 1)) |>
+    dplyr::mutate(growing_year = growing_year_of(.data$DOY, .data$YEAR)) |>
     dplyr::filter(.data$growing_year %in% good_years) |>
     dplyr::select(
       "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE",
@@ -494,7 +488,11 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
     # `ts_bounds` for no reason anyone would enjoy debugging.
     tStart = unname(max(tStart, 0.0)),
     tEnd = unname(tEnd),
-    nyear = length(good_years)
+    nyear = length(good_years),
+    # The DOY origin these bounds are expressed in. `choose_window_season()`
+    # needs it to lay out a whole-year span in the same coordinates, and
+    # carrying it here keeps the recipe strategies from re-reading site_info.
+    growing_year_start = growing_year_start(site_info)
   )
 
   # Quality of the column a run will treat as measured, as this function

@@ -60,7 +60,10 @@ ts_fill_add_features <- function(dat) {
     by = "date"
   )
 
-  th_d <- 2 * pi * dat$DOY / 365.25
+  # From the date, not from `DOY`, which at a wrapped site runs past 366 --
+  # the seasonal harmonic has to be periodic in the calendar year. Identical
+  # to `dat$DOY` wherever the site is not wrapped.
+  th_d <- 2 * pi * lubridate::yday(dat$date) / 365.25
   th_h <- 2 * pi * dat$HOUR / 24
   dat$doy_s1 <- sin(th_d);     dat$doy_c1 <- cos(th_d)
   dat$doy_s2 <- sin(2 * th_d); dat$doy_c2 <- cos(2 * th_d)
@@ -222,7 +225,7 @@ tas_windows <- function(gStart, gEnd) {
 window_cells <- function(dat, gStart, gEnd, col) {
   wins <- tas_windows(gStart, gEnd)
   dat <- dat |>
-    dplyr::mutate(growing_year = dplyr::if_else(.data$DOY <= 366, .data$YEAR, .data$YEAR - 1L))
+    dplyr::mutate(growing_year = growing_year_of(.data$DOY, .data$YEAR))
   purrr::map_dfr(seq_len(nrow(wins)), function(i) {
     w <- wins[i, ]
     dat |>

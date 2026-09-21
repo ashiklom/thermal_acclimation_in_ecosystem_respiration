@@ -44,9 +44,13 @@ the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
 ### `season`
 
 - `detect` — the detected growing season.
-- `whole_year` — DOY 1–366. **Only the window layout changes.** The detected
-  season still drives the year gap scan (in step 01) and the control-year
-  choice, because both need a span to be defined over. See *Future work*.
+- `whole_year` — a full year of DOY, starting where the site's growing year
+  starts: 1–366 at an ordinary site, and 183–548 at one whose growing year is
+  wrapped (`growing_year_start` in site_info.csv), so that the span is in the
+  same coordinates as the data. **Only the window layout changes.** The
+  detected season still drives the year gap scan (in step 01) and the
+  control-year choice, because both need a span to be defined over. See
+  *Future work*.
 
 ### `bounds`
 

@@ -82,18 +82,28 @@ fill_status <- function(fill) {
 # The day-of-year span the 14-day windows tile.
 #
 #   detect      the detected growing season: today's behaviour.
-#   whole_year  DOY 1-366. Tests the hypothesis that season detection is
+#   whole_year  a full year of DOY, starting where the site's growing year
+#               starts. Tests the hypothesis that season detection is
 #               redundant with the fit-stage guards. Only the *window layout*
 #               changes: the detected season still drives the year gap scan
 #               (in step 01) and the control-year choice, because both need a
 #               span to be defined over and a season-free rule for them is a
 #               separate piece of work. See docs/recipes.md.
+#
+# The span has to be in the same DOY coordinates as the data. At a site whose
+# growing year is wrapped, DOY runs 183..548 and a literal 1-366 would tile
+# only the first half of the record; so the origin comes from `feature_gs`,
+# where `prep_nee_ac()` recorded it. It is 1 at every unwrapped site, which
+# leaves the manuscript's layout untouched.
 choose_window_season <- function(recipe, feature_gs) {
+  origin <- feature_gs[["growing_year_start"]]
+  if (is.null(origin) || is.na(origin)) origin <- 1L
   switch(
     recipe$season,
     detect = list(gStart = feature_gs[["gStart"]], gEnd = feature_gs[["gEnd"]],
                   reason = "detected growing season"),
-    whole_year = list(gStart = 1, gEnd = 366, reason = "whole year, DOY 1-366"),
+    whole_year = list(gStart = origin, gEnd = origin + 365,
+                      reason = sprintf("whole year, DOY %d-%d", origin, origin + 365)),
     stop("Unknown season strategy ", shQuote(recipe$season))
   )
 }

@@ -399,24 +399,18 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     dplyr::select(-"DOY_gpp") |>
     dplyr::filter(!is.na(.data$NEE_daytime1))
 
-  # Deal with sites in southern hemisphere
-  # add growing_year
-  # TODO: Will this be a problem in leap years?
   a_measure_night_complete <- a_measure_night_complete |>
-    dplyr::mutate(growing_year = dplyr::case_when(
-      .data$DOY <= 366 ~ .data$YEAR,
-      TRUE ~ .data$YEAR - 1
-    ))
+    dplyr::mutate(growing_year = growing_year_of(.data$DOY, .data$YEAR))
   ac <- ac |>
-    dplyr::mutate(growing_year = dplyr::case_when(
-      .data$DOY <= 366 ~ .data$YEAR,
-      TRUE ~ .data$YEAR - 1
-    ))
+    dplyr::mutate(growing_year = growing_year_of(.data$DOY, .data$YEAR))
 
-  # remove the growing_year with incomplete data
-  # sites in southern hemisphere lose one year, because growing season crosses two years
+  # A site whose growing year is wrapped loses one year at each end of the
+  # record: the first growing year began before the data start and the last
+  # runs past their end, so both are partial. Keyed off the declaration rather
+  # than the two site names the original listed, so that a third such site
+  # does not silently keep its partial years.
   # TODO: Move this logic out of here.
-  if (name_site %in% c("AU-Tum", "ZA-Kru")) {
+  if (growing_year_start(site_info) > 1) {
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(dplyr::between(.data$growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
     ac <- ac |>

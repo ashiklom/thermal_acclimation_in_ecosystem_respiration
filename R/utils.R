@@ -29,7 +29,8 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
     estimate_ts_method = "c",
     netrad_column = "c",
     ts_col = "c",
-    ts_linear_domain = "c"
+    ts_linear_domain = "c",
+    growing_year_start = "i"
   )
 
   dat <- readr::read_csv(path, col_types = site_info_cols)
@@ -72,6 +73,33 @@ site_sources <- function(site_info) {
     )
   }
   sources
+}
+
+# The day of year a site's growing year begins.
+#
+# Northern-hemisphere sites run on the calendar year, so DOY 1 and no wrapping.
+# A site whose growing season straddles New Year declares the DOY it begins on
+# instead, and `wrap_growing_doy()` shifts the earlier part of each calendar
+# year past DOY 366 so that the season is one contiguous interval. AU-Tum and
+# ZA-Kru declare 183.
+#
+# This is declared per site rather than derived from `LAT < 0` because the two
+# are different questions. BR-Ma2 and BR-Sa1 are south of the equator but have
+# no temperature seasonality: their growing season is pinned to the whole
+# calendar year (gStart 1, gEnd 366), and wrapping them would put those bounds
+# outside the data the windows tile. The original workflows wrapped by an
+# explicit site list for that reason -- and wrapped no AmeriFlux site at all.
+growing_year_start <- function(site_info) {
+  declared <- site_info[["growing_year_start"]]
+  if (is.null(declared) || length(declared) != 1 || is.na(declared)) return(1L)
+  declared <- as.integer(declared)
+  if (declared < 1 || declared > 366) {
+    stop(
+      "Site ", site_info[["site_ID"]], " declares growing_year_start = ",
+      declared, ", which is not a day of year."
+    )
+  }
+  declared
 }
 
 # Which reader handles this site. AmeriFlux BASE needs its own path (u-star

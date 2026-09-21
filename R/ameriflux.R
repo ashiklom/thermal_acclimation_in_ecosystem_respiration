@@ -53,9 +53,7 @@ prep_ameriflux <- function(site_info) {
     dplyr::mutate(DATE = as.Date(.data$TIMESTAMP)) |>
     dplyr::left_join(sunrise_set, by = c("DATE" = "date"))
 
-  if (site_info[["LAT"]] < 0) {
-    a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
-  }
+  a$DOY <- wrap_growing_doy(a$DOY, growing_year_start(site_info))
 
   # determine: day-time or night-time
   dt <- difftime(a$TIMESTAMP[2], a$TIMESTAMP[1], units = "hours")
@@ -129,7 +127,13 @@ prep_ameriflux <- function(site_info) {
   tEnd <- gs$tEnd
 
   years <- unique(ac[["YEAR"]])
-  seasonStarts <- lapply(years, \(y) tibble::tibble(DOY = c(gStart, gEnd), year = y)) |>
+  # REddyProc wants real days of year, so a wrapped bound has to come back
+  # under 366 before it is handed over. No AmeriFlux site declares a wrapped
+  # growing year today; this is here so that one could.
+  seasonStarts <- lapply(
+    years,
+    \(y) tibble::tibble(DOY = unwrap_growing_doy(c(gStart, gEnd)), year = y)
+  ) |>
     dplyr::bind_rows()
 
   ac_u <- ac |>

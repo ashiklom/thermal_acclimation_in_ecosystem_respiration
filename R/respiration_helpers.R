@@ -24,11 +24,40 @@ add_timestamp_columns <- function(a, dt) {
   a
 }
 
-adjust_southern_hemisphere <- function(dat, lat) {
-  if (lat < 0) {
-    dat$DOY[dat$DOY < 183] <- dat$DOY[a$DOY < 183] + 366
-  }
-  dat
+# Wrap day-of-year so that a growing season straddling New Year is one
+# contiguous interval. Days before `origin` belong to the growing year that
+# began the previous calendar year, and are pushed past the end of it: with
+# `origin = 183`, DOY runs 183..548 and 1 January is 367.
+#
+# `366` is the shift whatever the year's length, as in the original workflows.
+# The consequence is that in a non-leap growing year the wrapped series steps
+# 365 -> 367 over New Year, leaving DOY 366 empty; the day is not lost, only
+# labelled one higher than the elapsed-day count. Every downstream use is a
+# `between(DOY, ...)` window or a by-DOY average, both of which tolerate the
+# skip, and the alternative -- a year-length-dependent shift -- would give the
+# same calendar date two different DOYs depending on the year.
+#
+# The invariant the rest of the pipeline rests on: `DOY > 366` if and only if
+# the row falls in the calendar year *after* the one its growing year started
+# in. See `growing_year_of()`.
+wrap_growing_doy <- function(doy, origin) {
+  if (origin <= 1) return(doy)
+  ifelse(doy < origin, doy + 366, doy)
+}
+
+# The inverse, for the places that need a real day of year back: building a
+# calendar timestamp from a growing-season bound, and handing season starts to
+# REddyProc, which wants a yday. A no-op on unwrapped values.
+unwrap_growing_doy <- function(doy) {
+  ifelse(doy > 366, doy - 366, doy)
+}
+
+# The growing year a row belongs to, from its (possibly wrapped) DOY and its
+# calendar year. Unwrapped sites never exceed DOY 366, so this is the identity
+# for them; see `wrap_growing_doy()` for why the test is the right one.
+growing_year_of <- function(doy, year) {
+  year <- as.integer(year)
+  dplyr::if_else(doy <= 366, year, year - 1L)
 }
 
 
@@ -86,14 +115,14 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
   list(gStart = gStart, gEnd = gEnd, tStart = tStart, tEnd = tEnd)
 }
 
-build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere) {
-  if (southern_hemisphere) {
-    gStart_adj <- ifelse(gStart > 366, gStart - 366, gStart)
-    gEnd_adj <- ifelse(gEnd > 366, gEnd - 366, gEnd)
-  } else {
-    gStart_adj <- gStart
-    gEnd_adj <- gEnd
-  }
+# The growing-season start and end as calendar timestamps, one pair per year,
+# so that `get_good_years()` can see a gap that runs off either end of the
+# season. The TIMESTAMP is built from the *unwrapped* bound -- it has to be a
+# real date -- while the DOY column keeps the wrapped value, because that is
+# what the `DOY >= gStart & DOY <= gEnd` filter downstream compares against.
+build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt) {
+  gStart_adj <- unwrap_growing_doy(gStart)
+  gEnd_adj <- unwrap_growing_doy(gEnd)
   data.frame(
     TIMESTAMP = c(
       as.POSIXct(
@@ -112,7 +141,6 @@ build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere) 
 get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
 
   name_site <- site_info[["site_ID"]]
-  southern_hemisphere <- site_info[["LAT"]] < 0
 
   gap_thresh <- compute_gap_thresholds(gStart, gEnd, name_site)
   gap_max_thresh <- gap_thresh$gap_max_thresh
@@ -121,7 +149,7 @@ get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
   yStart <- min(measured$YEAR)
   yEnd <- max(measured$YEAR)
 
-  a_gs_dates <- build_gs_dates(gStart, gEnd, yStart, yEnd, dt, southern_hemisphere)
+  a_gs_dates <- build_gs_dates(gStart, gEnd, yStart, yEnd, dt)
   a_check_gaps <- measured |>
     dplyr::select("TIMESTAMP", "DOY") |>
     dplyr::bind_rows(a_gs_dates) |>
@@ -129,10 +157,7 @@ get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
     dplyr::arrange(.data$TIMESTAMP)
 
   good_years <- a_check_gaps |>
-    dplyr::mutate(growing_year = dplyr::case_when(
-      DOY <= 366 ~ lubridate::year(TIMESTAMP),
-      TRUE ~ lubridate::year(TIMESTAMP) - 1
-    )) |>
+    dplyr::mutate(growing_year = growing_year_of(.data$DOY, lubridate::year(.data$TIMESTAMP))) |>
     dplyr::arrange(growing_year, TIMESTAMP) |>
     dplyr::group_by(growing_year) |>
     dplyr::filter(DOY >= gStart & DOY <= gEnd) |>

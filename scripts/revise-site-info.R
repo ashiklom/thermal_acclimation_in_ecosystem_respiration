@@ -34,6 +34,23 @@ netrad_sites <- tribble(
 )
 ts_regression_sites <- c("DE-Hte", "FR-FBn")
 
+# Sites whose growing year does not start on 1 January, and the day of year it
+# starts on instead. `wrap_growing_doy()` shifts everything earlier in the
+# calendar year past DOY 366 so that a season straddling New Year is one
+# contiguous interval -- which is what makes gStart/gEnd, the 14-day windows
+# and the gap scan well defined at these sites.
+#
+# Declared, not derived from `LAT < 0`. BR-Ma2 and BR-Sa1 are also south of the
+# equator, but they have no temperature seasonality: their growing season is
+# the whole calendar year, and wrapping them would move their pinned gStart/
+# gEnd outside the data. The original workflows wrapped by an explicit site
+# list for the same reason.
+wrapped_growing_year <- tribble(
+  ~site_ID, ~growing_year_start,
+  "AU-Tum", 183L,
+  "ZA-Kru", 183L
+)
+
 # Sites whose soil temperature the second pipeline step replaces with a TS ~ TA
 # regression. This was the hard-coded `site_TS_issue` vector in R/total_tas.R;
 # it is a per-site property, so it belongs here with the other per-site
@@ -110,7 +127,16 @@ sites_v2 <- sites |>
       .data$site_ID %in% ts_linear_night_sites ~ "night",
       TRUE ~ "ac"
     )
+  ) |>
+  left_join(wrapped_growing_year, by = "site_ID")
+
+missing_wrapped <- setdiff(wrapped_growing_year$site_ID, sites_v2$site_ID)
+if (length(missing_wrapped) > 0) {
+  stop(
+    "wrapped_growing_year names sites that are not in site_info: ",
+    paste(missing_wrapped, collapse = ", ")
   )
+}
 
 # Guard the two new columns against drifting out of step: a fit domain without a
 # selection is meaningless, and a selection without a domain has nothing to fit.
