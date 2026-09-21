@@ -134,3 +134,22 @@ test_that("prep_ustar_df returns the table and the RH-conversion decision", {
     expect_true(case$col %in% names(out$ac), info = case$si$site_ID)
   }
 })
+
+# The one AmeriFlux branch with no implementation behind it. Removing the
+# reader's exclusion from `pipeline_sites()` put these eight sites into
+# `THERMAL_SITES=all`, where they fail individually; that is the intended
+# behaviour, but only if the list stays honest about who is affected.
+test_that("the unimplemented estimate_Ts sites are exactly what site_info declares", {
+  si <- get_site_info()
+  declared <- si$site_ID[si$estimate_Ts & grepl("AmeriFlux_BASE", si$source, fixed = TRUE)]
+  expect_setequal(declared, SITES_TS_ESTIMATE_UNIMPLEMENTED)
+})
+
+test_that("an estimate_Ts site fails by name rather than mid-reader", {
+  si <- get_site_info(SITES_TS_ESTIMATE_UNIMPLEMENTED[[1]])
+  expect_true(si$estimate_Ts)
+  expect_error(
+    suppressWarnings(suppressMessages(prep_ustar_df(synthetic_ameriflux(si), si))),
+    "estimate_Ts"
+  )
+})

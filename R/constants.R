@@ -102,6 +102,17 @@ SITES_TS_FROM_TA_COLD <- c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US
 # `truth_synthetic`.
 SITES_TS_SYNTHETIC <- c("GF-Guy", "US-Cwt", "US-MBP")
 
+# AmeriFlux sites declaring `estimate_Ts = YES`, which the reader cannot build
+# because the offline soil-temperature reconstruction the original read from
+# disk has no implementation here. They are in `pipeline_sites("all")` and
+# fail as their own targets rather than being filtered out of the grid, so
+# that the gap shows up in a run's results. See the `estimate_Ts` branch of
+# `prep_ustar_df()`. Asserted against site_info.csv in
+# tests/testthat/test-ameriflux-prep.R.
+SITES_TS_ESTIMATE_UNIMPLEMENTED <- c(
+  "CA-Man", "US-Ced", "US-Ha1", "US-Ho1", "US-Ho2", "US-Los", "US-PFa", "US-SRG"
+)
+
 ts_measured_is_synthetic <- function(site_info) {
   isTRUE(site_info[["estimate_Ts"]]) ||
     site_info[["site_ID"]] %in% c(SITES_TS_FROM_TA_RECENT, SITES_TS_FROM_TA_COLD, SITES_TS_SYNTHETIC)
