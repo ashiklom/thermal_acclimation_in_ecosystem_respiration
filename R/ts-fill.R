@@ -398,10 +398,10 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
   )
   if (is.null(mod)) return(fail(paste("final fit of", best, "failed")))
   # Prediction over measured where a prediction exists, measured elsewhere --
-  # `overlay_ts()`, the same semantics as TS_linear. A pure prediction has NAs
+  # the same `overlay` semantics as TS_linear. A pure prediction has NAs
   # wherever a predictor is missing, and the step-01 filters have already
   # certified the nighttime table free of them.
-  ac_ts <- overlay_ts(ac$TS_measured, methods[[best]]$predict(mod, feats))
+  ac_ts <- write_back_ts(ac$TS_measured, methods[[best]]$predict(mod, feats), "overlay")
 
   # nightNEE is a row subset of ac; align by the timestamp columns both carry.
   key <- c("YEAR", "MONTH", "DAY", "HOUR", "MINUTE")

@@ -81,20 +81,11 @@ fix_soil_temp <- function(a, site_info) {
     }
   }
 
-  # Gapfill missing air temperature data
-  if (sum(is.na(data$TA)) > 0) {
-    TA_gf <- data |>
-      dplyr::summarise(TA_gf = mean(.data$TA, na.rm = TRUE), .by = c("DOY", "HOUR", "MINUTE"))
-    data <- data |> dplyr::left_join(TA_gf, by = c("DOY", "HOUR", "MINUTE"))
-    data$TA[is.na(data$TA)] <- data$TA_gf[is.na(data$TA)]
-  }
-
-  if ("NETRAD" %in% colnames(data) && (sum(is.na(data$NETRAD)) > 0)) {
-    # Gapfill missing NETRAD data
-    gf_netrad <- data |>
-      dplyr::summarise(NETRAD_gf = mean(.data$NETRAD, na.rm = TRUE), .by = c("DOY", "HOUR", "MINUTE"))
-    data <- data |> dplyr::left_join(gf_netrad, by = c("DOY", "HOUR", "MINUTE"))
-    data$NETRAD[is.na(data$NETRAD)] <- data$NETRAD_gf[is.na(data$NETRAD)]
+  # The predictors are gap-filled from their own day-of-year x time-of-day
+  # climatology before anything is fitted, as the original did.
+  data$TA <- write_back_ts(data$TA, doy_hour_climatology(data, "TA"), "fill_gaps")
+  if ("NETRAD" %in% colnames(data)) {
+    data$NETRAD <- write_back_ts(data$NETRAD, doy_hour_climatology(data, "NETRAD"), "fill_gaps")
   }
 
   # The two site lists this replaced -- the random-forest sites and the two
@@ -112,7 +103,7 @@ fix_soil_temp <- function(a, site_info) {
     # One or two years of TS and incomplete NETRAD: too little to train on.
     "linear regression" = predict(lm(data = data, TS ~ TA + NETRAD), data),
     # No net radiation at this site at all.
-    "TA only" = replace_ts(predict_ts_from_ta(ts_ta_model(data[data$TA > 0, ]), data$TA)),
+    "TA only" = predict_ts_from_ta(ts_ta_model(data[data$TA > 0, ]), data$TA),
     stop(
       name_site, " declares estimate_ts_method = ", shQuote(method),
       ", which is not one of \"NETRAD\", \"linear regression\", or empty."
@@ -124,6 +115,18 @@ fix_soil_temp <- function(a, site_info) {
   data[, c("TIMESTAMP", "TS_pred")]
 }
 
+
+# The mean of `col` at each day-of-year x hour x minute, aligned to `dat`'s
+# rows: the value the original gap-filled a predictor with. NaN where a slot
+# has no observations at all, which `write_back_ts()` writes through as NA.
+doy_hour_climatology <- function(dat, col) {
+  key <- c("DOY", "HOUR", "MINUTE")
+  clim <- dat |>
+    dplyr::summarise(.clim = mean(.data[[col]], na.rm = TRUE), .by = dplyr::all_of(key))
+  out <- dplyr::left_join(dat[, key], clim, by = key)[[".clim"]]
+  out[is.nan(out)] <- NA_real_
+  out
+}
 
 # NB no seed by default. The random 70/30 split and the forest itself are
 # unseeded here because every pipeline call arrives inside a target, and

@@ -6,11 +6,11 @@
 #   * `prep_ustar_df()` builds `TS` for AmeriFlux sites that have no usable
 #     measured soil temperature, replacing the column wholesale.
 #   * `fix_soil_temp()` falls back to it when a site has no net radiation.
-#   * `total_tas_site()` replaces measured `TS` for the sites declared
+#   * `apply_ts_linear()` replaces measured `TS` for the sites declared
 #     `ts_col == "TS_linear"`, as an *overlay* rather than a replacement.
 #
-# The fit is shared here; the two write-back semantics are kept separate on
-# purpose, because they are not interchangeable -- see `overlay_ts()`.
+# The fit is shared here, and so is the write-back: every one of them goes
+# through `write_back_ts()`, which names its semantics -- see there.
 
 # Fit soil temperature on air temperature. `na.action = na.omit` drops
 # incomplete rows, which is why callers can pass a subset containing NA rows.
@@ -49,21 +49,49 @@ predict_ts_from_ta <- function(mod, ta) {
   predict(mod, newdata = data.frame(TA = ta), na.action = na.pass)
 }
 
-# Write predictions over `ts` *only where a prediction exists*, so measured
-# soil temperature survives wherever air temperature is missing. The resulting
-# column is therefore a hybrid, not a pure regression. This is the original's
-# behaviour at the `ts_col == "TS_linear"` sites and it is load-bearing: a
-# wholesale replacement would introduce NAs that the step-01 quality filters
-# have already certified absent.
-overlay_ts <- function(ts, ts_pred) {
-  ts[!is.na(ts_pred)] <- ts_pred[!is.na(ts_pred)]
-  ts
-}
-
-# Replace `ts` entirely with the regression, including the NAs. Used where
-# there is no measured soil temperature to preserve.
-replace_ts <- function(ts_pred) {
-  ts_pred
+# Write an estimate back over a soil-temperature column. Three semantics are
+# in use and they are not interchangeable, so the mode is named at every call
+# rather than implied by the shape of the expression:
+#
+#   replace    the estimate wholesale, NAs included. Where there is no
+#              measured soil temperature to preserve: the whole-column
+#              reconstructions, the depth swap, the air-temperature substitute.
+#   overlay    the estimate wherever one exists, the original elsewhere, so
+#              measured soil temperature survives wherever a predictor is
+#              missing. The resulting column is a hybrid. This is the
+#              manuscript's behaviour at the `TS_linear` sites and it is
+#              load-bearing: a wholesale replacement would introduce NAs that
+#              the step-01 quality filters have already certified absent.
+#   fill_gaps  the estimate only where the original is missing: the PI
+#              gap-fill at US-NR1/US-ICh/US-ICs, US-MBP's air-temperature
+#              gap-fill, and the predictor climatologies inside
+#              `fix_soil_temp()`.
+#
+# The mode a column was written with travels in its provenance row, which is
+# how a later stage can tell a hybrid from a reconstruction without inspecting
+# the values.
+write_back_ts <- function(ts, estimate, mode) {
+  # No default: the mode is the point, and a call that omits it fails here
+  # rather than quietly replacing.
+  mode <- match.arg(mode, c("replace", "overlay", "fill_gaps"))
+  if (length(estimate) != length(ts)) {
+    stop(
+      "write_back_ts: the estimate has ", length(estimate), " values for ",
+      length(ts), " rows; the two have to align one to one."
+    )
+  }
+  switch(
+    mode,
+    replace = estimate,
+    overlay = {
+      ts[!is.na(estimate)] <- estimate[!is.na(estimate)]
+      ts
+    },
+    fill_gaps = {
+      ts[is.na(ts)] <- estimate[is.na(ts)]
+      ts
+    }
+  )
 }
 
 # The 2.5/97.5 percentiles of growing-season soil temperature, which gate the
@@ -108,8 +136,8 @@ ts_linear_domain_for <- function(site_info) {
 # tables, and recompute the bounds on the new scale.
 apply_ts_linear <- function(ac, nightNEE, site_info, gStart, gEnd) {
   mod <- ts_ta_model(ts_fit_data(ac, nightNEE, ts_linear_domain_for(site_info)))
-  nightNEE$TS <- overlay_ts(nightNEE$TS, predict_ts_from_ta(mod, nightNEE$TA))
-  ac$TS <- overlay_ts(ac$TS, predict_ts_from_ta(mod, ac$TA))
+  nightNEE$TS <- write_back_ts(nightNEE$TS, predict_ts_from_ta(mod, nightNEE$TA), "overlay")
+  ac$TS <- write_back_ts(ac$TS, predict_ts_from_ta(mod, ac$TA), "overlay")
   bounds <- ts_bounds(ac$TS, ac$DOY, gStart, gEnd)
   list(ac = ac, nightNEE = nightNEE, tStart = bounds$tStart, tEnd = bounds$tEnd)
 }

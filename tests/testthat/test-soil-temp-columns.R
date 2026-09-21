@@ -268,7 +268,7 @@ test_that("the consolidated fit reproduces the inline lm it replaced", {
   want_mod <- lm(data = d[d$TA > 0, ], TS ~ TA, na.action = na.omit)
   want <- predict(want_mod, newdata = data.frame(TA = d$TA))
 
-  got <- replace_ts(predict_ts_from_ta(ts_ta_model(d[d$TA > 0, ]), d$TA))
+  got <- write_back_ts(d$TS, predict_ts_from_ta(ts_ta_model(d[d$TA > 0, ]), d$TA), "replace")
   expect_equal(unname(got), unname(want))
   # Wholesale replacement keeps the NAs, unlike the overlay form. (`predict()`
   # names its result by row; the names carry no information here.)
@@ -433,4 +433,34 @@ test_that("the reconstruction runs at exactly the estimate_Ts sites", {
   reader <- vapply(seq_len(nrow(est)), function(i) site_reader(est[i, ]), "")
   expect_false(any(is.na(est$TS[reader == "ameriflux"])))
   expect_false(any(is.na(est$TA[reader == "ameriflux"])))
+})
+
+# ------------------------------------------------------- write_back_ts
+#
+# Every soil-temperature estimate reaches its column through this one
+# function, and the three semantics it offers are not interchangeable.
+test_that("write_back_ts: the three modes do three different things", {
+  ts <- c(1, NA, 3, NA)
+  est <- c(10, 20, NA, NA)
+  expect_equal(write_back_ts(ts, est, "replace"), est)
+  # overlay: the estimate wins wherever it exists, the original survives elsewhere
+  expect_equal(write_back_ts(ts, est, "overlay"), c(10, 20, 3, NA))
+  # fill_gaps: the original wins wherever it exists, the estimate fills its holes
+  expect_equal(write_back_ts(ts, est, "fill_gaps"), c(1, 20, 3, NA))
+})
+
+test_that("write_back_ts refuses a misaligned estimate and an unnamed mode", {
+  expect_error(write_back_ts(c(1, 2, 3), c(1, 2), "overlay"), "align")
+  expect_error(write_back_ts(c(1, 2), c(1, 2)), "arg")
+})
+
+test_that("the manuscript's overlay is write_back_ts's overlay", {
+  # The original wrote `ts[!is.na(pred)] <- pred[!is.na(pred)]` inline at the
+  # TS_linear sites; this is that expression, verbatim, against the function.
+  f <- ts_fixture()
+  pred <- predict_ts_from_ta(ts_ta_model(f$ac[f$ac$TA > 0, ]), f$ac$TA)
+  want <- f$ac$TS
+  want[!is.na(pred)] <- pred[!is.na(pred)]
+  expect_equal(write_back_ts(f$ac$TS, pred, "overlay"), want)
+  expect_true(anyNA(pred)) # the fixture has missing TA, so the overlay is visible
 })
