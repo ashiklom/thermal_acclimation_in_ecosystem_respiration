@@ -265,7 +265,7 @@ prep_ustar_df <- function(a, site_info) {
       name_site, " declares estimate_Ts = YES, and reconstructing soil ",
       "temperature inside the AmeriFlux reader is not implemented. See the ",
       "comment above this stop() in `prep_ustar_df()`. Affected sites: ",
-      paste(SITES_TS_ESTIMATE_UNIMPLEMENTED, collapse = ", "), "."
+      paste(SITES_ESTIMATE_TS_BLOCKED, collapse = ", "), "."
     )
     # df_TS <- read.csv(file = file.path(dir_rawdata, "TS_RandomForest", paste0(name_site, "_TS_rfp.csv")))
     # df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)

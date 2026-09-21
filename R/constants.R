@@ -109,7 +109,7 @@ SITES_TS_SYNTHETIC <- c("GF-Guy", "US-Cwt", "US-MBP")
 # that the gap shows up in a run's results. See the `estimate_Ts` branch of
 # `prep_ustar_df()`. Asserted against site_info.csv in
 # tests/testthat/test-ameriflux-prep.R.
-SITES_TS_ESTIMATE_UNIMPLEMENTED <- c(
+SITES_ESTIMATE_TS_BLOCKED <- c(
   "CA-Man", "US-Ced", "US-Ha1", "US-Ho1", "US-Ho2", "US-Los", "US-PFa", "US-SRG"
 )
 

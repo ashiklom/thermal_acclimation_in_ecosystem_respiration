@@ -142,11 +142,11 @@ test_that("prep_ustar_df returns the table and the RH-conversion decision", {
 test_that("the unimplemented estimate_Ts sites are exactly what site_info declares", {
   si <- get_site_info()
   declared <- si$site_ID[si$estimate_Ts & grepl("AmeriFlux_BASE", si$source, fixed = TRUE)]
-  expect_setequal(declared, SITES_TS_ESTIMATE_UNIMPLEMENTED)
+  expect_setequal(declared, SITES_ESTIMATE_TS_BLOCKED)
 })
 
 test_that("an estimate_Ts site fails by name rather than mid-reader", {
-  si <- get_site_info(SITES_TS_ESTIMATE_UNIMPLEMENTED[[1]])
+  si <- get_site_info(SITES_ESTIMATE_TS_BLOCKED[[1]])
   expect_true(si$estimate_Ts)
   expect_error(
     suppressWarnings(suppressMessages(prep_ustar_df(synthetic_ameriflux(si), si))),
