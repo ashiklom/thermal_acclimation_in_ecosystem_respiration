@@ -33,7 +33,8 @@ DEFAULT_SITES <- c(
   "CH-Dav", # ICOS TS >= 2 C truncation, applied before the gap scan; predicted soil temp
   "DE-Tha", # ICOS baseline
   "NL-Loo", # ICOS with a gStart override and TS ~ TA
-  "GF-Guy"  # ICOS tropical: air temperature substituted for soil, gStart/gEnd pinned
+  "GF-Guy", # ICOS tropical: air temperature substituted for soil, gStart/gEnd pinned
+  "AU-Tum"  # TERN southern hemisphere: the wrapped growing year, gEnd override
 )
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -51,9 +52,8 @@ oracle <- dplyr::bind_rows(
 # Failures we already know about and have documented, so that a genuinely new
 # breakage is not lost among them.
 KNOWN_GAPS <- c(
-  "southern hemisphere sites not implemented",
   "site-specific logic not implemented",
-  "Soil temperature estimation not implemented",
+  "reconstructing soil temperature inside the AmeriFlux reader is not implemented",
   "No download method"
 )
 
