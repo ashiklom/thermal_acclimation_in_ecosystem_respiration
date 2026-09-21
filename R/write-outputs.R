@@ -74,6 +74,12 @@ collect_ts_qc <- function(...) {
     dplyr::arrange(.data$site_ID)
 }
 
+# What stage A did to each site's soil temperature: one row per site.
+collect_ts_provenance <- function(...) {
+  dplyr::bind_rows(lapply(list(...), `[[`, "ts_provenance")) |>
+    dplyr::arrange(.data$site_ID)
+}
+
 # The blocked-CV table behind each site's fill choice: one row per method.
 collect_fill_cv <- function(...) {
   parts <- Filter(function(f) !is.null(f[["cv"]]), list(...))

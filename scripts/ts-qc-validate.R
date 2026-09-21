@@ -161,9 +161,7 @@ d <- d |>
       TRUE ~ "GOOD"
     ),
     hand_flagged = .data$ts_col == "TS_linear" |
-      .data$estimate_Ts == "YES" |
-      .data$site_ID %in% c(SITES_TS_FROM_TA_RECENT, SITES_TS_FROM_TA_COLD,
-                           SITES_TS_SYNTHETIC_AMERIFLUX)
+      TS_SOURCES[.data$ts_source] == "none"
   )
 
 readr::write_csv(d, outfile)

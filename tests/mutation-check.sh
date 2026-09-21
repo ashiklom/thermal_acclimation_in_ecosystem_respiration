@@ -123,17 +123,17 @@ add "SWC selection ignored, always measured" \
     '  dat[["SWC"]] <- dat[[swc_col]]' \
     '  dat[["SWC"]] <- dat[["SWC_measured"]]'
 add "FI-Sod regressions fitted on swapped windows" \
-    R/prepare-site-data.R \
-    '  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = a[early, ], na.action = na.omit)
-  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = a[late, ], na.action = na.omit)' \
-    '  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = a[late, ], na.action = na.omit)
-  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = a[early, ], na.action = na.omit)'
+    R/soil-temperature.R \
+    '  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = pairs[early, ], na.action = na.omit)
+  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = pairs[late, ], na.action = na.omit)' \
+    '  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = pairs[late, ], na.action = na.omit)
+  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = pairs[early, ], na.action = na.omit)'
 add "FI-Sod rebuild applied to the good period" \
-    R/prepare-site-data.R \
-    '  bad <- a$YEAR <= FI_SOD_TS_BAD_THROUGH' \
-    '  bad <- a$YEAR > FI_SOD_TS_BAD_THROUGH'
+    R/soil-temperature.R \
+    '  bad <- input$YEAR <= FI_SOD_TS_BAD_THROUGH' \
+    '  bad <- input$YEAR > FI_SOD_TS_BAD_THROUGH'
 add "FI-Sod skip guard removed" \
-    R/prepare-site-data.R \
+    R/soil-temperature.R \
     '  if (n_early == 0 || n_late == 0 || !any(bad)) {' \
     '  if (FALSE) {'
 add "FI-Sod windows widened to year boundaries" \

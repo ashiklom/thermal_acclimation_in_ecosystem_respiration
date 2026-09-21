@@ -107,45 +107,6 @@ FI_SOD_TS_BAD_THROUGH <- 2005
 FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
 FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")
 
-recalibrate_fi_sod_soil_temp <- function(a) {
-  in_window <- function(w) a$TIMESTAMP_START >= w[[1]] & a$TIMESTAMP_START <= w[[2]]
-  early <- in_window(FI_SOD_EARLY_WINDOW)
-  late <- in_window(FI_SOD_LATE_WINDOW)
-  # The rows being rebuilt. This predicate is verbatim from the original, which
-  # fitted on windows but applied to whole years.
-  bad <- a$YEAR <= FI_SOD_TS_BAD_THROUGH
-
-  complete_pairs <- function(i) {
-    sum(!is.na(a$TS_F_MDS_1[i]) & !is.na(a$TS_F_MDS_2[i]))
-  }
-  n_early <- complete_pairs(early)
-  n_late <- complete_pairs(late)
-
-  # Both relationships have to be estimable. Skipping loudly beats erroring: a
-  # record that does not reach back past 2006 needs no recalibration and should
-  # not take the whole site down with it.
-  if (n_early == 0 || n_late == 0 || !any(bad)) {
-    message(
-      "FI-Sod: skipping the pre-", FI_SOD_TS_BAD_THROUGH + 1,
-      " soil temperature recalibration. It needs complete TS_F_MDS_1/",
-      "TS_F_MDS_2 pairs in ", FI_SOD_EARLY_WINDOW[[1]], "-", FI_SOD_EARLY_WINDOW[[2]],
-      " and ", FI_SOD_LATE_WINDOW[[1]], "-", FI_SOD_LATE_WINDOW[[2]],
-      "; this record has ", n_early, " and ", n_late, ", spanning ",
-      min(a$YEAR), "-", max(a$YEAR), "."
-    )
-    return(a)
-  }
-
-  # Early-window shallow -> deep, then good-period deep -> shallow.
-  to_deep <- lm(TS_F_MDS_2 ~ TS_F_MDS_1, data = a[early, ], na.action = na.omit)
-  to_shallow <- lm(TS_F_MDS_1 ~ TS_F_MDS_2, data = a[late, ], na.action = na.omit)
-
-  deep_est <- predict(to_deep, data.frame(TS_F_MDS_1 = a$TS_F_MDS_1[bad]))
-  a$TS_F_MDS_1[bad] <- predict(to_shallow, data.frame(TS_F_MDS_2 = deep_est))
-  a$TS_F_MDS_1_QC[bad] <- 2
-  a
-}
-
 prep_fluxnet_family <- function(site_info) {
   name_site <- site_info[["site_ID"]]
   a <- read_spliced_products(site_info)
@@ -159,32 +120,13 @@ prep_fluxnet_family <- function(site_info) {
   a$HOUR <- lubridate::hour(a$TIMESTAMP)
   a$MINUTE <- lubridate::minute(a$TIMESTAMP)
 
-  if (name_site == "CZ-Stn") {
-    # use TS of second layer because the first layer is incomplete
-    a$TS_F_MDS_1 <- a$TS_F_MDS_2
-    a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
-  } else if (name_site == "FI-Sod") {
-    a <- recalibrate_fi_sod_soil_temp(a)
-  } else if (name_site == "GF-Guy") {
-    # use air temperature for this tropical site so that all tropical sites, we used bottom air temperature.
-    a$TS_F_MDS_1 <- a$TA_F_MDS
-    a$TS_F_MDS_1_QC <- a$TA_F_MDS_QC
-  } else if (isTRUE(site_info[["estimate_Ts"]])) {
-    # The same switch the AmeriFlux reader uses. It was a site list here, and
-    # that list was exactly the non-AmeriFlux half of `estimate_Ts = YES`;
-    # tests/testthat/test-soil-temp-columns.R holds the two together.
-    message("Reconstructing soil temperature (", ts_estimate_method(site_info), ")")
-    ts_fit <- fix_soil_temp(a, site_info) |>
-      dplyr::select("TIMESTAMP", TS_F_MDS_1 = "TS_pred")
-    a <- a |>
-      dplyr::select(-dplyr::any_of("TS_F_MDS_1")) |>
-      dplyr::left_join(ts_fit, by = "TIMESTAMP") |>
-      dplyr::mutate(TS_F_MDS_1_QC = dplyr::if_else(
-        is.na(.data$TS_F_MDS_1_QC) | .data$TS_F_MDS_1_QC == 3,
-        2,
-        .data$TS_F_MDS_1_QC
-      ))
-  }
+  # Soil temperature, stage A: the sensor after its per-site repairs, or a
+  # reconstruction where the site has none. Which is `ts_source` in
+  # site_info.csv; see R/soil-temperature.R. The reader's only job here is to
+  # hand over the record's columns under the shared names.
+  soil <- qualification_soil_temperature(fluxnet_ts_input(a, site_info), site_info)
+  a$TS <- soil[["TS"]]
+  a$TS_QC <- soil[["TS_QC"]]
 
   if (name_site == "FR-Pue") {
     # FLUXNET data do not include soil data for Site FR-Pue, but site PI provided the SWC data
@@ -196,8 +138,6 @@ prep_fluxnet_family <- function(site_info) {
     dplyr::rename(
       NEE = "NEE_VUT_REF",
       TA = "TA_F_MDS",
-      TS = "TS_F_MDS_1",
-      TS_QC = "TS_F_MDS_1_QC",
       NEE_QC = "NEE_VUT_REF_QC"
     ) |>
     dplyr::mutate(
@@ -208,8 +148,7 @@ prep_fluxnet_family <- function(site_info) {
       NEE_uStar_f = .data$NEE
     )
 
-  list(ac = result, dt = dt)
-
+  list(ac = result, dt = dt, ts_provenance = soil[["provenance"]])
 }
 
 
@@ -514,7 +453,9 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
     nightNEE = measured_final,
     feature_gs = feature_gs,
     ts_bounds = ts_bounds_tbl,
-    ts_qc = ts_qc
+    ts_qc = ts_qc,
+    # What stage A did to make `TS_measured`: one row, from the reader.
+    ts_provenance = prepared[["ts_provenance"]]
   )
 
 }

@@ -149,6 +149,7 @@ combined <- list(
   tar_combine(variant_window_skips_tbl, tas_all, command = collect_window_skips(!!!.x)),
   tar_combine(feature_gs_tbl, site_targets$site_data, command = collect_feature_gs(!!!.x)),
   tar_combine(ts_qc_tbl, site_targets$site_data, command = collect_ts_qc(!!!.x)),
+  tar_combine(ts_provenance_tbl, site_targets$site_data, command = collect_ts_provenance(!!!.x)),
   tar_combine(fill_cv_tbl, site_targets$site_fill, command = collect_fill_cv(!!!.x)),
   tar_combine(fill_summary_tbl, site_targets$site_fill, command = collect_fill_summary(!!!.x))
 )
@@ -165,6 +166,8 @@ outputs <- list(
            write_result_csv(variant_window_skips_tbl, file.path(DIR_ANALYSIS, "variant_window_skips.csv"))),
   tar_file(ts_qc_csv,
            write_result_csv(ts_qc_tbl, file.path(DIR_ANALYSIS, "ts_qc.csv"))),
+  tar_file(ts_provenance_csv,
+           write_result_csv(ts_provenance_tbl, file.path(DIR_ANALYSIS, "ts_provenance.csv"))),
   tar_file(fill_cv_csv,
            write_result_csv(fill_cv_tbl, file.path(DIR_ANALYSIS, "fill_cv.csv"))),
   tar_file(fill_summary_csv,

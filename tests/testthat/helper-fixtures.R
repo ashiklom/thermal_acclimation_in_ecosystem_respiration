@@ -152,7 +152,8 @@ synthetic_ameriflux <- function(site_info, n = 96) {
   a <- data.frame(
     YEAR = lubridate::year(ts), MONTH = lubridate::month(ts), DAY = lubridate::day(ts),
     DOY = lubridate::yday(ts), HOUR = lubridate::hour(ts), MINUTE = lubridate::minute(ts),
-    TIMESTAMP = ts, TIMESTAMP_END = format(ts + 900, "%Y%m%d%H%M"),
+    TIMESTAMP = ts, TIMESTAMP_START = format(ts - 900, "%Y%m%d%H%M"),
+    TIMESTAMP_END = format(ts + 900, "%Y%m%d%H%M"),
     daytime = rep(c(FALSE, TRUE), each = n / 2)
   )
   named <- unlist(site_info[c("NEE", "FC", "TA", "TS", "SWC", "SW_IN", "USTAR",

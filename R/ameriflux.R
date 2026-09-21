@@ -194,7 +194,7 @@ prep_ameriflux <- function(site_info) {
   # than recomputed downstream: it is the growing season the u-star season
   # factor was built from, and a second call that disagreed with it would put
   # the seasonal thresholds and the growing-season bounds out of step.
-  list(ac = ac, dt = dt, gs = gs)
+  list(ac = ac, dt = dt, gs = gs, ts_provenance = ustar[["ts_provenance"]])
 }
 
 # Every per-site column this function is about to read, for the path this site
@@ -282,12 +282,10 @@ prep_ustar_df <- function(a, site_info) {
     ac$TA <- a[[site_info$TA]]
   }
 
-  # Net radiation, where the BASE file has it. `fix_soil_temp()` already reads
-  # it -- the random-forest branch is `TS ~ TA + NETRAD` -- but it reads it
-  # from the raw record and throws it away again, so nothing downstream of
-  # step 01 can use or evaluate it. Carrying it forward is what lets the
-  # radiation-driven reconstructions be cross-validated against the
-  # air-temperature-only ones on equal terms.
+  # Net radiation, where the BASE file has it. Stage A reads it from the raw
+  # record for the `rf:TA+NETRAD` reconstruction; carrying it forward on `ac`
+  # is what lets the radiation-driven reconstructions be cross-validated
+  # against the air-temperature-only ones on equal terms downstream.
   #
   # The declared column wins; a bare `NETRAD` is the fallback, because most
   # BASE files that have net radiation call it that and only the five sites
@@ -300,60 +298,15 @@ prep_ustar_df <- function(a, site_info) {
     ac$NETRAD <- a[[netrad_column]]
   }
 
-  # soil temperature TS
-  #
-  # Where `estimate_Ts` is declared, the whole column is a reconstruction from
-  # air temperature and (where the site has it) net radiation, not a
-  # measurement. The original computed it in a separate pass -- workflow 01_01
-  # -- wrote `TS_RandomForest/<site>_TS_rfp.csv`, and read that file back here.
-  # `fix_soil_temp()` is 01_01 transcribed, so the reconstruction happens
-  # inline instead and there is no intermediate file to keep in step with the
-  # raw record.
-  #
-  # Joined on TIMESTAMP rather than assigned positionally: `fix_soil_temp()`
-  # joins day-of-year climatologies onto its working copy to gap-fill the
-  # predictors, and a duplicated key there would silently change the row count.
-  # The row count is checked for the same reason.
-  #
-  # The result is `TS`, i.e. `TS_measured` downstream, which is what the
-  # original treated it as. `ts_measured_is_synthetic()` already reports
-  # `estimate_Ts` sites, so a run that scores a reconstruction against this
-  # column is scoring it against another reconstruction, and says so.
-  if (site_info$estimate_Ts) {
-    message("Reconstructing soil temperature (", ts_estimate_method(site_info), ")")
-    nrow_before <- nrow(ac)
-    ac <- ac |>
-      dplyr::left_join(fix_soil_temp(a, site_info), by = "TIMESTAMP")
-    stopifnot(nrow(ac) == nrow_before)
-    ac$TS <- ac$TS_pred
-    ac$TS_pred <- NULL
-  } else {
-    # `TS` exists on the table from here on even where no sensor is declared
-    # (US-Cwt), so every arm below writes through `write_back_ts()` against a
-    # column of the right length.
-    ac$TS <- if (!is.na(site_info$TS)) a[[site_info$TS]] else rep(NA_real_, nrow(ac))
-    # deal with special cases
-    if (name_site %in% c("US-NR1", "US-ICh", "US-ICs")) {
-      # use PI gap-filled data
-      ac$TS <- write_back_ts(ac$TS, a$TS_PI_1, "fill_gaps")
-    } else if (name_site == "US-Cwt") {
-      # this site has no TS measurements, so we used TS-TA relationships from nearby US-xGB of the same DBF category.
-      est <- fixed_linear_estimator(intercept = 5.13873, slope = 0.64718)
-      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "replace")
-    } else if (name_site == "US-MBP") {
-      # this site only missed a few TS data, so only estimate these missing data.
-      est <- fixed_linear_estimator(intercept = 5.8670273, slope = 0.3688005)
-      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "fill_gaps")
-    } else if (name_site %in% SITES_TS_FROM_TA_RECENT) {
-      # recent data is more accurate
-      est <- ts_estimators()$lm_ta_recent
-      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "replace")
-    } else if (name_site %in% SITES_TS_FROM_TA_COLD) {
-      # cold area, use TA above 0 for growing season
-      est <- ts_estimators()$lm_ta_pos
-      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "replace")
-    }
-  }
+  # Soil temperature, stage A: the sensor after its per-site repairs, or a
+  # reconstruction where the site has none. Which is `ts_source` in
+  # site_info.csv; see R/soil-temperature.R. The reader's only job here is to
+  # hand over the record's columns under the shared names. The result is
+  # `TS`, i.e. `TS_measured` downstream, which is what the original treated it
+  # as at every one of these sites.
+  soil <- qualification_soil_temperature(ameriflux_ts_input(a, site_info), site_info)
+  stopifnot(length(soil[["TS"]]) == nrow(ac))
+  ac$TS <- soil[["TS"]]
 
   # Soil water
   # `SWC_use` is recoded to a logical by `get_site_info()`, and is never NA, so
@@ -415,7 +368,7 @@ prep_ustar_df <- function(a, site_info) {
 
   ac$daytime <- a$daytime
 
-  list(ac = ac, convert_rh = convert_rh)
+  list(ac = ac, convert_rh = convert_rh, ts_provenance = soil[["provenance"]])
 }
 
 

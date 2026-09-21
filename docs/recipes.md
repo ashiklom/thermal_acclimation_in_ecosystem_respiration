@@ -12,6 +12,8 @@ compared row for row.
 - Report: `reports/variant-comparison.qmd`, a `tar_quarto` target.
 - Background: `ts-rework.html` (findings F1–F13) is the analysis these options
   come from; `ts-variants.html` is the log of building them.
+- Soil temperature specifically — the two stages, `ts_source`, the estimator
+  registry and the refuse rule — is [docs/soil-temperature.md](soil-temperature.md).
 
 ## The axes
 

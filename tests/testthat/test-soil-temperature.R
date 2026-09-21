@@ -203,3 +203,189 @@ test_that("total_tas_site's soil temperature is get_soil_temperature's, at a rea
   expect_identical(soil$meta$ts_col, "TS_linear")
   expect_false("TS_measured" %in% names(soil$ac))
 })
+
+# ============================================================== stage A
+#
+# `qualification_soil_temperature()`: one arm per `ts_source`, each on a
+# synthetic input where the answer is known, and the provenance row that
+# travels with it. The manuscript's numbers at real sites are the frozen
+# oracle's business (tests/ts-swc-baseline.R); this is about each arm doing
+# what its level says and nothing else.
+
+stage_a_input <- function(n = 480, seed = 3) {
+  set.seed(seed)
+  t <- seq_len(n)
+  ta <- 12 + 8 * sin(2 * pi * t / 48) + 4 * t / n + rnorm(n, 0, 0.5)
+  ts <- 10 + 3 * sin(2 * pi * (t - 6) / 48) + 3 * t / n + rnorm(n, 0, 0.2)
+  ts[seq(7, n, by = 40)] <- NA                         # sensor gaps
+  stamp <- as.POSIXct("2019-01-01", tz = "UTC") + 1800 * (t - 1)
+  tibble::tibble(
+    TIMESTAMP = stamp + 900,
+    TIMESTAMP_START = format(stamp, "%Y%m%d%H%M"),
+    YEAR = c(rep(2019L, n / 2), rep(2023L, n / 2)),
+    # Two "years" of the same five days, so that every day-of-year x time slot
+    # has two rows and a predictor gap in one can be filled from the other.
+    DOY = rep(rep(1:5, each = 48), 2), HOUR = rep(rep(0:23, each = 2), 10), MINUTE = rep(c(0L, 30L), n / 2),
+    TS_sensor = ts, TS_sensor_QC = ifelse(is.na(ts), 3, 0),
+    TA = ta, TA_QC = 0,
+    NETRAD = 120 * pmax(sin(2 * pi * t / 48), 0) - 30,
+    TS_depth2 = ts - 1.5, TS_depth2_QC = 1,
+    TS_pi = ts + 0.1
+  )
+}
+stage_a_site <- function(ts_source, ..., site_ID = "X-Tst") {
+  base <- list(site_ID = site_ID, source = "FLUXNET", ts_source = ts_source,
+               estimate_Ts = ts_source == "reconstructed", estimate_ts_method = NA_character_,
+               netrad_column = NA_character_, TS = "TS_1", TA = "TA_1")
+  # `...` overrides rather than appends: a duplicated name would make `[[`
+  # return the default and the override silently unused.
+  utils::modifyList(base, list(...), keep.null = TRUE)
+}
+run_arm <- function(ts_source, input = stage_a_input(), ...) {
+  suppressMessages(qualification_soil_temperature(input, stage_a_site(ts_source, ...)))
+}
+
+test_that("every arm returns TS, TS_QC and one provenance row, aligned to the input", {
+  input <- stage_a_input()
+  for (src in setdiff(names(TS_SOURCES), "recalibrated")) {
+    out <- run_arm(src, input, estimate_ts_method = if (src == "reconstructed") "linear regression" else NA_character_)
+    expect_named(out, c("TS", "TS_QC", "provenance"), info = src)
+    expect_length(out$TS, nrow(input))
+    expect_length(out$TS_QC, nrow(input))
+    expect_equal(nrow(out$provenance), 1L, info = src)
+    expect_identical(out$provenance$ts_source, src)
+    expect_identical(out$provenance$ts_truth, unname(TS_SOURCES[[src]]))
+  }
+})
+
+test_that("sensor passes the sensor through, and says it did nothing", {
+  input <- stage_a_input()
+  out <- run_arm("sensor", input)
+  expect_identical(out$TS, input$TS_sensor)
+  expect_identical(out$TS_QC, input$TS_sensor_QC)
+  expect_identical(out$provenance$stage_a_mode, "none")
+  expect_true(is.na(out$provenance$stage_a_estimator))
+})
+
+test_that("the swaps take the column their level names, wholesale", {
+  input <- stage_a_input()
+  d2 <- run_arm("sensor_depth2", input)
+  expect_identical(d2$TS, input$TS_depth2)
+  expect_identical(d2$TS_QC, input$TS_depth2_QC)   # the second depth's own flag
+  expect_identical(d2$provenance$stage_a_mode, "replace")
+
+  ta <- run_arm("ta_substitute", input)
+  expect_identical(ta$TS, input$TA)
+  expect_identical(ta$TS_QC, input$TA_QC)
+  expect_identical(ta$provenance$stage_a_family, "fixed:TA")
+})
+
+test_that("the gap-fills touch only the sensor's gaps", {
+  input <- stage_a_input()
+  gaps <- is.na(input$TS_sensor)
+  expect_gt(sum(gaps), 0)
+
+  pi <- run_arm("gapfill_pi", input)
+  expect_identical(pi$TS[!gaps], input$TS_sensor[!gaps])
+  expect_identical(pi$TS[gaps], input$TS_pi[gaps])
+  expect_identical(pi$provenance$stage_a_mode, "fill_gaps")
+
+  mbp <- run_arm("gapfill_ta", input)
+  expect_identical(mbp$TS[!gaps], input$TS_sensor[!gaps])
+  expect_equal(mbp$TS[gaps], input$TA[gaps] * 0.3688005 + 5.8670273)   # US-MBP's line
+  expect_identical(mbp$provenance$stage_a_family, "fixed:TA")
+})
+
+test_that("the wholesale regressions are the registry's lines over the whole record", {
+  input <- stage_a_input()
+  reg <- ts_estimators()
+  train <- tibble::tibble(TS = input$TS_sensor, TA = input$TA, YEAR = input$YEAR)
+
+  cwt <- run_arm("borrowed_site", input)
+  expect_equal(cwt$TS, input$TA * 0.64718 + 5.13873)
+  expect_false(anyNA(cwt$TS))                                # nothing of the sensor survives
+  expect_match(cwt$provenance$stage_a_note, "US-xGB")
+
+  cold <- run_arm("lm_ta_cold", input)
+  expect_equal(cold$TS, reg$lm_ta_pos$predict(reg$lm_ta_pos$fit(train), train))
+  expect_identical(cold$provenance$stage_a_estimator, "lm_ta_pos")
+  expect_identical(cold$provenance$stage_a_family, "lm:TA")
+  expect_gt(cold$provenance$stage_a_n_train, 0)
+
+  recent <- run_arm("lm_ta_recent", input)
+  expect_equal(recent$TS, reg$lm_ta_recent$predict(reg$lm_ta_recent$fit(train), train))
+  # fitted on 2023 only, so the coefficients differ from the cold arm's
+  expect_false(isTRUE(all.equal(recent$TS, cold$TS)))
+})
+
+test_that("reconstructed routes on estimate_ts_method, gap-fills predictors, and sets the QC flag", {
+  input <- stage_a_input()
+  input$TA[c(3, 50)] <- NA                                   # predictor gaps the climatology fills
+
+  lin <- run_arm("reconstructed", input, estimate_ts_method = "linear regression")
+  expect_identical(lin$provenance$stage_a_estimator, "lm_ta_netrad")
+  expect_identical(lin$provenance$stage_a_family, "lm:TA+NETRAD")
+  expect_identical(lin$provenance$stage_a_mode, "replace")
+  expect_false(anyNA(lin$TS))                                # every gap filled, every row predicted
+  # the sensor's poor/missing flags become "good gap-filled"; its good ones stay
+  expect_true(all(lin$TS_QC[input$TS_sensor_QC == 3] == 2))
+  expect_true(all(lin$TS_QC[input$TS_sensor_QC == 0] == 0))
+
+  ta_only <- run_arm("reconstructed", input)
+  expect_identical(ta_only$provenance$stage_a_estimator, "lm_ta_pos")
+
+  # DE-Hte trains on the second depth and the provenance says so
+  hte <- run_arm("reconstructed", input, site_ID = "DE-Hte", estimate_ts_method = "linear regression")
+  expect_match(hte$provenance$stage_a_note, "second depth")
+})
+
+test_that("an arm that needs a column the record lacks fails by name, up front", {
+  input <- stage_a_input()
+  bare <- input[, setdiff(names(input), c("TS_depth2", "TS_depth2_QC", "TS_pi", "NETRAD"))]
+  expect_error(run_arm("sensor_depth2", bare), "TS_depth2")
+  expect_error(run_arm("gapfill_pi", bare), "TS_pi")
+  expect_error(run_arm("reconstructed", bare, estimate_ts_method = "NETRAD"), "NETRAD")
+  # ...and a missing required column is refused before any arm runs
+  expect_error(run_arm("sensor", input[, setdiff(names(input), "TA")]), "TA")
+})
+
+test_that("FI-Sod's recalibration is skipped, and says so, when its windows are not in the record", {
+  # The fixture is 2019/2023; the recalibration windows are 2001-2006.
+  out <- run_arm("recalibrated", stage_a_input(), site_ID = "FI-Sod")
+  expect_identical(out$TS, stage_a_input()$TS_sensor)
+  expect_match(out$provenance$stage_a_note, "skipped")
+})
+
+test_that("the reader inputs hand over the record's columns under the shared names", {
+  # FLUXNET-family
+  a <- tibble::tibble(
+    TIMESTAMP = 1:3, TIMESTAMP_START = c("a", "b", "c"), YEAR = 1L, DOY = 1L, HOUR = 0L, MINUTE = 0L,
+    TS_F_MDS_1 = c(1, 2, 3), TS_F_MDS_1_QC = c(0, 0, 3), TS_F_MDS_2 = c(0.5, 1.5, 2.5), TS_F_MDS_2_QC = 1,
+    TA_F_MDS = c(4, 5, 6), TA_F_MDS_QC = 0, NETRAD = c(10, 20, 30)
+  )
+  fx <- fluxnet_ts_input(a, stage_a_site("sensor"))
+  expect_true(all(TS_INPUT_REQUIRED %in% names(fx)))
+  expect_identical(fx$TS_sensor, a$TS_F_MDS_1)
+  expect_identical(fx$TS_depth2, a$TS_F_MDS_2)
+  expect_identical(fx$TA, a$TA_F_MDS)
+  expect_identical(fx$NETRAD, a$NETRAD)
+  # a record with no shallow sensor is refused unless the site substitutes air temperature
+  no_ts <- a[, setdiff(names(a), c("TS_F_MDS_1", "TS_F_MDS_1_QC"))]
+  expect_error(fluxnet_ts_input(no_ts, stage_a_site("sensor")), "TS_F_MDS_1")
+  expect_silent(fluxnet_ts_input(no_ts, stage_a_site("ta_substitute")))
+
+  # AmeriFlux: the declared per-site columns, and TS_PI_1 where present
+  si <- get_site_info("US-NR1")
+  b <- synthetic_ameriflux(si, n = 4)
+  b$TS_PI_1 <- c(9, 9, 9, 9)
+  am <- ameriflux_ts_input(b, si)
+  expect_true(all(TS_INPUT_REQUIRED %in% names(am)))
+  expect_identical(am$TS_sensor, b[[si$TS]])
+  expect_identical(am$TA, b[[si$TA]])
+  expect_identical(am$TS_pi, b$TS_PI_1)
+  expect_true(all(is.na(am$TS_sensor)) == FALSE)
+  # no sensor declared: an all-NA sensor column, so every arm sees the right length
+  cwt <- ameriflux_ts_input(synthetic_ameriflux(get_site_info("US-Cwt"), n = 4), get_site_info("US-Cwt"))
+  expect_true(all(is.na(cwt$TS_sensor)))
+  expect_length(cwt$TS_sensor, 4L)
+})

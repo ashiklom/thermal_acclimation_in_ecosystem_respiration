@@ -95,20 +95,22 @@ test_that("the manuscript's forest is randomForest under its own protocol", {
 
 test_that("fix_soil_temp routes each estimate_ts_method to its registry entry and says so", {
   d <- est_fixture()
-  a <- d
-  names(a)[names(a) == "TS"] <- "TS_F_MDS_1"
-  names(a)[names(a) == "TA"] <- "TA_F_MDS"
-  a$TS_F_MDS_1_QC <- 0
-  base <- list(site_ID = "X-Tst", source = "FLUXNET", estimate_Ts = TRUE, netrad_column = "NETRAD")
+  input <- tibble::tibble(
+    TIMESTAMP = d$TIMESTAMP, TIMESTAMP_START = format(d$TIMESTAMP, "%Y%m%d%H%M"),
+    YEAR = d$YEAR, DOY = d$DOY, HOUR = d$HOUR, MINUTE = d$MINUTE,
+    TS_sensor = d$TS, TS_sensor_QC = 0, TA = d$TA, NETRAD = d$NETRAD
+  )
+  base <- list(site_ID = "X-Tst", source = "FLUXNET", ts_source = "reconstructed",
+               estimate_Ts = TRUE, netrad_column = "NETRAD")
 
-  lin <- suppressMessages(fix_soil_temp(a, c(base, estimate_ts_method = "linear regression")))
-  expect_identical(attr(lin, "estimator"), "lm_ta_netrad")
-  expect_identical(attr(lin, "family"), "lm:TA+NETRAD")
-  expect_named(lin, c("TIMESTAMP", "TS_pred"))
-  expect_equal(nrow(lin), nrow(a))
-  expect_gt(attr(lin, "n_train"), 0)
+  lin <- suppressMessages(fix_soil_temp(input, c(base, estimate_ts_method = "linear regression")))
+  expect_identical(lin$provenance$stage_a_estimator, "lm_ta_netrad")
+  expect_identical(lin$provenance$stage_a_family, "lm:TA+NETRAD")
+  expect_named(lin, c("TS", "TS_QC", "provenance"))
+  expect_length(lin$TS, nrow(input))
+  expect_gt(lin$provenance$stage_a_n_train, 0)
 
-  ta_only <- suppressMessages(fix_soil_temp(a, c(base, estimate_ts_method = NA_character_)))
-  expect_identical(attr(ta_only, "estimator"), "lm_ta_pos")
-  expect_identical(attr(ta_only, "family"), "lm:TA")
+  ta_only <- suppressMessages(fix_soil_temp(input, c(base, estimate_ts_method = NA_character_)))
+  expect_identical(ta_only$provenance$stage_a_estimator, "lm_ta_pos")
+  expect_identical(ta_only$provenance$stage_a_family, "lm:TA")
 })

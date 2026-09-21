@@ -80,32 +80,6 @@ SITES_GS_NEE_ZERO <- c("FI-Sod", "DE-RuC")
 TS_MIN_VALID <- 2.0
 SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 
-# NB the three lists below are the readers' *dispatch* for the moment; the
-# *declaration* of the same facts is `ts_source` in site_info.csv, and a test
-# holds the two together until the readers switch on the declaration.
-#
-# AmeriFlux sites with no usable measured soil temperature, where `TS` is
-# *constructed* from air temperature during step 01 -- so this is how their
-# `TS_measured` column comes to exist, not a later substitution for it. The two
-# lists differ only in the rows the regression is fitted on: US-BZo uses its
-# recent years because the earlier record is unreliable, the cold sites use all
-# rows above freezing. Disjoint from the `ts_col == "TS_linear"` sites, which
-# are a step-02 concern.
-SITES_TS_FROM_TA_RECENT <- c("US-BZo")
-SITES_TS_FROM_TA_COLD <- c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR")
-
-# Sites whose step-01 `TS_measured` is not a soil-temperature measurement by
-# any declared mechanism: GF-Guy has air temperature substituted so that all
-# tropical sites use bottom air temperature; US-Cwt's whole column is
-# `TA * 0.64718 + 5.13873` borrowed from a nearby site; US-MBP's gaps are
-# filled from `TA * 0.3688005 + 5.8670273`. All three are bare `name_site ==`
-# branches in the readers, invisible to site_info.csv. Together with
-# `estimate_Ts` and `SITES_TS_FROM_TA_*` this is the complete list of sites at
-# which a reconstruction scored against `TS_measured` is being scored against
-# another reconstruction -- which `fill_soil_temp()` records as
-# `truth_synthetic`.
-SITES_TS_SYNTHETIC <- c("GF-Guy", "US-Cwt", "US-MBP")
-
 # What the column step 01 leaves as `TS_measured` actually is, per site --
 # declared in site_info.csv as `ts_source`, one level per mechanism the readers
 # apply. The value is the level's answer to the only question downstream

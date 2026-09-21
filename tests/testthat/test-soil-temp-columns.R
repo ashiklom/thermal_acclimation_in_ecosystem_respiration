@@ -48,18 +48,19 @@ test_that("step-01 TA construction and step-02 selection stay disjoint", {
 
 # ------------------------------------------------------ the ts_source column
 #
-# `ts_source` is the declaration of what each site's `TS_measured` is. The
-# readers still dispatch on site lists and `name_site ==` branches; these hold
-# the declaration to that dispatch, so that when the readers switch to reading
-# the declaration nothing changes.
-test_that("ts_source reproduces the readers' dispatch, site for site", {
+# `ts_source` is the declaration of what each site's `TS_measured` is, and
+# since stage A dispatches on it, the declaration *is* the dispatch. These pin
+# it to the site lists and `name_site ==` branches the readers used to carry,
+# so that a row edited in site_info.csv is a visible change, not a silent one.
+test_that("ts_source is the readers' former dispatch, site for site", {
   si <- get_site_info()
   src <- setNames(si$ts_source, si$site_ID)
   by_source <- function(level) unname(sort(names(src)[src == level]))
 
   expect_setequal(by_source("reconstructed"), si$site_ID[si$estimate_Ts])
-  expect_setequal(by_source("lm_ta_recent"), SITES_TS_FROM_TA_RECENT)
-  expect_setequal(by_source("lm_ta_cold"), SITES_TS_FROM_TA_COLD)
+  # The two site lists the AmeriFlux reader used to dispatch on, verbatim.
+  expect_setequal(by_source("lm_ta_recent"), "US-BZo")
+  expect_setequal(by_source("lm_ta_cold"), c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR"))
   # The `name_site ==` arms, from the readers.
   expect_identical(by_source("sensor_depth2"), "CZ-Stn")
   expect_identical(by_source("recalibrated"), "FI-Sod")
@@ -282,6 +283,19 @@ FI_SOD_2015_HH <- file.path(
   "FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv"
 )
 
+# The recalibration reads the stage-A input; these fixtures carry only what
+# it needs, so the rest of the shape is filled with placeholders.
+as_stage_a <- function(a) {
+  n <- nrow(a)
+  tibble::tibble(
+    TIMESTAMP = seq_len(n), TIMESTAMP_START = a$TIMESTAMP_START, YEAR = a$YEAR,
+    DOY = 1L, HOUR = 0L, MINUTE = 0L,
+    TS_sensor = a$TS_F_MDS_1, TS_sensor_QC = a$TS_F_MDS_1_QC, TA = NA_real_,
+    TS_depth2 = a$TS_F_MDS_2
+  )
+}
+fi_sod_recalibrate <- function(a) recalibrate_fi_sod_soil_temp(as_stage_a(a), get_site_info("FI-Sod"))
+
 test_that("the date windows reproduce the original's row windows exactly", {
   # The decisive test. `FI_SOD_EARLY_WINDOW` / `FI_SOD_LATE_WINDOW` are
   # `a[1:24383, ]` and `a[90000:245000, ]` resolved against the FLUXNET2015
@@ -311,10 +325,11 @@ test_that("the date windows reproduce the original's row windows exactly", {
     d$TS_F_MDS_1_QC[d$YEAR <= 2005] <- 2
     d
   })
-  got <- recalibrate_fi_sod_soil_temp(a)
+  got <- fi_sod_recalibrate(a)
 
-  expect_equal(got$TS_F_MDS_1, original$TS_F_MDS_1)
-  expect_equal(got$TS_F_MDS_1_QC, original$TS_F_MDS_1_QC)
+  expect_equal(got$TS, original$TS_F_MDS_1)
+  expect_equal(got$TS_QC, original$TS_F_MDS_1_QC)
+  expect_identical(got$provenance$stage_a_mode, "overlay")
 })
 
 test_that("a year boundary instead of the windows would change the science", {
@@ -340,7 +355,7 @@ test_that("a year boundary instead of the windows would change the science", {
       TS_F_MDS_2 = predict(to_deep, data.frame(TS_F_MDS_1 = a$TS_F_MDS_1[bad]))
     ))
   })
-  by_window <- recalibrate_fi_sod_soil_temp(a)$TS_F_MDS_1[bad]
+  by_window <- fi_sod_recalibrate(a)$TS[bad]
 
   rms <- sqrt(mean((unname(by_year) - by_window)^2, na.rm = TRUE))
   expect_gt(rms, 5) # measured at 8.13 C; the point is that it is not small
@@ -366,15 +381,15 @@ fi_sod_fixture <- function(start = "200101010000", n = 48 * 2600, seed = 7) {
 
 test_that("the rebuild flags what it rebuilt and leaves the rest alone", {
   a <- fi_sod_fixture()
-  out <- recalibrate_fi_sod_soil_temp(a)
+  out <- fi_sod_recalibrate(a)
   bad <- a$YEAR <= 2005
-  expect_true(all(out$TS_F_MDS_1_QC[bad] == 2))
-  expect_equal(out$TS_F_MDS_1[!bad], a$TS_F_MDS_1[!bad])
-  expect_equal(out$TS_F_MDS_1_QC[!bad], a$TS_F_MDS_1_QC[!bad])
+  expect_true(all(out$TS_QC[bad] == 2))
+  expect_equal(out$TS[!bad], a$TS_F_MDS_1[!bad])
+  expect_equal(out$TS_QC[!bad], a$TS_F_MDS_1_QC[!bad])
   # And it actually corrects: the rebuilt values should track the deep sensor
   # better than the raw early ones, which is what the late relationship says.
   expect_lt(
-    mean(abs(out$TS_F_MDS_1[bad] - a$TS_F_MDS_2[bad])),
+    mean(abs(out$TS[bad] - a$TS_F_MDS_2[bad])),
     mean(abs(a$TS_F_MDS_1[bad] - a$TS_F_MDS_2[bad]))
   )
 })
@@ -384,13 +399,15 @@ test_that("a record that misses either window is skipped, not an error", {
   # neither window. The original indexed rows 90000:245000 here and aborted
   # with "0 (non-NA) cases", taking the whole site down.
   recent <- fi_sod_fixture(start = "202301010000", n = 48 * 700)
-  expect_message(out <- recalibrate_fi_sod_soil_temp(recent), "skipping")
-  expect_equal(out, recent)
+  expect_message(out <- fi_sod_recalibrate(recent), "skipping")
+  expect_equal(out$TS, recent$TS_F_MDS_1)
+  expect_equal(out$TS_QC, recent$TS_F_MDS_1_QC)
+  expect_match(out$provenance$stage_a_note, "skipped")
 })
 
 test_that("the skip message says what the record actually holds", {
   recent <- fi_sod_fixture(start = "202301010000", n = 48 * 700)
-  msg <- paste(capture_messages(recalibrate_fi_sod_soil_temp(recent)), collapse = " ")
+  msg <- paste(capture_messages(fi_sod_recalibrate(recent)), collapse = " ")
   expect_match(msg, "2023-2024")
   expect_match(msg, "200101010000")
 })
