@@ -71,3 +71,26 @@ at all, which is what the two Brazilian sites are.
 3. A check of what it costs. A wrapped site loses one growing year at each end
    of its record — the first began before the data start, the last runs past
    their end — which `total_tas_site()` trims.
+
+## One known residual, inherited
+
+`total_tas_site()` attaches the previous day's daytime NEE — the GPP proxy the
+direct model uses — by `DOY_gpp = DOY - 1` for the pre-noon half of each night.
+In the wrapped frame the series steps 365 → 367 over New Year, so at a wrapped
+site the 1 January mornings ask for DOY 366:
+
+- in a non-leap calendar year there is no such row, and those half-hours drop
+  out of the direct model;
+- in a leap year there *is* one — 31 December of the same calendar year, which
+  belongs to the next growing year — and they join to it, a year off.
+
+Measured on AU-Tum (2002–2026, 206 424 rows): 204 rows dropped, 60 rows
+mis-joined, 0.13 % of the record, confined to the pre-noon half of one calendar
+day per year, and only in the direct model. The total model does not read the
+column.
+
+This is inherited verbatim from the original workflows, which wrapped the same
+way and used the same `DOY - 1`. It is left alone rather than fixed because the
+fix — deriving the previous day from the calendar date instead of from DOY —
+changes a line every site runs through, for an effect this size. Worth doing
+alongside the next deliberate change to that block, not on its own.
