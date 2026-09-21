@@ -116,6 +116,70 @@ test_that("ts_col overrides the strategy and says so", {
   expect_equal(soil$ac$TS_final, c(9, 10, 11))
 })
 
+# ---------------------------------------------- no truth, no second method
+#
+# Where step 01's column is not measured soil temperature at every row, a
+# variant has nothing to fit its alternative against, so it keeps that column.
+
+test_that("a variant keeps step 01's column where ts_source leaves no truth", {
+  bad <- fake_site_data("BAD")
+  synthetic <- fake_site_info(ts_source = "reconstructed")
+
+  scr <- get_soil_temperature(bad, synthetic, get_recipe("screened"))
+  expect_identical(scr$meta$ts_col, "TS_measured")
+  expect_true(scr$meta$ts_refused)
+  expect_match(scr$meta$ts_reason, "reconstructed")
+  expect_match(scr$meta$ts_reason, "screen_best strategy wanted TS_linear")
+  expect_equal(scr$ac$TS_final, c(4, 5, 6))
+
+  # memory_fill: the fill is not attached even though one is supplied.
+  mf <- get_soil_temperature(bad, synthetic, get_recipe("memfill"), fill = fake_fill())
+  expect_identical(mf$meta$ts_col, "TS_measured")
+  expect_true(mf$meta$ts_refused)
+  expect_true(is.na(mf$meta$fill_method))
+  expect_equal(mf$ac$TS_final, c(4, 5, 6))
+
+  # The partial cases count as no truth too.
+  for (src in c("recalibrated", "gapfill_ta", "lm_ta_cold", "borrowed_site", "ta_substitute")) {
+    r <- get_soil_temperature(bad, fake_site_info(ts_source = src), get_recipe("screened"))
+    expect_true(r$meta$ts_refused, info = src)
+  }
+})
+
+test_that("the refusal does not fire where it should not", {
+  bad <- fake_site_data("BAD")
+  # A sensor, a second depth, the PI's gap fill: measured at every row.
+  for (src in c("sensor", "sensor_depth2", "gapfill_pi")) {
+    r <- get_soil_temperature(bad, fake_site_info(ts_source = src), get_recipe("screened"))
+    expect_identical(r$meta$ts_col, "TS_linear", info = src)
+    expect_false(r$meta$ts_refused, info = src)
+  }
+  # The manuscript's own strategy is a declaration and is exempt.
+  orig <- get_soil_temperature(bad, fake_site_info("TS_linear", ts_source = "reconstructed"), original_recipe())
+  expect_identical(orig$meta$ts_col, "TS_linear")
+  expect_false(orig$meta$ts_refused)
+  # A variant that would have chosen TS_measured anyway has nothing to refuse.
+  good <- get_soil_temperature(fake_site_data("GOOD"), fake_site_info(ts_source = "reconstructed"),
+                               get_recipe("screened"))
+  expect_identical(good$meta$ts_col, "TS_measured")
+  expect_false(good$meta$ts_refused)
+  # An explicit ts_col is a sensitivity run and is honoured.
+  ovr <- get_soil_temperature(bad, fake_site_info(ts_source = "reconstructed"), get_recipe("screened"),
+                              ts_col = "TS_linear")
+  expect_identical(ovr$meta$ts_col, "TS_linear")
+  expect_false(ovr$meta$ts_refused)
+})
+
+test_that("the fill declines where there is no truth, before doing any work", {
+  # A site_data with nothing in it: if the truth check did not come first,
+  # this would fail on the missing tables rather than return a status.
+  out <- suppressMessages(fill_soil_temp(list(), fake_site_info(ts_source = "reconstructed")))
+  expect_match(out$status, "no measured truth")
+  expect_match(out$status, "reconstructed")
+  expect_null(out$ac_ts)
+  expect_false(fill_available(out))
+})
+
 test_that("a site_data without ts_bounds is refused by name", {
   sd_ <- fake_site_data()
   sd_$ts_bounds <- NULL

@@ -41,12 +41,46 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
 
   # `ts_col` overrides the strategy, for sensitivity runs that compare
   # estimation methods against each other on the same site.
-  choice <- if (is.null(ts_col)) {
+  override <- ts_col
+  choice <- if (is.null(override)) {
     choose_ts_col(recipe, site_data, site_info, fill)
   } else {
-    list(ts_col = ts_col, reason = "ts_col argument")
+    list(ts_col = override, reason = "ts_col argument")
   }
   ts_col <- choice[["ts_col"]]
+
+  # No second method where there is no measured truth to fit it against.
+  #
+  # At 27 sites the column step 01 calls `TS_measured` has rows that are not
+  # a sensor reading -- a whole-column reconstruction at 25 of them, a
+  # partial one at FI-Sod and US-MBP (`ts_source` in site_info.csv says
+  # which). Every variant strategy's alternative to that column is a model
+  # fitted *to* it: `TS_linear` regresses it on air temperature, `TS_memfill`
+  # is cross-validated against it. Fitted to a reconstruction, either one
+  # returns a function of the same predictors wearing a skill score that
+  # measures how well a regression reproduces a regression. So a variant
+  # keeps step 01's column at these sites and says why. The manuscript's own
+  # strategy is exempt: `ts_col` there is a declaration, and its two
+  # legitimate double-applications (FI-Sod, US-MBP) are the manuscript's.
+  # An explicit `ts_col` argument is a sensitivity run and is honoured.
+  #
+  # The prep-stage `ts_qc = sensor` strategy is where a variant gets to act
+  # at these sites instead: qualify on the raw sensor, and there is a truth.
+  refused <- FALSE
+  if (is.null(override) && !identical(recipe$ts, "site_info") &&
+      identical(ts_measured_truth(site_info), "none") &&
+      !identical(ts_col, "TS_measured")) {
+    refused <- TRUE
+    choice <- list(
+      ts_col = "TS_measured",
+      reason = sprintf(
+        paste0("kept step 01's column: ts_source = %s leaves no measured soil ",
+               "temperature to fit a second method against (%s strategy wanted %s)"),
+        ts_source(site_info), recipe$ts, ts_col
+      )
+    )
+    ts_col <- "TS_measured"
+  }
 
   # The reconstructed column is attached here, not in step 01, because it is
   # produced by its own per-site target (`fill_soil_temp()`) and only a
@@ -95,6 +129,8 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     # whatever recipe is in force. Strategies select downstream of those
     # reconstructions and cannot undo them (ts-variants.html, V4).
     ts_measured_synthetic = ts_measured_is_synthetic(site_info),
+    ts_source = ts_source(site_info),
+    ts_refused = refused,
     fill_method = fill_method,
     fill_cv_rmse = fill_cv_rmse,
     fill_degenerate = fill_degenerate,

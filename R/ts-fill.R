@@ -345,6 +345,16 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
          ac_ts = NULL, night_ts = NULL, ts_bounds = NULL)
   }
 
+  # No truth, no fill. Where step 01's column is itself a reconstruction at
+  # any row (`ts_measured_truth()` is "none"), every candidate would be scored
+  # on how well it reproduces a regression, and the best of them is the one
+  # that shares its functional form -- DE-Hte's `lm_ta_netrad` at 1.5e-14.
+  # `get_soil_temperature()` would refuse the result anyway; declining here
+  # keeps the cost and the non-information out of the run.
+  if (identical(ts_measured_truth(site_info), "none")) {
+    return(fail(paste0("no measured truth: ts_source = ", ts_source(site_info))))
+  }
+
   ac <- site_data[["ac"]]
   if (!"TS_measured" %in% names(ac)) return(fail("no TS_measured column"))
   ac$TS <- ac$TS_measured

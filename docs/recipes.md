@@ -36,6 +36,22 @@ compared row for row.
   fill is unavailable the strategy falls back to `TS_linear` and records why
   in `settings$ts_reason`.
 
+**Where there is no measured truth, no second method is applied.** At the 27
+sites whose `ts_source` (site_info.csv) leaves rows of `TS_measured` that are
+not a sensor reading — the 16 `estimate_Ts` reconstructions, the seven
+wholesale `TS ~ TA` sites, GF-Guy, US-Cwt, and the partial cases FI-Sod and
+US-MBP — both `screen_best` and `memory_fill` keep step 01's column and record
+`ts_refused = TRUE` with the reason. The alternative is a model fitted *to* a
+reconstruction: `TS_linear` regresses it on air temperature, `TS_memfill` is
+cross-validated against it, and either returns a function of the same
+predictors wearing a skill score (DE-Hte's `lm_ta_netrad`: 1.5×10⁻¹⁴). The
+fill target declines at those sites for the same reason
+(`status = "no measured truth"`), so `fill_cv.csv` carries no rows for them.
+`site_info` is exempt — it is a declaration, and the manuscript's own two
+double-applications (FI-Sod, US-MBP) are the manuscript's. The prep-stage
+`ts_qc = sensor` strategy (*Future work*) is where a variant gets to act at
+these sites: qualify on the raw sensor, and there is a truth.
+
 The verdict is computed by `ts_quality()` on the column step 01 leaves as
 `TS_measured` — *after* the site-specific column choices step 01 makes — because
 that is the column a run would otherwise fit on. The raw-record screen, which is

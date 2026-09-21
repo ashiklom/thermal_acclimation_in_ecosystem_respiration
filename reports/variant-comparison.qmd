@@ -247,7 +247,10 @@ in `site_info.csv` says which mechanism (`reconstructed`, `lm_ta_cold`,
 downstream of those and cannot undo them, so at those sites every recipe but
 `noseason` fits the same column. `fill_truth_synthetic` says the same of the
 CV's truth, and `fill_degenerate` that the winner reproduced it to numerical
-zero.
+zero. `ts_refused` marks where a variant *wanted* another column and kept step
+01's instead: at a site whose `ts_source` leaves no measured truth, neither the
+regression nor the fill has anything to be fitted against, so no second method
+is applied and `ts_reason` says so.
 
 ```{r provenance}
 #| echo: false
@@ -256,7 +259,7 @@ if (is.null(settings)) skip_note("Provenance", "variant_settings_csv not built."
   settings |>
     filter(model == first(model)) |>   # choices are model-independent except swc
     select(site_ID, recipe_id, ts_col, ts_reason, ts_verdict, ts_flags,
-           any_of("ts_measured_synthetic"),
+           any_of(c("ts_source", "ts_refused", "ts_measured_synthetic")),
            fill_method, fill_cv_rmse, any_of(c("fill_degenerate", "fill_truth_synthetic")),
            bounds_strategy, tStart, tEnd,
            window_gStart, window_gEnd, control_year, fit_profile) |>
