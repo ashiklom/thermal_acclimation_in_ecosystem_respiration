@@ -182,6 +182,11 @@ cached_step01 <- function(name_site) {
     hit <- readRDS(path)
     if (identical(hit$code_key, CODE_KEY)) return(hit$value)
   }
+  # `fix_soil_temp()`'s random forest is unseeded: inside the pipeline every
+  # call is in a target and `targets` seeds it, but this script runs outside
+  # one, and without this the four forest sites could never reproduce their
+  # own digests. 222 is the original workflow's seed.
+  set.seed(222)
   value <- tryCatch(
     suppressWarnings(suppressMessages(prep_nee_ac(get_site_info(name_site)))),
     error = function(e) structure(conditionMessage(e), class = "baseline_error")
@@ -397,15 +402,21 @@ if (write_mode || !file.exists(outfile)) {
   if (file.exists(outfile)) {
     old_text <- readLines(outfile, warn = FALSE)
     old_text <- old_text[nzchar(old_text)]
-    if (!identical(old_text[[1]], header)) {
-      stop(
-        "The committed baseline's columns differ from this run's, so the two ",
-        "cannot be merged row-wise. Re-run `--write` over every site instead:\n  ",
-        "Rscript tests/ts-swc-baseline.R --write"
-      )
-    }
     refreshed <- unique(report$site_ID)
     old_body <- old_text[-1]
+    if (!identical(old_text[[1]], header)) {
+      # A changed column set can only be written wholesale: rows for sites not
+      # in this run would be carried across under the wrong header.
+      stale <- setdiff(unique(sub(",.*$", "", old_body)), refreshed)
+      if (length(stale)) {
+        stop(
+          "The committed baseline's columns differ from this run's, so rows for ",
+          "sites not in this run cannot be carried across: ", paste(stale, collapse = ", "),
+          ". Re-run `--write` over every site instead:\n  Rscript tests/ts-swc-baseline.R --write"
+        )
+      }
+      old_body <- character()
+    }
     site_of <- sub(",.*$", "", old_body)
     kept <- old_body[!site_of %in% refreshed]
     cat(sprintf(
