@@ -34,7 +34,9 @@ DEFAULT_SITES <- c(
   "DE-Tha", # ICOS baseline
   "NL-Loo", # ICOS with a gStart override and TS ~ TA
   "GF-Guy", # ICOS tropical: air temperature substituted for soil, gStart/gEnd pinned
-  "AU-Tum"  # TERN southern hemisphere: the wrapped growing year, gEnd override
+  "AU-Tum", # TERN southern hemisphere: the wrapped growing year, gEnd override
+  "US-Ha1", # AmeriFlux estimate_Ts: soil temperature regressed from air only
+  "US-Los"  # AmeriFlux estimate_Ts: the random forest on air + net radiation
 )
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -53,7 +55,6 @@ oracle <- dplyr::bind_rows(
 # breakage is not lost among them.
 KNOWN_GAPS <- c(
   "site-specific logic not implemented",
-  "reconstructing soil temperature inside the AmeriFlux reader is not implemented",
   "No download method"
 )
 

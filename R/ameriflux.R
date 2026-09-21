@@ -249,28 +249,31 @@ prep_ustar_df <- function(a, site_info) {
 
   # soil temperature TS
   #
-  # TODO: Implement. This is the one AmeriFlux branch with nothing behind it,
-  # and it blocks the eight sites listed below -- `estimate_Ts = YES` in
-  # site_info.csv, AmeriFlux BASE. The original read a soil temperature the
-  # authors had reconstructed offline and shipped as
-  # `TS_RandomForest/<site>_TS_rfp.csv`, a file this repo does not have; the
-  # commented-out lines are what it did with it. The reconstruction itself is
-  # already here, in `fix_soil_temp()`, whose AmeriFlux branch selects exactly
-  # the columns this needs and is reachable from nowhere else. Wiring the two
-  # together is the work -- plus deciding whether the result should be
-  # `TS_measured` (as the original treated it) or a separate column, since
-  # `ts_measured_is_synthetic()` would then have to say so.
+  # Where `estimate_Ts` is declared, the whole column is a reconstruction from
+  # air temperature and (where the site has it) net radiation, not a
+  # measurement. The original computed it in a separate pass -- workflow 01_01
+  # -- wrote `TS_RandomForest/<site>_TS_rfp.csv`, and read that file back here.
+  # `fix_soil_temp()` is 01_01 transcribed, so the reconstruction happens
+  # inline instead and there is no intermediate file to keep in step with the
+  # raw record.
+  #
+  # Joined on TIMESTAMP rather than assigned positionally: `fix_soil_temp()`
+  # joins day-of-year climatologies onto its working copy to gap-fill the
+  # predictors, and a duplicated key there would silently change the row count.
+  # The row count is checked for the same reason.
+  #
+  # The result is `TS`, i.e. `TS_measured` downstream, which is what the
+  # original treated it as. `ts_measured_is_synthetic()` already reports
+  # `estimate_Ts` sites, so a run that scores a reconstruction against this
+  # column is scoring it against another reconstruction, and says so.
   if (site_info$estimate_Ts) {
-    stop(
-      name_site, " declares estimate_Ts = YES, and reconstructing soil ",
-      "temperature inside the AmeriFlux reader is not implemented. See the ",
-      "comment above this stop() in `prep_ustar_df()`. Affected sites: ",
-      paste(SITES_ESTIMATE_TS_BLOCKED, collapse = ", "), "."
-    )
-    # df_TS <- read.csv(file = file.path(dir_rawdata, "TS_RandomForest", paste0(name_site, "_TS_rfp.csv")))
-    # df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
-    # df_TS <- dplyr::left_join(data.frame(TIMESTAMP = ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
-    # ac$TS <- df_TS$TS_pred
+    message("Reconstructing soil temperature (", ts_estimate_method(site_info), ")")
+    nrow_before <- nrow(ac)
+    ac <- ac |>
+      dplyr::left_join(fix_soil_temp(a, site_info), by = "TIMESTAMP")
+    stopifnot(nrow(ac) == nrow_before)
+    ac$TS <- ac$TS_pred
+    ac$TS_pred <- NULL
   } else {
     if (!is.na(site_info$TS)) {
       ac$TS <- a[[site_info$TS]]

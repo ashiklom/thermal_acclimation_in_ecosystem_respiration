@@ -135,21 +135,64 @@ test_that("prep_ustar_df returns the table and the RH-conversion decision", {
   }
 })
 
-# The one AmeriFlux branch with no implementation behind it. Removing the
-# reader's exclusion from `pipeline_sites()` put these eight sites into
-# `THERMAL_SITES=all`, where they fail individually; that is the intended
-# behaviour, but only if the list stays honest about who is affected.
-test_that("the unimplemented estimate_Ts sites are exactly what site_info declares", {
-  si <- get_site_info()
-  declared <- si$site_ID[si$estimate_Ts & grepl("AmeriFlux_BASE", si$source, fixed = TRUE)]
-  expect_setequal(declared, SITES_ESTIMATE_TS_BLOCKED)
+# ------------------------------------------------ the estimate_Ts sites
+#
+# Eight AmeriFlux sites have no usable measured soil temperature and
+# reconstruct the whole column from air temperature, five of them with net
+# radiation as well. The reader used to `stop()` here, so this was the last
+# branch with no execution behind it. These run the reconstruction on
+# synthetic input -- fast, and enough to catch the failure that hid in it:
+# `fix_soil_temp()`'s AmeriFlux branch selected the per-site soil and air
+# temperature columns without renaming them to `TS`/`TA`, which the gap fill
+# read as "nothing missing" and the fit read as "object 'TA' not found".
+estimate_ts_sites <- (\(si) si$site_ID[si$estimate_Ts &
+  grepl("AmeriFlux_BASE", si$source, fixed = TRUE)])(get_site_info())
+
+test_that("both AmeriFlux estimator branches are represented", {
+  methods <- vapply(estimate_ts_sites, function(s) ts_estimate_method(get_site_info(s)), "")
+  expect_setequal(unname(methods), c("NETRAD", "TA only"))
 })
 
-test_that("an estimate_Ts site fails by name rather than mid-reader", {
-  si <- get_site_info(SITES_ESTIMATE_TS_BLOCKED[[1]])
+for (name_site in estimate_ts_sites) {
+  test_that(sprintf("fix_soil_temp reconstructs soil temperature at %s", name_site), {
+    si <- get_site_info(name_site)
+    withr::local_seed(4)
+    a <- with_synthetic_soil_signal(synthetic_ameriflux(si, n = 48 * 30), si)
+    out <- suppressWarnings(suppressMessages(fix_soil_temp(a, si)))
+
+    expect_named(out, c("TIMESTAMP", "TS_pred"))
+    expect_equal(nrow(out), nrow(a))
+    expect_identical(out$TIMESTAMP, a$TIMESTAMP)
+    expect_type(out$TS_pred, "double")
+    # A reconstruction of nothing would also satisfy the shape checks.
+    expect_false(all(is.na(out$TS_pred)))
+    expect_gt(stats::sd(out$TS_pred, na.rm = TRUE), 0)
+  })
+}
+
+test_that("the reader attaches the reconstruction as TS, one row per input row", {
+  # US-Ha1 is the cheapest of the eight -- no net radiation, so the branch is
+  # a regression rather than a forest -- and the join is what this pins:
+  # `fix_soil_temp()` gap-fills through day-of-year joins internally, where a
+  # duplicated key would change the row count without changing the columns.
+  si <- get_site_info("US-Ha1")
   expect_true(si$estimate_Ts)
+  withr::local_seed(4)
+  a <- with_synthetic_soil_signal(synthetic_ameriflux(si, n = 48 * 30), si)
+  out <- suppressWarnings(suppressMessages(prep_ustar_df(a, si)))[["ac"]]
+
+  expect_equal(nrow(out), nrow(a))
+  expect_true("TS" %in% names(out))
+  expect_false("TS_pred" %in% names(out))
+  expect_false(all(is.na(out$TS)))
+})
+
+test_that("an unknown estimator is refused by name", {
+  si <- get_site_info("US-Ha1")
+  si$estimate_ts_method <- "kriging"
+  a <- with_synthetic_soil_signal(synthetic_ameriflux(si, n = 96), si)
   expect_error(
-    suppressWarnings(suppressMessages(prep_ustar_df(synthetic_ameriflux(si), si))),
-    "estimate_Ts"
+    suppressWarnings(suppressMessages(fix_soil_temp(a, si))),
+    "estimate_ts_method"
   )
 })

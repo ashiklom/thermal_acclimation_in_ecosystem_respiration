@@ -152,8 +152,8 @@ parse_toml <- function(path) {
 # BASE and the FLUXNET-family products alike, in either hemisphere.
 #
 # Scope is not a claim that every site will succeed. A site whose raw data is
-# not on disk, or which needs a reader branch that is still a `stop()` (see
-# the `estimate_Ts` sites in `prep_ustar_df()`), fails as its own target under
+# not on disk (ZA-Kru today), or which needs a reader branch that is still a
+# `stop()` (FR-Pue's PI-supplied soil water), fails as its own target under
 # `error = "continue"` and is reported by the run report. That is deliberately
 # a per-site failure rather than a silent exclusion from the grid, so that the
 # gap is visible in the results rather than only in this function.
