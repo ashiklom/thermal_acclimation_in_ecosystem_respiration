@@ -157,15 +157,18 @@ predict_soil_temp <- function(data, use_NETRAD, seed = NULL) {
   y0 <- predict(rf, train)
   y1 <- predict(rf, test)
 
-  message("Training data performance by random forests: ")
-  print(caret::postResample(pred = y0, obs = train$TS))
-
-  message("Testing data performance by random forests: ")
-  print(caret::postResample(pred = y1, obs = test$TS))
-
+  # Through `message()`, not `print()`, so that a caller can silence them.
+  # These are the original's diagnostics and worth keeping -- they are the
+  # only report of how well the reconstruction fits -- but they run once per
+  # `estimate_Ts` site, and printing a full `lm` summary straight to stdout
+  # from inside a test or a `tar_make()` worker buries everything else.
+  report <- function(label, x) {
+    message(label, "\n", paste(utils::capture.output(print(x)), collapse = "\n"))
+  }
+  report("Training data performance by random forests:", caret::postResample(pred = y0, obs = train$TS))
+  report("Testing data performance by random forests:", caret::postResample(pred = y1, obs = test$TS))
   # compare with linear regression
-  message("Performance by linear regression: ")
-  print(summary(lm))
+  report("Performance by linear regression:", summary(lm))
   # random forest is much better than lm;
 
   # do the prediction
