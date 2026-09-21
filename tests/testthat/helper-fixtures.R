@@ -43,6 +43,31 @@ prepped_site <- function(name_site) {
 # real one. Nothing below is site-specific: these are properties of the path.
 READER_SITES <- c(fluxnet_family = "DE-RuC", ameriflux = "US-Kon")
 
+# The column names in a site's AmeriFlux BASE archive, read from the header
+# alone. `amf_read_base()` would parse the whole table -- tens of seconds and
+# hundreds of MB per site -- and the declaration check only needs the names.
+#
+# An archive can hold more than one BASE table (BR-Sa1 ships an older hourly
+# one alongside its half-hourly), so the half-hourly file wins, as it does in
+# the reader.
+ameriflux_base_header <- function(name_site) {
+  zip <- product_file(name_site, "AmeriFlux_BASE")
+  inside <- utils::unzip(zip, list = TRUE)$Name
+  csv <- grep("_BASE_HH_.*[.]csv$", inside, value = TRUE)
+  if (!length(csv)) csv <- grep("_BASE_.*[.]csv$", inside, value = TRUE)
+  # Read the first few lines in one call. An `unz()` connection that is not
+  # explicitly opened is opened and closed again by every read, so reading it
+  # a line at a time returns line 1 forever.
+  con <- unz(zip, csv[[1]])
+  on.exit(close(con), add = TRUE)
+  head_lines <- readLines(con, n = 5L, warn = FALSE)
+  header <- head_lines[!startsWith(head_lines, "#")]
+  if (!length(header)) {
+    stop(name_site, ": no header line in the first 5 lines of ", csv[[1]], ".")
+  }
+  trimws(strsplit(header[[1]], ",", fixed = TRUE)[[1]])
+}
+
 # A seasonal NEE/TS curve with every day-of-year present.
 #
 # Completeness is load-bearing. `detect_growing_season()` floors gStart with the

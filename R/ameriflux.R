@@ -197,8 +197,61 @@ prep_ameriflux <- function(site_info) {
   list(ac = ac, dt = dt, gs = gs)
 }
 
+# Every per-site column this function is about to read, for the path this site
+# takes. `TS` is skipped where the column is reconstructed, `SWC` where the
+# site discards soil water, and exactly one of `RH`/`VPD` is consulted.
+#
+# `netrad_column` is deliberately absent: `prep_ustar_df()` carries net
+# radiation forward only if it happens to be there, while `fix_soil_temp()`
+# raises its own error when a site that needs it does not have it.
+declared_ameriflux_columns <- function(site_info) {
+  fields <- c("NEE", "FC", "TA", "SW_IN", "USTAR",
+              if (!isTRUE(site_info$estimate_Ts)) "TS",
+              if (isTRUE(site_info$SWC_use)) "SWC",
+              if (!is.na(site_info$RH)) "RH" else "VPD")
+  declared <- unlist(site_info[fields])
+  declared <- declared[!is.na(declared)]
+  # `NEE` is a `+`-separated sum at 26 sites; every term has to be present.
+  unique(trimws(unlist(strsplit(declared, "+", fixed = TRUE))))
+}
+
+# AmeriFlux BASE column names carry the sensor's position and processing
+# level, and they change between releases: US-Ho1 and US-Ho2 declared
+# `RH_PI_F_2_1_1`, which release 15-5 and 10-5 no longer publish. Read through
+# `[[` on a tibble, an absent name yields NULL and the column is simply never
+# created, so the complaint used to surface inside REddyProc as "Missing
+# specified columns in dataset: RelHumidity_Percent" -- nowhere near the site
+# declaration that caused it, and with nothing to act on.
+#
+# Checked in one place, up front, naming the site, the field, the column and
+# what the record does offer instead. The declarations themselves live in
+# site_info.csv and `scripts/revise-site-info.R`.
+check_declared_columns <- function(a, site_info) {
+  name_site <- site_info[["site_ID"]]
+  wanted <- declared_ameriflux_columns(site_info)
+  absent <- setdiff(wanted, names(a))
+  if (!length(absent)) return(invisible(NULL))
+
+  # Same measurement, different position or processing level: the shortlist
+  # someone re-declaring the column would want to choose from.
+  near <- function(col) {
+    stem <- sub("_.*$", "", col)
+    hits <- grep(paste0("^", stem, "(_|$)"), names(a), value = TRUE)
+    if (length(hits)) paste(hits, collapse = ", ") else "none"
+  }
+  stop(
+    name_site, " declares ", length(absent), " column(s) that its AmeriFlux ",
+    "BASE record does not contain:\n",
+    paste0("  ", absent, "  --  the record has: ", vapply(absent, near, ""),
+           collapse = "\n"),
+    "\nRe-declare them in data-core/site_info.csv and in ",
+    "scripts/revise-site-info.R, which rebuilds it."
+  )
+}
+
 prep_ustar_df <- function(a, site_info) {
   name_site <- site_info[["site_ID"]]
+  check_declared_columns(a, site_info)
 
   ac <- a |>
     dplyr::select("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "TIMESTAMP", "TIMESTAMP_END")

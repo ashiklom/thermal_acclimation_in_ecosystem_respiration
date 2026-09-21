@@ -196,3 +196,66 @@ test_that("an unknown estimator is refused by name", {
     "estimate_ts_method"
   )
 })
+
+# ------------------------------------ declared columns vs. the actual record
+#
+# AmeriFlux BASE column names encode sensor position and processing level, and
+# they change between releases. US-Ho1 and US-Ho2 declared `RH_PI_F_2_1_1`,
+# which releases 15-5 and 10-5 no longer publish; `[[` on a tibble returns
+# NULL for an absent name, so the column was never created and the failure
+# surfaced inside REddyProc as a complaint about `RelHumidity_Percent`.
+test_that("a declared column the record lacks is refused, by name, up front", {
+  si <- get_site_info("US-Kon")
+  a <- synthetic_ameriflux(si)
+  a[[si$TA]] <- NULL
+
+  expect_error(prep_ustar_df(a, si), "US-Kon")
+  expect_error(prep_ustar_df(a, si), si$TA)
+  # and the shortlist of what the record does offer, so the message is actionable
+  expect_error(prep_ustar_df(a, si), "the record has")
+})
+
+test_that("the declared-column set follows the path the site actually takes", {
+  # Soil temperature is not read where it is reconstructed, soil water is not
+  # read where the site discards it, and exactly one of RH/VPD is consulted.
+  reconstructed <- get_site_info("US-Ha1")
+  expect_true(reconstructed$estimate_Ts)
+  expect_false(reconstructed$TS %in% declared_ameriflux_columns(reconstructed))
+
+  no_water <- get_site_info("US-Kon") # SWC_use NO, but names a column
+  expect_false(is.na(no_water$SWC))
+  expect_false(no_water$SWC %in% declared_ameriflux_columns(no_water))
+
+  rh_site <- get_site_info("US-Kon")
+  vpd_site <- get_site_info("US-GLE")
+  expect_true(rh_site$RH %in% declared_ameriflux_columns(rh_site))
+  expect_true(vpd_site$VPD %in% declared_ameriflux_columns(vpd_site))
+
+  # A compound NEE declaration contributes every term.
+  compound <- get_site_info("US-Kon")
+  compound$NEE <- "FC_1_1_1 + SC_1_1_1"
+  expect_true(all(c("FC_1_1_1", "SC_1_1_1") %in% declared_ameriflux_columns(compound)))
+})
+
+test_that("every AmeriFlux site's declared columns exist in its record", {
+  # The check that would have caught US-Ho1 and US-Ho2 before a pipeline run
+  # did. Reads only each archive's header, so it costs seconds, not minutes.
+  si <- get_site_info()
+  si <- si[vapply(seq_len(nrow(si)), function(i) site_reader(si[i, ]), "") == "ameriflux", ]
+  skip_if(anyNA(vapply(si$site_ID, function(s) product_file(s, "AmeriFlux_BASE"), "")),
+          "not every AmeriFlux BASE archive is downloaded")
+
+  offenders <- character()
+  for (i in seq_len(nrow(si))) {
+    row <- si[i, ]
+    cols <- ameriflux_base_header(row$site_ID)
+    # US-Ha2's `_A_1_1` columns are built by `prep_ameriflux()` from two
+    # locations before `prep_ustar_df()` runs, so they are not expected here.
+    wanted <- setdiff(declared_ameriflux_columns(row), grep("_A_1_1$", declared_ameriflux_columns(row), value = TRUE))
+    absent <- setdiff(wanted, cols)
+    if (length(absent)) {
+      offenders <- c(offenders, paste0(row$site_ID, ": ", paste(absent, collapse = ", ")))
+    }
+  }
+  expect_equal(offenders, character())
+})
