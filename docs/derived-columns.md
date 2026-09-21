@@ -104,8 +104,8 @@ reading at all — 16 `estimate_Ts` reconstructions, seven wholesale `TS ~ TA`
 lines, GF-Guy's air temperature, US-Cwt's borrowed coefficients, and the
 partial cases FI-Sod and US-MBP.
 
-`ts_measured_is_synthetic()` is "does `ts_source` leave any derived row",
-and it drives two things: the `truth_synthetic` flag on the fill, and the
+`ts_measured_truth()` is "does `ts_source` leave any derived row" ("none")
+or not ("sensor"), and it drives two things: the `truth_synthetic` flag on the fill, and the
 refuse rule in stage B under which no variant applies a second method to a
 column that is already a reconstruction.
 

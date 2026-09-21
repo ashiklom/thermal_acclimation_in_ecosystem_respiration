@@ -220,11 +220,15 @@ test_that("a declared column the record lacks is refused, by name, up front", {
 })
 
 test_that("the declared-column set follows the path the site actually takes", {
-  # Soil temperature is not read where it is reconstructed, soil water is not
-  # read where the site discards it, and exactly one of RH/VPD is consulted.
+  # Soil temperature is read wherever declared -- at a reconstructed site it is
+  # the training target -- soil water is not read where the site discards it,
+  # and exactly one of RH/VPD is consulted.
   reconstructed <- get_site_info("US-Ha1")
-  expect_true(reconstructed$estimate_Ts)
-  expect_false(reconstructed$TS %in% declared_ameriflux_columns(reconstructed))
+  expect_identical(ts_source(reconstructed), "reconstructed")
+  expect_true(reconstructed$TS %in% declared_ameriflux_columns(reconstructed))
+  no_sensor <- get_site_info("US-Cwt")
+  expect_true(is.na(no_sensor$TS))
+  expect_false(any(is.na(declared_ameriflux_columns(no_sensor))))
 
   no_water <- get_site_info("US-Kon") # SWC_use NO, but names a column
   expect_false(is.na(no_water$SWC))

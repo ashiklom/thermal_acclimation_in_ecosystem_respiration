@@ -138,10 +138,6 @@ ts_measured_truth <- function(site_info) {
   unname(TS_SOURCES[[ts_source(site_info)]])
 }
 
-ts_measured_is_synthetic <- function(site_info) {
-  identical(ts_measured_truth(site_info), "none")
-}
-
 # The development site sample: what `_targets.R` runs by default.
 #
 # Running every northern-hemisphere FLUXNET-family site end to end is not a

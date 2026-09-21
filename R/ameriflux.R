@@ -198,15 +198,15 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
 }
 
 # Every per-site column this function is about to read, for the path this site
-# takes. `TS` is skipped where the column is reconstructed, `SWC` where the
-# site discards soil water, and exactly one of `RH`/`VPD` is consulted.
+# takes. `TS` is read wherever it is declared -- at a reconstructed site it is
+# the estimator's training target -- `SWC` only where the site keeps soil
+# water, and exactly one of `RH`/`VPD` is consulted.
 #
 # `netrad_column` is deliberately absent: `prep_ustar_df()` carries net
 # radiation forward only if it happens to be there, while `fix_soil_temp()`
 # raises its own error when a site that needs it does not have it.
 declared_ameriflux_columns <- function(site_info) {
-  fields <- c("NEE", "FC", "TA", "SW_IN", "USTAR",
-              if (!isTRUE(site_info$estimate_Ts)) "TS",
+  fields <- c("NEE", "FC", "TA", "SW_IN", "USTAR", "TS",
               if (isTRUE(site_info$SWC_use)) "SWC",
               if (!is.na(site_info$RH)) "RH" else "VPD")
   declared <- unlist(site_info[fields])

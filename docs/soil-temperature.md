@@ -51,7 +51,7 @@ the manuscript applied, derived in `scripts/revise-site-info.R`:
 `TS_SOURCES` in `R/constants.R` is that last column: whether *every* row of the
 column is a sensor reading. It is deliberately strict — FI-Sod and US-MBP are
 "none" because part of their column is derived — and it is what the refuse
-rule (below) and `ts_measured_is_synthetic()` read.
+rule (below) reads, through `ts_measured_truth()`.
 
 The only site names left inside stage A are the manuscript's three
 training-target rules in the `reconstructed` arm: DE-Hte trains on the second

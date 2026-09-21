@@ -82,9 +82,8 @@ test_that("ts_measured_truth says whether every row of TS_measured is a sensor r
   for (s in c("FI-Sod", "US-MBP", "GF-Guy", "US-Cwt", "US-BZo", "CA-ARB", "DE-Hte", "US-Los")) {
     expect_identical(truth(s), "none", info = s)
   }
-  # `ts_measured_is_synthetic()` is the same question, as a logical.
-  expect_true(ts_measured_is_synthetic(get_site_info("DE-Hte")))
-  expect_false(ts_measured_is_synthetic(get_site_info("DE-Tha")))
+  # and every level is one of the two answers
+  expect_true(all(TS_SOURCES %in% c("sensor", "none")))
 })
 
 test_that("an unknown or missing ts_source is refused by name", {
