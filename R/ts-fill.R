@@ -78,80 +78,26 @@ TS_FILL_FEATURES_MEMORY <- c(
 
 # ------------------------------------------------------------------- methods
 #
-# Each method is fit(train) -> model and predict(model, newdata) -> numeric of
-# length nrow(newdata), NA wherever the predictors are not available.
-#
-# `lm_ta_pos` is the pipeline's current default reproduced exactly: fit
-# `TS ~ TA` above freezing, predict everywhere. `rf_ta`/`rf_ta_netrad` are
-# `predict_soil_temp()`'s two branches.
-#
-# `ranger` stands in for `randomForest`: the same algorithm, already a project
-# dependency, an order of magnitude faster, and used on both sides of every
-# comparison -- so the substitution favours no method, but these numbers are
-# not bit-identical to what `predict_soil_temp()` would produce.
+# The estimators are R/ts-estimators.R's; see there for the shape and for why
+# the fill's forests are `ranger` while the manuscript's is `randomForest`.
+# `lm_ta_pos` is the pipeline's step-02 default reproduced exactly: fit
+# `TS ~ TA` above freezing, predict everywhere.
 
-lm_method <- function(preds, fit_subset = NULL) {
-  list(
-    predictors = preds,
-    fit = function(train) {
-      if (!is.null(fit_subset)) train <- train[fit_subset(train), , drop = FALSE]
-      stats::lm(stats::reformulate(preds, "TS"), data = train, na.action = stats::na.omit)
-    },
-    predict = function(mod, newdata) {
-      as.numeric(stats::predict(mod, newdata = newdata, na.action = stats::na.pass))
-    }
-  )
-}
-
-rf_method <- function(preds, num_trees = 200) {
-  list(
-    predictors = preds,
-    fit = function(train) {
-      ok <- stats::complete.cases(train[, c("TS", preds), drop = FALSE])
-      if (sum(ok) < 50) stop("fewer than 50 complete training rows")
-      ranger::ranger(
-        x = as.data.frame(train[ok, preds, drop = FALSE]),
-        y = train$TS[ok],
-        num.trees = num_trees,
-        num.threads = 1,
-        seed = 222
-      )
-    },
-    predict = function(mod, newdata) {
-      # ranger has no NA handling, so rows with an incomplete feature vector
-      # get NA rather than being silently dropped -- which would misalign the
-      # prediction with the rows it belongs to.
-      out <- rep(NA_real_, nrow(newdata))
-      ok <- stats::complete.cases(newdata[, mod$forest$independent.variable.names, drop = FALSE])
-      if (any(ok)) {
-        out[ok] <- stats::predict(
-          mod, data = as.data.frame(newdata[ok, , drop = FALSE]), num.threads = 1
-        )$predictions
-      }
-      out
-    }
-  )
-}
-
+# The fill's candidates: the registry entries that can be fitted on a
+# blocked fold. The manuscript's forest is not among them -- its 60k/70:30
+# protocol is a fit-once recipe, not a fold-wise one -- but its family,
+# `rf:TA+NETRAD`, is, as `rf_ta_netrad`.
 ts_fill_methods <- function(have_netrad = FALSE, num_trees = 200) {
-  m <- list(
-    lm_ta_pos = lm_method("TA", fit_subset = function(d) !is.na(d$TA) & d$TA > 0),
-    lm_ta = lm_method("TA"),
-    rf_ta = rf_method("TA", num_trees),
-    lm_memory = lm_method(TS_FILL_FEATURES_MEMORY),
-    rf_memory = rf_method(TS_FILL_FEATURES_MEMORY, num_trees)
-  )
-  if (have_netrad) {
-    m$lm_ta_netrad <- lm_method(c("TA", "NETRAD"))
-    m$rf_ta_netrad <- rf_method(c("TA", "NETRAD"), num_trees)
-    m$rf_memory_netrad <- rf_method(c(TS_FILL_FEATURES_MEMORY, "NETRAD"), num_trees)
-  }
-  m
+  all <- ts_estimators(num_trees = num_trees)
+  wanted <- c("lm_ta_pos", "lm_ta", "rf_ta", "lm_memory", "rf_memory")
+  if (have_netrad) wanted <- c(wanted, "lm_ta_netrad", "rf_ta_netrad", "rf_memory_netrad")
+  all[wanted]
 }
 
 # ------------------------------------------------------------------- blocking
 #
-# `predict_soil_temp()` splits half-hourly rows 70/30 at *random*. Half-hourly
+# The manuscript's forest (`rf_ta_netrad_manuscript`) splits half-hourly rows
+# 70/30 at *random*. Half-hourly
 # soil temperature is autocorrelated on a scale of days, so a held-out row's
 # neighbours are in the training set. Measured (F13), that flatters an
 # instantaneous model by almost nothing and a memory model by a third -- it
@@ -182,7 +128,7 @@ TS_FILL_BLOCKINGS <- list(
   season = blocks_season
 )
 
-# Training rows are capped, as `predict_soil_temp()` caps them at 60,000, so
+# Training rows are capped, as the manuscript's forest caps them at 60,000, so
 # that a 20-year record does not make the random forest the bottleneck. Applied
 # inside each fold after the held-out block is removed, so it cannot leak.
 subsample_rows <- function(dat, n, seed) {

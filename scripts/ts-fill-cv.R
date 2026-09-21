@@ -4,7 +4,7 @@
 #
 # Two questions, one harness.
 #
-#   1. How optimistic is the random 70/30 split `predict_soil_temp()` uses?
+#   1. How optimistic is the random 70/30 split the manuscript's forest uses?
 #      Running the *same* model under `random` and under contiguous blocking
 #      answers it as a measurement rather than an assertion.
 #
@@ -41,7 +41,7 @@ max_train <- as.integer(parse_opt(args, "--max-train", "20000"))
 
 stopifnot(all(blockings %in% names(TS_FILL_BLOCKINGS)))
 
-# Training rows are capped, as `predict_soil_temp()` caps them at 60,000, so
+# Training rows are capped, as the manuscript's forest caps them at 60,000, so
 # that a 20-year half-hourly record does not make the random forest the
 # bottleneck. The cap is applied inside each fold, after the held-out block is
 # removed, so it cannot leak.

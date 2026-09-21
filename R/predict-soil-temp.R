@@ -18,7 +18,7 @@ fix_soil_temp <- function(a, site_info) {
   if (site_reader(site_info) == "ameriflux") {
     # Renamed, not just selected. The AmeriFlux columns are named per site
     # (`TS_PI_1_1_A`, `T_SONIC_1_1_1`, ...), and everything below this point --
-    # the gap fills, the formulae, `predict_soil_temp()` -- is written against
+    # the gap fills, the formulae, the estimators -- is written against
     # `TS` and `TA`. Selecting them under their original names left `data$TA`
     # NULL, which `sum(is.na(NULL))` reports as zero missing values, so the gap
     # fill quietly did nothing and the fit failed with "object 'TA' not found".
@@ -96,23 +96,31 @@ fix_soil_temp <- function(a, site_info) {
   # here. tests/testthat/test-soil-temp-columns.R pins the two against each
   # other, so the equivalence is checked rather than asserted in prose.
   method <- ts_estimate_method(site_info)
-  data$TS_pred <- switch(
+  estimator_name <- switch(
     method,
     # Net radiation is available, so the random forest can use it.
-    "NETRAD" = predict_soil_temp(data, use_NETRAD = TRUE)[["TS_pred"]],
+    "NETRAD" = "rf_ta_netrad_manuscript",
     # One or two years of TS and incomplete NETRAD: too little to train on.
-    "linear regression" = predict(lm(data = data, TS ~ TA + NETRAD), data),
+    "linear regression" = "lm_ta_netrad",
     # No net radiation at this site at all.
-    "TA only" = predict_ts_from_ta(ts_ta_model(data[data$TA > 0, ]), data$TA),
+    "TA only" = "lm_ta_pos",
     stop(
       name_site, " declares estimate_ts_method = ", shQuote(method),
       ", which is not one of \"NETRAD\", \"linear regression\", or empty."
     )
   )
+  est <- ts_estimators()[[estimator_name]]
+  mod <- est$fit(data)
+  data$TS_pred <- est$predict(mod, data)
 
-  # Only the prediction and its key. Every caller joins it back onto the table
-  # it came from, and the intermediate gap-fill columns are not theirs to see.
-  data[, c("TIMESTAMP", "TS_pred")]
+  # Only the prediction and its key, plus what made it. Every caller joins the
+  # prediction back onto the table it came from; the provenance travels in
+  # attributes because the caller's table has no room for a second row.
+  out <- data[, c("TIMESTAMP", "TS_pred")]
+  attr(out, "estimator") <- estimator_name
+  attr(out, "family") <- est$family
+  attr(out, "n_train") <- sum(stats::complete.cases(data[, c("TS", est$predictors), drop = FALSE]))
+  out
 }
 
 
@@ -126,56 +134,4 @@ doy_hour_climatology <- function(dat, col) {
   out <- dplyr::left_join(dat[, key], clim, by = key)[[".clim"]]
   out[is.nan(out)] <- NA_real_
   out
-}
-
-# NB no seed by default. The random 70/30 split and the forest itself are
-# unseeded here because every pipeline call arrives inside a target, and
-# `targets` already derives a deterministic per-target seed from the target's
-# name -- so a pipeline run reproduces, while `set.seed(222)` at this depth
-# would instead pin every site to the same draw. Pass `seed` when calling this
-# outside the pipeline and reproducibility is wanted.
-predict_soil_temp <- function(data, use_NETRAD, seed = NULL) {
-  # separate data into trained or tested
-  if (!is.null(seed)) {
-    set.seed(seed)    # default value = 222
-  }
-  # use a maximum of 60000 data to train and test the model; too many data will
-  # cause RF super slow and may not improve accuracy.
-  sampled <- sample(seq_len(nrow(data)), size = min(60000, nrow(data)), replace = FALSE)
-  ind <- sample(2, length(sampled), replace = TRUE, prob = c(0.7, 0.3))
-  train <- data[sampled[ind == 1], ]
-  test <- data[sampled[ind == 2], ]
-  # remove NA data
-  train <- na.omit(train)
-  test  <- na.omit(test)
-
-  if (use_NETRAD) {
-    rf <- randomForest::randomForest(formula = TS ~ TA + NETRAD, data = train) # this takes lots of time
-    lm <- lm(data = data, TS ~ TA + NETRAD)
-  } else {
-    rf <- randomForest::randomForest(formula = TS ~ TA, data = train) # this takes lots of time
-    lm <- lm(data = data, TS ~ TA)
-  }
-
-  y0 <- predict(rf, train)
-  y1 <- predict(rf, test)
-
-  # Through `message()`, not `print()`, so that a caller can silence them.
-  # These are the original's diagnostics and worth keeping -- they are the
-  # only report of how well the reconstruction fits -- but they run once per
-  # `estimate_Ts` site, and printing a full `lm` summary straight to stdout
-  # from inside a test or a `tar_make()` worker buries everything else.
-  report <- function(label, x) {
-    message(label, "\n", paste(utils::capture.output(print(x)), collapse = "\n"))
-  }
-  report("Training data performance by random forests:", caret::postResample(pred = y0, obs = train$TS))
-  report("Testing data performance by random forests:", caret::postResample(pred = y1, obs = test$TS))
-  # compare with linear regression
-  report("Performance by linear regression:", summary(lm))
-  # random forest is much better than lm;
-
-  # do the prediction
-  data$TS_pred <- predict(rf, data)
-
-  data[, c("TIMESTAMP", "TS_pred")]
 }

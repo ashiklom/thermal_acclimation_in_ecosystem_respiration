@@ -338,18 +338,20 @@ prep_ustar_df <- function(a, site_info) {
       ac$TS <- write_back_ts(ac$TS, a$TS_PI_1, "fill_gaps")
     } else if (name_site == "US-Cwt") {
       # this site has no TS measurements, so we used TS-TA relationships from nearby US-xGB of the same DBF category.
-      ac$TS <- write_back_ts(ac$TS, ac$TA * 0.64718 + 5.13873, "replace")
+      est <- fixed_linear_estimator(intercept = 5.13873, slope = 0.64718)
+      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "replace")
     } else if (name_site == "US-MBP") {
       # this site only missed a few TS data, so only estimate these missing data.
-      ac$TS <- write_back_ts(ac$TS, ac$TA * 0.3688005 + 5.8670273, "fill_gaps")
+      est <- fixed_linear_estimator(intercept = 5.8670273, slope = 0.3688005)
+      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "fill_gaps")
     } else if (name_site %in% SITES_TS_FROM_TA_RECENT) {
       # recent data is more accurate
-      mod_lm <- ts_ta_model(ac[ac$YEAR > 2021 & ac$TA > 0, ])
-      ac$TS <- write_back_ts(ac$TS, predict_ts_from_ta(mod_lm, ac$TA), "replace")
+      est <- ts_estimators()$lm_ta_recent
+      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "replace")
     } else if (name_site %in% SITES_TS_FROM_TA_COLD) {
       # cold area, use TA above 0 for growing season
-      mod_lm <- ts_ta_model(ac[ac$TA > 0, ])
-      ac$TS <- write_back_ts(ac$TS, predict_ts_from_ta(mod_lm, ac$TA), "replace")
+      est <- ts_estimators()$lm_ta_pos
+      ac$TS <- write_back_ts(ac$TS, est$predict(est$fit(ac), ac), "replace")
     }
   }
 

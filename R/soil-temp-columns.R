@@ -1,22 +1,10 @@
-# Soil temperature estimated from air temperature.
+# The step-02 soil-temperature substitution, its fit domain, and the bounds.
 #
-# Three places in this pipeline fit the same TS ~ TA regression and differ only
-# in which rows they fit on and how they write the result back:
-#
-#   * `prep_ustar_df()` builds `TS` for AmeriFlux sites that have no usable
-#     measured soil temperature, replacing the column wholesale.
-#   * `fix_soil_temp()` falls back to it when a site has no net radiation.
-#   * `apply_ts_linear()` replaces measured `TS` for the sites declared
-#     `ts_col == "TS_linear"`, as an *overlay* rather than a replacement.
-#
-# The fit is shared here, and so is the write-back: every one of them goes
-# through `write_back_ts()`, which names its semantics -- see there.
-
-# Fit soil temperature on air temperature. `na.action = na.omit` drops
-# incomplete rows, which is why callers can pass a subset containing NA rows.
-ts_ta_model <- function(fit_data) {
-  lm(data = fit_data, TS ~ TA, na.action = na.omit)
-}
+# The `TS ~ TA` line itself is `lm_ta` in R/ts-estimators.R, shared with the
+# readers and the fill; the write-back is `write_back_ts()` below, shared
+# likewise. What is specific to this file is *which rows* the substitution
+# is fitted on (`ts_fit_data()`), that it is an overlay, and the two bounds
+# definitions every candidate column carries.
 
 # The rows a site's regression is fitted on. A separate concept from the model
 # because it is a per-site declaration (`site_info$ts_linear_domain`): all but
@@ -42,11 +30,6 @@ ts_fit_data <- function(ac, nightNEE, domain) {
     night = nightNEE,
     stop("Unknown ts_linear_domain: ", shQuote(domain), ". Expected \"ac\" or \"night\".")
   )
-}
-
-# Predictions aligned one-to-one with `ta`, NA wherever TA is missing.
-predict_ts_from_ta <- function(mod, ta) {
-  predict(mod, newdata = data.frame(TA = ta), na.action = na.pass)
 }
 
 # Write an estimate back over a soil-temperature column. Three semantics are
