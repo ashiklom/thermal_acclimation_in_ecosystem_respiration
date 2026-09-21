@@ -130,10 +130,31 @@ synthetic_ameriflux <- function(site_info, n = 96) {
     TIMESTAMP = ts, TIMESTAMP_END = format(ts + 900, "%Y%m%d%H%M"),
     daytime = rep(c(FALSE, TRUE), each = n / 2)
   )
-  named <- unlist(site_info[c("NEE", "FC", "TA", "TS", "SWC", "SW_IN", "USTAR", "RH", "VPD")])
+  named <- unlist(site_info[c("NEE", "FC", "TA", "TS", "SWC", "SW_IN", "USTAR",
+                              "RH", "VPD", "netrad_column")])
   for (spec in stats::na.omit(named)) {
     for (nm in trimws(unlist(strsplit(spec, "\\+")))) a[[nm]] <- seq_len(n) / 10
   }
+  a
+}
+
+# A plausible soil/air temperature pair for the `estimate_Ts` reconstruction,
+# written over whatever `synthetic_ameriflux()` put in the site's declared
+# columns. A ramp in every column would make `TS ~ TA` an exact identity and
+# `TA + NETRAD` rank-deficient, so a reconstruction of it proves nothing: this
+# gives soil temperature a damped, lagged version of air temperature, which is
+# the relationship the estimator is supposed to find.
+with_synthetic_soil_signal <- function(a, site_info) {
+  t <- seq_len(nrow(a))
+  diurnal <- sin(2 * pi * t / 48)
+  drift <- t / nrow(a)
+  a[[site_info$TA]] <- 12 + 8 * diurnal + 6 * drift + stats::rnorm(length(t), 0, 0.5)
+  if (!is.na(site_info$netrad_column)) {
+    a[[site_info$netrad_column]] <- 120 * pmax(diurnal, 0) - 30
+  }
+  # Damped and lagged by three hours, as a buried sensor would be.
+  lagged <- c(rep(diurnal[[1]], 6), utils::head(diurnal, -6))
+  a[[site_info$TS]] <- 11 + 2.5 * lagged + 5 * drift + stats::rnorm(length(t), 0, 0.2)
   a
 }
 

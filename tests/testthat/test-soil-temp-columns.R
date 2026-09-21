@@ -344,3 +344,43 @@ test_that("the skip message says what the record actually holds", {
   expect_match(msg, "2023-2024")
   expect_match(msg, "200101010000")
 })
+
+# ------------------------------------ the estimator declaration vs. the lists
+#
+# `fix_soil_temp()` used to pick its estimator from two hard-coded site lists
+# while site_info.csv already carried the same information in
+# `estimate_ts_method`. It now reads the declaration, and these hold the
+# declaration to what the lists said -- so a disagreement is a test failure
+# rather than a site quietly fitted without its net radiation.
+test_that("estimate_ts_method reproduces the estimator site lists verbatim", {
+  si <- get_site_info()
+  method <- vapply(seq_len(nrow(si)), function(i) ts_estimate_method(si[i, ]), "")
+
+  # The random-forest list from workflow 01_01, and from `fix_soil_temp()`
+  # before the declaration replaced it.
+  expect_setequal(
+    si$site_ID[method == "NETRAD"],
+    c("DE-Akm", "FR-Pue", "US-Los", "US-SRG", "CA-Man", "US-Ced", "US-Ho1", "CZ-RAJ")
+  )
+  # The two sites with too little soil temperature to train a forest on.
+  expect_setequal(si$site_ID[method == "linear regression"], c("DE-Hte", "FR-FBn"))
+  # And the declaration is exactly `netrad_column`, which is where it comes from.
+  expect_identical(method == "NETRAD", !is.na(si$netrad_column))
+})
+
+test_that("the reconstruction runs at exactly the estimate_Ts sites", {
+  # `prep_fluxnet_family()` had its own copy of the list too. Both readers now
+  # branch on `estimate_Ts`, so this is the whole population.
+  si <- get_site_info()
+  expect_setequal(
+    si$site_ID[si$estimate_Ts],
+    c("US-Ha1", "US-Los", "US-Ho1", "US-Ho2", "US-PFa", "US-SRG", "CA-Man", "US-Ced",
+      "FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")
+  )
+  # Every AmeriFlux one declares the per-site columns the estimator reads;
+  # without them `fix_soil_temp()` would select nothing and fail on `TA`.
+  est <- si[si$estimate_Ts, ]
+  reader <- vapply(seq_len(nrow(est)), function(i) site_reader(est[i, ]), "")
+  expect_false(any(is.na(est$TS[reader == "ameriflux"])))
+  expect_false(any(is.na(est$TA[reader == "ameriflux"])))
+})

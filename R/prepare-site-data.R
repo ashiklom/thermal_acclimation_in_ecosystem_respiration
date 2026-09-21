@@ -169,8 +169,11 @@ prep_fluxnet_family <- function(site_info) {
     # use air temperature for this tropical site so that all tropical sites, we used bottom air temperature.
     a$TS_F_MDS_1 <- a$TA_F_MDS
     a$TS_F_MDS_1_QC <- a$TA_F_MDS_QC
-  } else if (name_site %in% c("FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")) {
-    message("Predicting soil temperature")
+  } else if (isTRUE(site_info[["estimate_Ts"]])) {
+    # The same switch the AmeriFlux reader uses. It was a site list here, and
+    # that list was exactly the non-AmeriFlux half of `estimate_Ts = YES`;
+    # tests/testthat/test-soil-temp-columns.R holds the two together.
+    message("Reconstructing soil temperature (", ts_estimate_method(site_info), ")")
     ts_fit <- fix_soil_temp(a, site_info) |>
       dplyr::select("TIMESTAMP", TS_F_MDS_1 = "TS_pred")
     a <- a |>
