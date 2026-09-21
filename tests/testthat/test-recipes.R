@@ -23,12 +23,12 @@ test_that("the CSV's original row agrees with original_recipe()", {
 test_that("an unknown strategy or a bad id fails by name", {
   expect_error(
     new_recipe("x", ts = "magic", season = "detect_or_override", bounds = "native",
-               swc = "site_info", year_qc = "site_info"),
+               swc = "site_info", year_qc = "site_info", ts_qc = "manuscript"),
     "axis 'ts' is 'magic'"
   )
   expect_error(
     new_recipe("Bad-Id", ts = "site_info", season = "detect_or_override", bounds = "native",
-               swc = "site_info", year_qc = "site_info"),
+               swc = "site_info", year_qc = "site_info", ts_qc = "manuscript"),
     "recipe_id must be"
   )
   bad <- get_recipe("memfill")
@@ -36,12 +36,17 @@ test_that("an unknown strategy or a bad id fails by name", {
   expect_error(validate_recipe(bad), "season")
 })
 
-test_that("every current recipe shares one prep key", {
-  # This is the assumption _targets.R asserts; the test explains what it
-  # protects. Two recipes with different prep keys need two site_data targets.
+test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
+  # A recipe with a different prep key gets its own step 01 per site in
+  # _targets.R; every other recipe shares the manuscript's.
   keys <- vapply(read_recipes()$recipe_id, function(id) recipe_prep_key(get_recipe(id)), "")
-  expect_length(unique(keys), 1)
-  expect_identical(unname(unique(keys)), "site_info")
+  expect_identical(unname(keys[["original"]]), MANUSCRIPT_PREP_KEY())
+  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info+manuscript")
+  expect_identical(unname(keys[["memfill_sensor"]]), "site_info+sensor")
+  expect_setequal(names(keys)[keys == MANUSCRIPT_PREP_KEY()],
+                  setdiff(names(keys), "memfill_sensor"))
+  # and the label is fit for a target name
+  expect_match(prep_key_label(keys[["memfill_sensor"]]), "^[A-Za-z0-9_]+$")
 })
 
 test_that("pipeline_recipes and pipeline_models scope by env var semantics", {
@@ -87,7 +92,7 @@ fake_fill <- function(ok = TRUE) {
 test_that("choose_ts_col follows the recipe and the verdict", {
   si <- list(ts_col = "TS_linear")
   r <- function(ts) new_recipe("r", ts = ts, season = "detect_or_override", bounds = "native",
-                               swc = "site_info", year_qc = "site_info")
+                               swc = "site_info", year_qc = "site_info", ts_qc = "manuscript")
 
   expect_identical(choose_ts_col(r("site_info"), fake_site_data("BAD"), si)$ts_col, "TS_linear")
   expect_identical(choose_ts_col(r("site_info"), fake_site_data("GOOD"), si)$ts_col, "TS_linear")
@@ -137,7 +142,7 @@ test_that("choose_swc_col: era5 is direct-only, site_info defers to the declarat
   si_no <- list(SWC_use = FALSE)
   r_orig <- get_recipe("original")
   r_era5 <- new_recipe("e", ts = "site_info", season = "detect_or_override", bounds = "native",
-                       swc = "era5", year_qc = "site_info")
+                       swc = "era5", year_qc = "site_info", ts_qc = "manuscript")
   expect_true(is.na(choose_swc_col(r_era5, si_yes, direct = FALSE)$swc_col))
   expect_identical(choose_swc_col(r_era5, si_yes, direct = TRUE)$swc_col, "SWC_era5")
   expect_identical(choose_swc_col(r_orig, si_yes, direct = TRUE)$swc_col,

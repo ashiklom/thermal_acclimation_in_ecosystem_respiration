@@ -70,22 +70,24 @@ message(
 message("  sites:   ", paste(sites, collapse = ", "))
 message("  recipes: ", paste(recipes, collapse = ", "))
 
-# Step 01 is shared across recipes. Every recipe in the registry today has the
-# same prep key, so one `site_data` per site serves all of them; this is the
-# assertion that keeps that true. When a recipe with a different prep key is
-# added (a `computed` year qualification, say), `site_data` has to be mapped
-# over `crossing(site, prep_key)` and the fit grid pointed at the matching one
-# -- the shape is the same as `site_fill` below, and this stop() names the spot.
-prep_keys <- unique(vapply(recipes, function(r) recipe_prep_key(get_recipe(r)), ""))
-if (length(prep_keys) != 1) {
-  stop(
-    "The recipes in this run have ", length(prep_keys), " distinct prep keys (",
-    paste(prep_keys, collapse = "; "), "). site_data is built once per site; ",
-    "see the comment above this check in _targets.R for what to change."
-  )
-}
-
+# Step 01 is shared across recipes with the same *prep key* -- the axes in
+# `RECIPE_PREP_AXES`. The manuscript's prep is the pipeline's spine: one
+# `site_data` per site, always built under `original_recipe()`, and it is
+# what every collector, the manuscript-layout outputs and the `workflows/`
+# scripts read. A recipe whose prep key differs gets its own step 01 per site
+# (`site_data_v_*` / `site_fill_v_*` below) that only its fits read, so
+# nothing about the manuscript's run moves when a variant is added.
 sanitize <- function(x) gsub("-", ".", x, fixed = TRUE)
+prep_of <- vapply(recipes, function(r) recipe_prep_key(get_recipe(r)), "")
+variant_preps <- tibble::tibble(prep_key = setdiff(unique(prep_of), MANUSCRIPT_PREP_KEY())) |>
+  dplyr::mutate(
+    prep_label = prep_key_label(.data$prep_key),
+    # any recipe with this key defines the same step 01; take the first
+    prep_recipe = vapply(.data$prep_key, function(k) names(prep_of)[prep_of == k][[1]], "")
+  )
+if (nrow(variant_preps)) {
+  message("  variant step-01 preps: ", paste(variant_preps$prep_key, collapse = ", "))
+}
 
 # Per-site, recipe-independent: the declaration, the download, step 01, and
 # the soil-temperature reconstruction the `memory_fill` recipes read.
@@ -107,14 +109,40 @@ recipe_targets <- tar_map(
   tar_target(recipe, get_recipe(recipe_id, path = recipes_file))
 )
 
+# Step 01 and the fill under each variant prep key, per site. The recipe is
+# threaded in for its prep axes; everything else about it is ignored here.
+variant_prep_grid <- tidyr::crossing(site_name = sites, variant_preps) |>
+  dplyr::mutate(
+    site_info_sym = rlang::syms(paste0("site_info_", sanitize(.data$site_name))),
+    site_dl_sym = rlang::syms(paste0("site_dl_", sanitize(.data$site_name))),
+    recipe_sym = rlang::syms(paste0("recipe_", .data$prep_recipe))
+  )
+variant_prep_targets <- if (nrow(variant_prep_grid)) {
+  tar_map(
+    values = variant_prep_grid,
+    names = c("site_name", "prep_label"),
+    tar_target(site_data_v, {site_dl_sym; prep_nee_ac(site_info_sym, recipe = recipe_sym)}, format = "qs"),
+    tar_target(site_fill_v, fill_soil_temp(site_data_v, site_info_sym), format = "qs")
+  )
+} else {
+  list()
+}
+
 # The fits: sites x recipes x models. The per-site inputs are referenced as
 # symbols built from the site name, the same device `write_respiration_all()`
 # already relies on, so a fit target depends on exactly its own site's data.
 grid <- tidyr::crossing(site_name = sites, recipe_id = recipes, model = models) |>
   dplyr::mutate(
-    site_data_sym = rlang::syms(paste0("site_data_", sanitize(.data$site_name))),
+    prep_key = unname(prep_of[.data$recipe_id]),
+    # the manuscript's step 01, or this recipe's own
+    prep_suffix = ifelse(
+      .data$prep_key == MANUSCRIPT_PREP_KEY(),
+      paste0("_", sanitize(.data$site_name)),
+      paste0("_v_", sanitize(.data$site_name), "_", prep_key_label(.data$prep_key))
+    ),
+    site_data_sym = rlang::syms(paste0("site_data", .data$prep_suffix)),
     site_info_sym = rlang::syms(paste0("site_info_", sanitize(.data$site_name))),
-    site_fill_sym = rlang::syms(paste0("site_fill_", sanitize(.data$site_name))),
+    site_fill_sym = rlang::syms(paste0("site_fill", .data$prep_suffix)),
     recipe_sym = rlang::syms(paste0("recipe_", .data$recipe_id)),
     direct = .data$model == "direct",
     fit_profile = FIT_PROFILE
@@ -233,6 +261,7 @@ list(
   external,
   site_targets,
   recipe_targets,
+  variant_prep_targets,
   fit_targets,
   combined,
   outputs,

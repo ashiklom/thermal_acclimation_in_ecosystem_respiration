@@ -24,6 +24,7 @@ compared row for row.
 | `bounds` | `native` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of |
 | `swc` | `site_info` · `era5` | fit | which soil-water column the direct model uses |
 | `year_qc` | `site_info` | prep | how years are qualified |
+| `ts_qc` | `manuscript` · `sensor` | prep | which soil-temperature column step 01 qualifies years on and screens |
 
 ### `ts`
 
@@ -85,6 +86,27 @@ the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
 Under every strategy **only the window layout changes**: the
 `detect_or_override` season still drives the year gap scan (in step 01) and the
 control-year choice, because both need a span to be defined over.
+
+### `ts_qc`
+
+- `manuscript` — stage A as the manuscript had it: the sensor after its
+  per-site repairs, or a reconstruction where the site has none (`ts_source`
+  in `site_info.csv`; see [docs/soil-temperature.md](soil-temperature.md)).
+- `sensor` — the raw declared sensor wherever the manuscript's arm would leave
+  rows that are not a sensor reading. The arms whose result *is* measured at
+  every row (the second depth at CZ-Stn, the PI gap-fill at US-NR1/ICh/ICs)
+  still run. Qualification, the quality screen and the fill's truth are then
+  all measurements, which is what lets a `memory_fill` recipe act at the 27
+  sites the refuse rule otherwise holds. A site whose raw sensor is too
+  sparse to qualify a year fails its own step-01 target and drops from the
+  recipe — the honest result, not a fallback.
+
+This is a **prep** axis: a recipe with `ts_qc = sensor` has a different prep
+key from the manuscript's and gets its own step 01 and fill per site
+(`site_data_v_*`, `site_fill_v_*` in `_targets.R`), which only its fits read.
+The manuscript's `site_data` — what every collector and the `workflows/`
+scripts consume — never moves. `memfill_sensor` is the registry's example; it
+is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
 
 ### `bounds`
 

@@ -107,7 +107,7 @@ FI_SOD_TS_BAD_THROUGH <- 2005
 FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
 FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")
 
-prep_fluxnet_family <- function(site_info) {
+prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   a <- read_spliced_products(site_info)
 
@@ -124,7 +124,7 @@ prep_fluxnet_family <- function(site_info) {
   # reconstruction where the site has none. Which is `ts_source` in
   # site_info.csv; see R/soil-temperature.R. The reader's only job here is to
   # hand over the record's columns under the shared names.
-  soil <- qualification_soil_temperature(fluxnet_ts_input(a, site_info), site_info)
+  soil <- qualification_soil_temperature(fluxnet_ts_input(a, site_info), site_info, ts_qc = ts_qc)
   a$TS <- soil[["TS"]]
   a$TS_QC <- soil[["TS_QC"]]
 
@@ -177,7 +177,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
   # the growing season it detected, because the u-star filtering it ran already
   # depended on it.
   if (site_reader(site_info) == "ameriflux") {
-    prepared <- prep_ameriflux(site_info)
+    prepared <- prep_ameriflux(site_info, ts_qc = recipe$ts_qc)
     ac <- prepared[["ac"]]
     gs <- prepared[["gs"]]
     measured <- ac |>
@@ -204,7 +204,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
       dplyr::filter(!!keep_night, .data$NEE > -5, .data$NEE < 30) |>
       tibble::as_tibble()
   } else {
-    prepared <- prep_fluxnet_family(site_info)
+    prepared <- prep_fluxnet_family(site_info, ts_qc = recipe$ts_qc)
     ac <- prepared[["ac"]]
     gs <- detect_growing_season(
       ac, site_info,

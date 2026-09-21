@@ -29,7 +29,12 @@ RECIPE_AXES <- list(
   # Which soil-water column the direct model uses.
   swc = c("site_info", "era5"),
   # How years are qualified. One strategy so far; see docs for `computed`.
-  year_qc = c("site_info")
+  year_qc = c("site_info"),
+  # Which soil-temperature column step 01 qualifies years on and screens.
+  # `manuscript` is stage A as the manuscript had it -- repairs and
+  # reconstructions included; `sensor` is the raw declared sensor wherever
+  # the manuscript's arm would have left rows that are not a sensor reading.
+  ts_qc = c("manuscript", "sensor")
 )
 
 # The axes whose choice changes what step 01 (`prep_nee_ac()`) produces. Every
@@ -37,13 +42,15 @@ RECIPE_AXES <- list(
 # step-01 result. This is what keeps the grid affordable: step 01 costs
 # 30-140 s a site, and step 02 produces every candidate column so that a fit
 # can select rather than recompute.
-RECIPE_PREP_AXES <- c("year_qc")
+RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 
 # The development sample of recipes, by analogy with `DEV_SITES`: chosen to
 # exercise every strategy that has its own code path, not to be exhaustive.
 #   original    site_info ts, native bounds, detected season -- the oracle
 #   memfill_hh  memory_fill ts (needs the per-site fill), halfhourly bounds
 #   noseason    whole_year season
+# `memfill_sensor` is not in the sample: it is the first recipe with its own
+# step 01, so it doubles a run's step-01 cost. THERMAL_RECIPES names it.
 DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 
 # A plain S3 list rather than an S7 class, deliberately. Recipes travel
@@ -51,12 +58,12 @@ DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 # not come back `identical()` from qs2 (the class object is re-created), and a
 # named list with a class attribute does. The validation an S7 class would have
 # given lives in `validate_recipe()` and runs at construction.
-new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc,
+new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc,
                        description = NA_character_) {
   r <- structure(
     list(
       recipe_id = recipe_id, ts = ts, season = season, bounds = bounds,
-      swc = swc, year_qc = year_qc, description = description
+      swc = swc, year_qc = year_qc, ts_qc = ts_qc, description = description
     ),
     class = "recipe"
   )
@@ -100,7 +107,7 @@ original_recipe <- function() {
   new_recipe(
     "original",
     ts = "site_info", season = "detect_or_override", bounds = "native", swc = "site_info",
-    year_qc = "site_info",
+    year_qc = "site_info", ts_qc = "manuscript",
     description = "Exactly the manuscript logic."
   )
 }
@@ -141,7 +148,7 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   }
   r <- new_recipe(
     row$recipe_id, ts = row$ts, season = row$season, bounds = row$bounds,
-    swc = row$swc, year_qc = row$year_qc, description = row$description
+    swc = row$swc, year_qc = row$year_qc, ts_qc = row$ts_qc, description = row$description
   )
   # The CSV's `original` row must agree with the code's definition, or the
   # oracle comparison is against the wrong thing.
@@ -158,10 +165,13 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
 }
 
 # The part of a recipe that step 01 sees. Two recipes with the same prep key
-# can share a `site_data` target.
+# can share a `site_data` target. `prep_key_label()` is the same thing spelled
+# so it can sit inside a target name.
 recipe_prep_key <- function(recipe) {
   paste(vapply(RECIPE_PREP_AXES, function(a) recipe[[a]], ""), collapse = "+")
 }
+prep_key_label <- function(prep_key) gsub("[^A-Za-z0-9]+", "_", prep_key)
+MANUSCRIPT_PREP_KEY <- function() recipe_prep_key(original_recipe())
 
 # Which recipes a pipeline run includes, by analogy with `pipeline_sites()`.
 #   THERMAL_RECIPES=dev            the development sample (default)

@@ -1,6 +1,6 @@
 # Custom pre-processing for Ameriflux_BASE data
 
-prep_ameriflux <- function(site_info) {
+prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   files_AmeriFlux_BASE <- list.files(
     file.path(DIR_RAWDATA, "Ameriflux"), pattern = "^AMF_.*_BASE.*\\.zip$", full.names = TRUE, recursive = TRUE
@@ -110,7 +110,7 @@ prep_ameriflux <- function(site_info) {
   }
 
   # Prepare data frame (ac) for u-star filtering
-  ustar <- prep_ustar_df(a, site_info)
+  ustar <- prep_ustar_df(a, site_info, ts_qc = ts_qc)
   ac <- ustar[["ac"]]
 
   #l###############################################################################
@@ -249,7 +249,7 @@ check_declared_columns <- function(a, site_info) {
   )
 }
 
-prep_ustar_df <- function(a, site_info) {
+prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   check_declared_columns(a, site_info)
 
@@ -304,7 +304,7 @@ prep_ustar_df <- function(a, site_info) {
   # hand over the record's columns under the shared names. The result is
   # `TS`, i.e. `TS_measured` downstream, which is what the original treated it
   # as at every one of these sites.
-  soil <- qualification_soil_temperature(ameriflux_ts_input(a, site_info), site_info)
+  soil <- qualification_soil_temperature(ameriflux_ts_input(a, site_info), site_info, ts_qc = ts_qc)
   stopifnot(length(soil[["TS"]]) == nrow(ac))
   ac$TS <- soil[["TS"]]
 

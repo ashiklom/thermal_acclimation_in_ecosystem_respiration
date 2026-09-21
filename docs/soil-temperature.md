@@ -114,13 +114,21 @@ mechanism is one level in `TS_SOURCES`, one arm in
 `qualification_soil_temperature()`, and — if it fits a model — one entry in
 `ts_estimators()`.
 
+## The `ts_qc` prep axis
+
+`qualification_soil_temperature(input, site_info, ts_qc)`: under `manuscript`
+the arm is the declaration; under `sensor` every arm whose result is not
+measured at every row is replaced by the raw declared sensor, and the arms
+that are (`sensor_depth2`, `gapfill_pi`) still run. The provenance row records
+both the declaration (`ts_source`) and what ran (`stage_a_arm`, `ts_truth`),
+and **stage B and the fill read the latter** — so under `ts_qc = sensor`
+nothing is refused and the fill has a real truth at the 27 sites. A site
+whose raw sensor is too sparse to qualify a year fails step 01 and drops from
+that recipe. In `_targets.R` a variant prep key gets its own `site_data_v_*`
+and `site_fill_v_*` per site; the manuscript's `site_data` is untouched. See
+docs/recipes.md.
+
 ## Future work
 
-- **`ts_qc = sensor` (prep-stage axis).** Qualify on the raw sensor,
-  skipping stage A's reconstructions and wholesale regressions, so that a
-  variant has a real truth at the 27 "none" sites. The first recipe with a
-  different prep key; `site_data` maps over `crossing(site, prep_key)` and the
-  `stop()` in `_targets.R` names the spot. A site whose sensor is too sparse
-  to qualify a year drops from that variant.
 - **Declare the three training-target rules** (DE-Hte, FR-Bil, FR-Pue) as
   site_info columns, and stage A stops testing site names altogether.

@@ -70,7 +70,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   # at these sites instead: qualify on the raw sensor, and there is a truth.
   refused <- FALSE
   if (is.null(override) && !identical(recipe$ts, "site_info") &&
-      identical(ts_measured_truth(site_info), "none") &&
+      identical(stage_a_truth(site_data, site_info), "none") &&
       !identical(ts_col, "TS_measured")) {
     refused <- TRUE
     choice <- list(
@@ -78,7 +78,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
       reason = sprintf(
         paste0("kept step 01's column: ts_source = %s leaves no measured soil ",
                "temperature to fit a second method against (%s strategy wanted %s)"),
-        ts_source(site_info), recipe$ts, ts_col
+        stage_a_arm(site_data, site_info), recipe$ts, ts_col
       )
     )
     ts_col <- "TS_measured"
@@ -131,7 +131,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     # Whether the column step 01 called measured is a reconstruction it made,
     # whatever recipe is in force. Strategies select downstream of those
     # reconstructions and cannot undo them (ts-variants.html, V4).
-    ts_measured_synthetic = ts_measured_is_synthetic(site_info),
+    ts_measured_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
     ts_source = ts_source(site_info),
     ts_refused = refused,
     # What stage A did to make `TS_measured`, from the provenance row step 01
@@ -150,6 +150,18 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   )
 
   list(ac = ac, nightNEE = night, meta = meta)
+}
+
+# What stage A actually did at this site, from the provenance row step 01
+# carries -- under `ts_qc = sensor` that is not what `ts_source` declares.
+# Falls back to the declaration for a site_data built before the row existed.
+stage_a_truth <- function(site_data, site_info) {
+  prov <- site_data[["ts_provenance"]]
+  if (!is.null(prov) && "ts_truth" %in% names(prov)) prov[["ts_truth"]][[1]] else ts_measured_truth(site_info)
+}
+stage_a_arm <- function(site_data, site_info) {
+  prov <- site_data[["ts_provenance"]]
+  if (!is.null(prov) && "stage_a_arm" %in% names(prov)) prov[["stage_a_arm"]][[1]] else ts_source(site_info)
 }
 
 # `TS_final`, and no other soil-temperature column.
@@ -285,7 +297,7 @@ need_input <- function(input, cols, site_info, why) {
   }
 }
 
-qualification_soil_temperature <- function(input, site_info) {
+qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   absent <- setdiff(TS_INPUT_REQUIRED, names(input))
   if (length(absent)) {
@@ -293,7 +305,16 @@ qualification_soil_temperature <- function(input, site_info) {
   }
   n <- nrow(input)
   qc <- if ("TS_sensor_QC" %in% names(input)) input$TS_sensor_QC else rep(NA_real_, n)
-  source <- ts_source(site_info)
+
+  # Which arm runs. `manuscript` is the declaration. `sensor` keeps the arms
+  # whose result is measured at every row -- the sensor itself, the second
+  # depth, the PI gap-fill -- and replaces every other arm with the raw
+  # declared sensor, so that qualification, the screen and the fill's truth
+  # are all measurements. A site whose raw sensor is too sparse to qualify a
+  # year then fails step 01, which is the honest result for that variant.
+  ts_qc <- match.arg(ts_qc, RECIPE_AXES[["ts_qc"]])
+  declared <- ts_source(site_info)
+  arm <- if (identical(ts_qc, "sensor") && !identical(TS_SOURCES[[declared]], "sensor")) "sensor" else declared
 
   fitted <- function(estimator_name, mode, est = ts_estimators()[[estimator_name]], note = NA_character_) {
     train <- tibble::tibble(TS = input$TS_sensor, TA = input$TA, YEAR = input$YEAR)
@@ -313,8 +334,8 @@ qualification_soil_temperature <- function(input, site_info) {
     )
   }
 
-  switch(
-    source,
+  out <- switch(
+    arm,
     sensor = list(
       TS = input$TS_sensor, TS_QC = qc,
       provenance = ts_provenance_row(site_info, mode = "none")
@@ -357,8 +378,16 @@ qualification_soil_temperature <- function(input, site_info) {
     # cold area, use TA above 0 for growing season
     lm_ta_cold = fitted("lm_ta_pos", "replace"),
     reconstructed = fix_soil_temp(input, site_info),
-    stop(name_site, ": no stage-A arm for ts_source = ", shQuote(source))
+    stop(name_site, ": no stage-A arm for ts_source = ", shQuote(arm))
   )
+
+  # The provenance row says what was declared, what was asked for, which arm
+  # actually ran, and -- the field the refuse rule and the fill read -- whether
+  # what ran leaves a measured column.
+  out$provenance$ts_qc <- ts_qc
+  out$provenance$stage_a_arm <- arm
+  out$provenance$ts_truth <- unname(TS_SOURCES[[arm]])
+  out
 }
 
 # ---------------------------------------------------------- reconstructed

@@ -297,8 +297,8 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
   # that shares its functional form -- DE-Hte's `lm_ta_netrad` at 1.5e-14.
   # `get_soil_temperature()` would refuse the result anyway; declining here
   # keeps the cost and the non-information out of the run.
-  if (identical(ts_measured_truth(site_info), "none")) {
-    return(fail(paste0("no measured truth: ts_source = ", ts_source(site_info))))
+  if (identical(stage_a_truth(site_data, site_info), "none")) {
+    return(fail(paste0("no measured truth: stage A ran ", stage_a_arm(site_data, site_info))))
   }
 
   ac <- site_data[["ac"]]
@@ -377,7 +377,7 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
     # reconstruction. DE-Akm shows why both are needed -- its TS_measured is
     # `fix_soil_temp()`'s random forest, which `rf_ta_netrad` reproduces to
     # 0.30 C rather than to zero, so the RMSE test alone does not fire.
-    truth_synthetic = ts_measured_is_synthetic(site_info),
+    truth_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
     n_train = sum(!is.na(feats$TS))
   )
 }

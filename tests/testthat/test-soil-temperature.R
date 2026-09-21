@@ -389,3 +389,50 @@ test_that("the reader inputs hand over the record's columns under the shared nam
   expect_true(all(is.na(cwt$TS_sensor)))
   expect_length(cwt$TS_sensor, 4L)
 })
+
+# --------------------------------------------------- ts_qc = sensor (stage A)
+
+test_that("ts_qc = sensor replaces the derived arms with the raw sensor, and keeps the measured ones", {
+  input <- stage_a_input()
+  for (src in c("reconstructed", "lm_ta_cold", "borrowed_site", "ta_substitute", "recalibrated", "gapfill_ta")) {
+    out <- suppressMessages(qualification_soil_temperature(
+      input, stage_a_site(src, estimate_ts_method = "linear regression"), ts_qc = "sensor"
+    ))
+    expect_identical(out$TS, input$TS_sensor, info = src)
+    expect_identical(out$provenance$stage_a_arm, "sensor", info = src)
+    expect_identical(out$provenance$ts_source, src, info = src)   # the declaration is still recorded
+    expect_identical(out$provenance$ts_truth, "sensor", info = src)
+    expect_identical(out$provenance$ts_qc, "sensor", info = src)
+  }
+  # arms whose result is measured at every row still run
+  pi <- qualification_soil_temperature(input, stage_a_site("gapfill_pi"), ts_qc = "sensor")
+  expect_identical(pi$provenance$stage_a_arm, "gapfill_pi")
+  expect_identical(pi$TS[is.na(input$TS_sensor)], input$TS_pi[is.na(input$TS_sensor)])
+  # and `manuscript` is the declaration, as before
+  man <- suppressMessages(qualification_soil_temperature(
+    input, stage_a_site("reconstructed", estimate_ts_method = "linear regression")
+  ))
+  expect_identical(man$provenance$stage_a_arm, "reconstructed")
+  expect_identical(man$provenance$ts_truth, "none")
+  expect_error(qualification_soil_temperature(input, stage_a_site("sensor"), ts_qc = "raw"), "arg")
+})
+
+test_that("stage B and the fill read the truth stage A produced, not the declaration", {
+  bad <- fake_site_data("BAD")
+  synthetic <- fake_site_info(ts_source = "reconstructed")
+  # Under the manuscript prep the declaration and the provenance agree: refused.
+  bad$ts_provenance <- tibble::tibble(site_ID = "X-Tst", ts_source = "reconstructed", ts_qc = "manuscript",
+                                      stage_a_arm = "reconstructed", ts_truth = "none")
+  expect_true(get_soil_temperature(bad, synthetic, get_recipe("screened"))$meta$ts_refused)
+  # Under the sensor prep stage A ran the raw sensor: there is a truth, nothing to refuse.
+  bad$ts_provenance <- tibble::tibble(site_ID = "X-Tst", ts_source = "reconstructed", ts_qc = "sensor",
+                                      stage_a_arm = "sensor", ts_truth = "sensor")
+  r <- get_soil_temperature(bad, synthetic, get_recipe("memfill_sensor"), fill = fake_fill())
+  expect_false(r$meta$ts_refused)
+  expect_identical(r$meta$ts_col, "TS_memfill")
+  expect_false(r$meta$ts_measured_synthetic)
+  # the fill likewise
+  expect_match(suppressMessages(fill_soil_temp(
+    list(ts_provenance = tibble::tibble(ts_truth = "none", stage_a_arm = "reconstructed")), synthetic
+  ))$status, "no measured truth")
+})
