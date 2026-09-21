@@ -104,16 +104,34 @@ In order of application, and all in step 01:
   because the original's row indices did not survive a re-download.
 - **GF-Guy** — air temperature is substituted, so that all tropical sites use
   bottom air temperature.
-- **FR-Fon, CH-Dav, DE-Akm, DE-Hte, FR-Bil, FR-Pue, FR-FBn, CZ-RAJ** —
-  predicted by `fix_soil_temp()`: a random forest on air temperature and net
-  radiation where net radiation is available (`netrad_column` in
-  `site_info.csv`), a two-predictor regression at two sites with short records,
-  and a `TS ~ TA` fit otherwise.
+- **`estimate_Ts = YES` (16 sites, both readers)** — the whole column is
+  reconstructed by `fix_soil_temp()`, which is workflow `01_01` transcribed.
+  Which estimator is `estimate_ts_method` in `site_info.csv`, derived from
+  `netrad_column`, not a site list:
+
+  | `estimate_ts_method` | estimator | sites |
+  | --- | --- | --- |
+  | `NETRAD` | random forest, `TS ~ TA + NETRAD` | CA-Man, CZ-RAJ, DE-Akm, FR-Pue, US-Ced, US-Ho1, US-Los, US-SRG |
+  | `linear regression` | `lm(TS ~ TA + NETRAD)` — too little TS to train a forest | DE-Hte, FR-FBn |
+  | *(empty)* | `lm(TS ~ TA)` fitted above freezing | CH-Dav, FR-Bil, FR-Fon, US-Ha1, US-Ho2, US-PFa |
+
+  The original ran this as a separate pass writing
+  `TS_RandomForest/<site>_TS_rfp.csv`, and the AmeriFlux reader read that file
+  back. Both readers now call `fix_soil_temp()` inline, so there is no
+  intermediate file to keep in step with the raw record. The forest's train and
+  test split is unseeded: every pipeline call is inside a target, and `targets`
+  already derives a deterministic per-target seed.
 - **AmeriFlux sites with no usable soil temperature** —
   `SITES_TS_FROM_TA_RECENT` and `SITES_TS_FROM_TA_COLD` replace the column
   wholesale from a `TS ~ TA` fit, differing only in the rows fitted on. US-Cwt
   imports coefficients from a nearby site of the same IGBP class, and US-MBP
   fills only its gaps.
+
+A reconstruction is not a measurement, and the pipeline says so twice over:
+`ts_measured_is_synthetic()` flags every `estimate_Ts` site, and the raw-record
+quality screen independently calls their soil temperature `airlike` — which it
+is. Under the `original` recipe they are used anyway, as the manuscript did;
+`screen_best` and `memory_fill` route around them.
 
 `SITES_TS_FROM_TA_*` and `ts_col = "TS_linear"` are disjoint by construction,
 and there is a test for it: a site in both would have its soil temperature
@@ -160,5 +178,8 @@ the current selection path still reproduces it. Step 01 is cached per site,
 keyed by a digest of everything under `R/`, so any pipeline edit invalidates
 the cache rather than verifying stale results.
 
-The random-forest branch of `fix_soil_temp()` is **not** covered: it needs one
-of the eight `netrad_column` sites, none of which is in the baseline set.
+The random-forest branch of `fix_soil_temp()` is **not** covered by this
+baseline: it needs one of the eight `netrad_column` sites, none of which is in
+the baseline set. It is exercised elsewhere — by DE-Akm in `DEV_SITES`, and on
+synthetic input at all eight AmeriFlux `estimate_Ts` sites in
+`tests/testthat/test-ameriflux-prep.R`.
