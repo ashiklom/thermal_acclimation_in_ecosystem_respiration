@@ -18,19 +18,22 @@ fake_tables <- function() {
 
 # ------------------------------------------------------ soil temperature
 
-test_that("resolve_ts_column materialises the requested column as TS", {
+test_that("materialise_ts_final leaves exactly one soil-temperature column", {
   dat <- fake_tables()
-  expect_equal(resolve_ts_column(dat, "TS_measured")$TS, c(4, 5, 6))
-  expect_equal(resolve_ts_column(dat, "TS_linear")$TS, c(9, 10, 11))
-  # The source columns are left intact, so a later comparison is still possible.
-  out <- resolve_ts_column(dat, "TS_linear")
-  expect_equal(out$TS_measured, c(4, 5, 6))
-  expect_equal(out$TS_linear, c(9, 10, 11))
+  expect_equal(materialise_ts_final(dat, "TS_measured")$TS_final, c(4, 5, 6))
+  expect_equal(materialise_ts_final(dat, "TS_linear")$TS_final, c(9, 10, 11))
+  # The candidates are gone, `TS` included: with them on the table "no
+  # branching downstream" would be a convention, with them off it is a
+  # property. Everything that is not soil temperature is untouched.
+  out <- materialise_ts_final(dat, "TS_linear")
+  expect_identical(ts_candidate_columns(out), "TS_final")
+  expect_identical(setdiff(names(dat), names(out)), c("TS", "TS_measured", "TS_linear"))
+  expect_equal(out$SWC_era5, dat$SWC_era5)
 })
 
 test_that("a TS column the pipeline did not produce fails by name", {
   dat <- fake_tables()
-  err <- expect_error(resolve_ts_column(dat, "TS_randomforest"), "TS_randomforest")
+  err <- expect_error(materialise_ts_final(dat, "TS_randomforest"), "TS_randomforest")
   # The message has to say what *is* available, or the next question is
   # unanswerable from the error alone.
   expect_match(conditionMessage(err), "TS_measured")

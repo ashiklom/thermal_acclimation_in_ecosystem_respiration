@@ -1,14 +1,16 @@
 N_CORES <- 4        # Used internally by brms
 WINDOW_SIZE <- 14   # Uniform window size: 2 weeks.
 
+# The soil-temperature column is `TS_final`: the one column
+# `get_soil_temperature()` leaves on the tables. See R/soil-temperature.R.
 BRM_FORMULA_TOTAL <- brms::bf(
-  NEE ~ exp(alpha * TS + beta * TS^2) * C0,
+  NEE ~ exp(alpha * TS_final + beta * TS_final^2) * C0,
   alpha + beta + C0 ~ 1,
   nl = TRUE
 )
 
 BRM_FORMULA_DIRECT <- brms::bf(
-  NEE ~ exp(alpha * TS + beta*TS^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2),
+  NEE ~ exp(alpha * TS_final + beta * TS_final^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2),
   alpha + beta + C0 + Hs + k2 ~ 1,
   nl = TRUE
 )
@@ -104,7 +106,7 @@ Year_Result <- S7::new_class("Year_Result", properties = list(
 # misattributed a rejection still produced a plausible reason and the suite
 # could not tell. The mutation check found exactly that hole.
 year_rejection <- function(data_subset, TSref) {
-  ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
+  ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
   if (nrow(data_subset) <= 25) {
     return("year_too_few_obs")             # ensure enough observations
   }
@@ -166,11 +168,11 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
   }
 
   if (direct) {
-    frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * 
+    frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS_final - exp(beta_ln) * TS_final^2) *
       SWC / (exp(Hs_ln) + SWC) * (exp(C0_ln) + NEE_daytime * exp(k2_ln))
     start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6, Hs_ln = 2.3)
   } else {
-    frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln) * TS^2) * (exp(C0_ln))
+    frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS_final - exp(beta_ln) * TS_final^2) * (exp(C0_ln))
     start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9)
   }
 
@@ -271,6 +273,20 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   gStart <- feature_gs[["gStart"]]
   gEnd <- feature_gs[["gEnd"]]
 
+  # Soil temperature: one call, one column out. Selection, the fill, the
+  # bounds and the provenance all live in `get_soil_temperature()`; from here
+  # on the tables carry `TS_final` and nothing else soil-temperature-shaped.
+  # Made before the soil-water block because the fill's rows align with the
+  # tables as step 01 left them, and the measured-soil-water filter below
+  # drops nighttime rows.
+  soil <- get_soil_temperature(site_data, site_info, recipe = recipe, fill = fill, ts_col = ts_col)
+  ac <- soil[["ac"]]
+  a_measure_night_complete <- soil[["nightNEE"]]
+  ts_meta <- soil[["meta"]]
+  ts_col <- ts_meta[["ts_col"]]
+  tStart <- ts_meta[["tStart"]]
+  tEnd <- ts_meta[["tEnd"]]
+
   # Soil water: choose a column, as with soil temperature. `prep_nee_ac()`
   # carries both `SWC_measured` and `SWC_era5` on every table, so no reading or
   # joining happens here.
@@ -299,62 +315,6 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(!is.na(.data$SWC))
   }
-
-  # Soil temperature: choose a column, do not compute one. `prep_nee_ac()`
-  # produced every variant this site offers along with the growing-season
-  # bounds belonging to each, so the column and its bounds are selected
-  # together and cannot disagree.
-  if (is.null(site_data[["ts_bounds"]])) {
-    stop(
-      name_site, ": this site_data was built before soil-temperature columns ",
-      "were carried explicitly, so it has no `ts_bounds`. Rebuild it with ",
-      "`prep_nee_ac()`, or delete the stale `_targets/` store."
-    )
-  }
-
-  ts_choice <- if (is.null(ts_col)) {
-    choose_ts_col(recipe, site_data, site_info, fill)
-  } else {
-    list(ts_col = ts_col, reason = "ts_col argument")
-  }
-  ts_col <- ts_choice$ts_col
-  ts_bounds_all <- site_data[["ts_bounds"]]
-  fill_method <- NA_character_
-  fill_cv_rmse <- NA_real_
-  fill_degenerate <- NA
-  fill_truth_synthetic <- NA
-
-  # The reconstructed column is attached here, not in step 01, because it is
-  # produced by its own per-site target (`fill_soil_temp()`) and only a
-  # `memory_fill` recipe reads it. Its rows align with `site_data` by
-  # construction -- the fill was computed from the same tables -- and that is
-  # asserted rather than assumed. Its native bounds definition is the
-  # half-hourly one, like the other reconstructed column's.
-  if (identical(ts_col, "TS_memfill")) {
-    if (!fill_available(fill)) {
-      stop(name_site, ": recipe selected TS_memfill but no usable fill was supplied (",
-           fill_status(fill), ").")
-    }
-    stopifnot(
-      length(fill$ac_ts) == nrow(ac),
-      length(fill$night_ts) == nrow(a_measure_night_complete)
-    )
-    ac[["TS_memfill"]] <- fill$ac_ts
-    a_measure_night_complete[["TS_memfill"]] <- fill$night_ts
-    fill_rows <- fill$ts_bounds
-    fill_rows$native <- fill_rows$definition == "halfhourly"
-    ts_bounds_all <- dplyr::bind_rows(ts_bounds_all, fill_rows)
-    fill_method <- fill$method
-    fill_cv_rmse <- fill$cv_rmse
-    fill_degenerate <- isTRUE(fill$degenerate)
-    fill_truth_synthetic <- isTRUE(fill$truth_synthetic)
-  }
-
-  ac <- resolve_ts_column(ac, ts_col)
-  a_measure_night_complete <- resolve_ts_column(a_measure_night_complete, ts_col)
-  ts_range <- choose_bounds(recipe, ts_bounds_all, ts_col)
-  tStart <- ts_range[["tStart"]]
-  tEnd <- ts_range[["tEnd"]]
 
   # The span the windows tile. Under `whole_year` only this changes: the
   # detected `gStart`/`gEnd` above still choose the control year, because that
@@ -424,7 +384,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     dplyr::filter(dplyr::between(.data$DOY, gStart, gEnd)) |>
     dplyr::filter(.data$growing_year %in% years) |>
     dplyr::group_by(.data$growing_year) |>
-    dplyr::summarise(TS = mean(.data$TS, na.rm = TRUE), .groups = "drop_last") |>
+    dplyr::summarise(TS = mean(.data$TS_final, na.rm = TRUE), .groups = "drop_last") |>
     dplyr::ungroup()
 
   control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
@@ -443,13 +403,12 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   # numbers it produced. `outcome` reports only TAS and two fit statistics, so
   # without this a difference between two runs cannot be attributed to the
   # column selected, the bounds, the control year or the window count.
-  ts_qc <- site_data[["ts_qc"]]
   settings <- tibble::tibble(
     site_ID = name_site,
     recipe_id = recipe$recipe_id,
     model = if (direct) "direct" else "total",
     fit_profile = fs$profile,
-    ts_col = ts_col,
+    ts_col = ts_meta[["ts_col"]],
     swc_col = if (is.na(swc_col)) NA_character_ else swc_col,
     SWC_use = SWC_use,
     gStart = gStart,
@@ -464,22 +423,21 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     nwindow = nwindow,
     control_year = control_year,
     nyear_available = length(years),
-    # Provenance: which strategy made each choice, and why.
-    ts_strategy = recipe$ts,
-    ts_reason = ts_choice$reason,
-    ts_verdict = if (!is.null(ts_qc)) ts_qc$verdict[[1]] else NA_character_,
-    ts_flags = if (!is.null(ts_qc)) ts_qc$flags[[1]] else NA_character_,
-    fill_method = fill_method,
-    fill_cv_rmse = fill_cv_rmse,
-    fill_degenerate = fill_degenerate,
-    fill_truth_synthetic = fill_truth_synthetic,
-    # Whether the column this run treats as measured is a reconstruction
-    # step 01 made, whatever recipe is in force. The recipes select downstream
-    # of those reconstructions and cannot undo them (ts-variants.html, V4).
-    ts_measured_synthetic = ts_measured_is_synthetic(site_info),
+    # Provenance: which strategy made each choice, and why. The
+    # soil-temperature fields are `get_soil_temperature()`'s metadata row,
+    # carried verbatim so the record and the column cannot disagree.
+    ts_strategy = ts_meta[["ts_strategy"]],
+    ts_reason = ts_meta[["ts_reason"]],
+    ts_verdict = ts_meta[["ts_verdict"]],
+    ts_flags = ts_meta[["ts_flags"]],
+    fill_method = ts_meta[["fill_method"]],
+    fill_cv_rmse = ts_meta[["fill_cv_rmse"]],
+    fill_degenerate = ts_meta[["fill_degenerate"]],
+    fill_truth_synthetic = ts_meta[["fill_truth_synthetic"]],
+    ts_measured_synthetic = ts_meta[["ts_measured_synthetic"]],
     season_strategy = recipe$season,
-    bounds_strategy = recipe$bounds,
-    bounds_reason = ts_range$reason,
+    bounds_strategy = ts_meta[["bounds_strategy"]],
+    bounds_reason = ts_meta[["bounds_reason"]],
     swc_strategy = recipe$swc,
     swc_reason = swc_choice$reason
   )
@@ -603,7 +561,7 @@ total_tas_window <- function(
   ac_yearly_window <- ac |>
     dplyr::filter(dplyr::between(.data$DOY, window_start, window_end)) |>
     dplyr::group_by(.data$growing_year) |>
-    dplyr::summarise(TS = mean(.data$TS, na.rm = TRUE), .groups = "drop_last") |>
+    dplyr::summarise(TS = mean(.data$TS_final, na.rm = TRUE), .groups = "drop_last") |>
     dplyr::ungroup()
 
   skip <- (!dplyr::between(
@@ -636,7 +594,7 @@ total_tas_window <- function(
   # This is used to fit the data later.
   keep <- function(dat) dplyr::between(dat$DOY, window_start, window_end)
   data_ref <- data.frame(
-    TS = mean(ac$TS[keep(ac)], na.rm = TRUE),
+    TS_final = mean(ac$TS_final[keep(ac)], na.rm = TRUE),
     NEE_daytime = mean(ac_day$NEE_daytime[keep(ac_day)], na.rm = TRUE)
   )
   if (SWC_use) {
@@ -659,11 +617,11 @@ total_tas_window <- function(
     # rule 1: total number of points > 100.
     # rule 2: TSref is within the 0.025 and 0.975 quantiles.
     # if the two rules are violated, extend window size.
-    TSref <- data_ref[["TS"]]
+    TSref <- data_ref[["TS_final"]]
     extend_days <- 0
 
     check_subset <- function(data_subset, TSref, nobs_threshold) {
-      ts_quants <- quantile(data_subset$TS, c(0.025, 0.975), na.rm = TRUE)
+      ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
       (nrow(data_subset) < nobs_threshold || !dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]]))
     }
 
@@ -676,7 +634,7 @@ total_tas_window <- function(
       if (
         (nrow(data_subset) >= nobs_threshold) &&
           ((window_end + extend_days) >= gEnd) &&
-          (TSref >= max(data_subset$TS, na.rm = TRUE))
+          (TSref >= max(data_subset$TS_final, na.rm = TRUE))
       ) {
         break
       }

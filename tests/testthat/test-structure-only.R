@@ -92,7 +92,7 @@ test_that(sprintf("[%s/%s] settings record the choices that shaped the run", rea
 # check proved it, by misattributing a rejection and surviving. Each branch is
 # therefore driven to fire on its own, with the others held satisfied.
 make_subset <- function(n = 200, ts = seq(5, 25, length.out = n), nee = 3) {
-  tibble::tibble(TS = ts, NEE = rep_len(nee, n))
+  tibble::tibble(TS_final = ts, NEE = rep_len(nee, n))
 }
 
 test_that("year_rejection accepts a subset that breaks no rule", {

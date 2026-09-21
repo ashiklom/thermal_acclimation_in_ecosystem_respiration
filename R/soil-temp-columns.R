@@ -114,22 +114,6 @@ apply_ts_linear <- function(ac, nightNEE, site_info, gStart, gEnd) {
   list(ac = ac, nightNEE = nightNEE, tStart = bounds$tStart, tEnd = bounds$tEnd)
 }
 
-# Materialise the declared TS column as `TS`, which is the name the model
-# formulae and every downstream summary use. Selection happens in exactly one
-# place so that a table can never carry a `TS` that disagrees with the column
-# it was supposed to come from.
-resolve_ts_column <- function(dat, ts_col) {
-  if (!ts_col %in% names(dat)) {
-    stop(
-      "Requested TS column ", shQuote(ts_col), " is not present. Available: ",
-      paste(grep("^TS", names(dat), value = TRUE), collapse = ", "),
-      ". It has to be produced by `prep_nee_ac()`."
-    )
-  }
-  dat[["TS"]] <- dat[[ts_col]]
-  dat
-}
-
 # The day-of-year-climatology definition of the bounds: average each DOY over
 # the years present, keep the DOYs inside the growing season, take the
 # 2.5/97.5 percentiles of *those* means. Averaging removes the diurnal and
