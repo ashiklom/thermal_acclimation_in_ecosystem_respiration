@@ -80,6 +80,10 @@ SITES_GS_NEE_ZERO <- c("FI-Sod", "DE-RuC")
 TS_MIN_VALID <- 2.0
 SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 
+# NB the three lists below are the readers' *dispatch* for the moment; the
+# *declaration* of the same facts is `ts_source` in site_info.csv, and a test
+# holds the two together until the readers switch on the declaration.
+#
 # AmeriFlux sites with no usable measured soil temperature, where `TS` is
 # *constructed* from air temperature during step 01 -- so this is how their
 # `TS_measured` column comes to exist, not a later substitution for it. The two
@@ -102,9 +106,66 @@ SITES_TS_FROM_TA_COLD <- c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US
 # `truth_synthetic`.
 SITES_TS_SYNTHETIC <- c("GF-Guy", "US-Cwt", "US-MBP")
 
+# What the column step 01 leaves as `TS_measured` actually is, per site --
+# declared in site_info.csv as `ts_source`, one level per mechanism the readers
+# apply. The value is the level's answer to the only question downstream
+# needs: does this column contain measured soil temperature at every row it
+# has, so that a reconstruction can be scored against it?
+#
+#   sensor         the declared sensor, untouched
+#   sensor_depth2  a different depth of the same profile (CZ-Stn) -- a sensor
+#   gapfill_pi     the sensor, with its gaps taken from the PI's gap-filled
+#                  product (US-NR1, US-ICh, US-ICs): the data provider's own
+#                  MDS fill, the same thing `TS_F_MDS_1` already is at every
+#                  FLUXNET-family site
+#   recalibrated   FI-Sod: the pre-2006 third of the record rebuilt by
+#                  chaining two regressions between depths
+#   gapfill_ta     US-MBP: gaps filled from air temperature
+#   ta_substitute  GF-Guy: air temperature, wholesale
+#   borrowed_site  US-Cwt: `TA * 0.647 + 5.14`, coefficients from a neighbour
+#   lm_ta_recent   US-BZo: `TS ~ TA` fitted on recent years, wholesale
+#   lm_ta_cold     six AmeriFlux sites: `TS ~ TA` fitted above freezing, wholesale
+#   reconstructed  the 16 `estimate_Ts` sites: `fix_soil_temp()`'s estimator,
+#                  named in `estimate_ts_method`, wholesale
+#
+# "none" is deliberately strict: a column that is a sensor reading at *most*
+# rows still has rows that are not, and a fill cross-validated against it is
+# partly scoring itself against a regression. FI-Sod and US-MBP fall on that
+# side for that reason; relaxing it is a one-word change here.
+TS_SOURCES <- c(
+  sensor        = "sensor",
+  sensor_depth2 = "sensor",
+  gapfill_pi    = "sensor",
+  recalibrated  = "none",
+  gapfill_ta    = "none",
+  ta_substitute = "none",
+  borrowed_site = "none",
+  lm_ta_recent  = "none",
+  lm_ta_cold    = "none",
+  reconstructed = "none"
+)
+
+ts_source <- function(site_info) {
+  src <- site_info[["ts_source"]]
+  if (length(src) != 1 || is.na(src) || !src %in% names(TS_SOURCES)) {
+    stop(
+      "Site ", site_info[["site_ID"]], " declares ts_source = ",
+      if (length(src) == 1) shQuote(src) else paste0("length ", length(src)),
+      "; must be one of ", paste(shQuote(names(TS_SOURCES)), collapse = ", "),
+      ". It is derived in scripts/revise-site-info.R."
+    )
+  }
+  src
+}
+
+# "sensor" or "none": whether `TS_measured` is measured soil temperature at
+# every row, and so can serve as the truth a reconstruction is scored against.
+ts_measured_truth <- function(site_info) {
+  unname(TS_SOURCES[[ts_source(site_info)]])
+}
+
 ts_measured_is_synthetic <- function(site_info) {
-  isTRUE(site_info[["estimate_Ts"]]) ||
-    site_info[["site_ID"]] %in% c(SITES_TS_FROM_TA_RECENT, SITES_TS_FROM_TA_COLD, SITES_TS_SYNTHETIC)
+  identical(ts_measured_truth(site_info), "none")
 }
 
 # The development site sample: what `_targets.R` runs by default.

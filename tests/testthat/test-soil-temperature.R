@@ -25,8 +25,8 @@ fake_site_data <- function(verdict = "GOOD") {
     ts_qc = tibble::tibble(site_ID = "X-Tst", verdict = verdict, flags = "")
   )
 }
-fake_site_info <- function(ts_col = "TS_measured") {
-  list(site_ID = "X-Tst", ts_col = ts_col, estimate_Ts = FALSE)
+fake_site_info <- function(ts_col = "TS_measured", ts_source = "sensor") {
+  list(site_ID = "X-Tst", ts_col = ts_col, estimate_Ts = FALSE, ts_source = ts_source)
 }
 fake_fill <- function(n_ac = 3, n_night = 2) {
   list(

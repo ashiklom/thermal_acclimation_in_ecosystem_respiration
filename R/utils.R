@@ -30,7 +30,8 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
     netrad_column = "c",
     ts_col = "c",
     ts_linear_domain = "c",
-    growing_year_start = "i"
+    growing_year_start = "i",
+    ts_source = "c"
   )
 
   dat <- readr::read_csv(path, col_types = site_info_cols)
@@ -49,6 +50,17 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
         "NO" ~ FALSE
       )
     )
+
+  # `ts_source` has to be declared at every site: a missing level would make
+  # the readers' dispatch and the fill's truth check disagree silently.
+  bad_source <- dat_clean$site_ID[is.na(dat_clean$ts_source) | !dat_clean$ts_source %in% names(TS_SOURCES)]
+  if (length(bad_source)) {
+    stop(
+      path, ": ts_source is missing or unknown at ", paste(bad_source, collapse = ", "),
+      ". Levels: ", paste(names(TS_SOURCES), collapse = ", "),
+      ". Re-run scripts/revise-site-info.R."
+    )
+  }
 
   if (is.null(site_ID)) return(dat_clean)
 

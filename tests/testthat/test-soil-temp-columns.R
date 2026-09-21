@@ -36,12 +36,62 @@ test_that("ts_col and ts_linear_domain cannot drift apart", {
 })
 
 test_that("step-01 TA construction and step-02 selection stay disjoint", {
-  # `SITES_TS_FROM_TA_*` build TS_measured because there is no usable measured
-  # soil temperature; `ts_col == "TS_linear"` replaces a measured column later.
-  # A site in both would be regressed twice, from different fits.
+  # The wholesale `TS ~ TA` sources build TS_measured because there is no
+  # usable measured soil temperature; `ts_col == "TS_linear"` replaces a
+  # measured column later. A site in both would be regressed twice, from
+  # different fits.
   si <- get_site_info()
   step02 <- si$site_ID[si$ts_col == "TS_linear"]
-  expect_equal(intersect(c(SITES_TS_FROM_TA_RECENT, SITES_TS_FROM_TA_COLD), step02), character())
+  wholesale <- si$site_ID[si$ts_source %in% c("lm_ta_recent", "lm_ta_cold")]
+  expect_equal(intersect(wholesale, step02), character())
+})
+
+# ------------------------------------------------------ the ts_source column
+#
+# `ts_source` is the declaration of what each site's `TS_measured` is. The
+# readers still dispatch on site lists and `name_site ==` branches; these hold
+# the declaration to that dispatch, so that when the readers switch to reading
+# the declaration nothing changes.
+test_that("ts_source reproduces the readers' dispatch, site for site", {
+  si <- get_site_info()
+  src <- setNames(si$ts_source, si$site_ID)
+  by_source <- function(level) unname(sort(names(src)[src == level]))
+
+  expect_setequal(by_source("reconstructed"), si$site_ID[si$estimate_Ts])
+  expect_setequal(by_source("lm_ta_recent"), SITES_TS_FROM_TA_RECENT)
+  expect_setequal(by_source("lm_ta_cold"), SITES_TS_FROM_TA_COLD)
+  # The `name_site ==` arms, from the readers.
+  expect_identical(by_source("sensor_depth2"), "CZ-Stn")
+  expect_identical(by_source("recalibrated"), "FI-Sod")
+  expect_identical(by_source("ta_substitute"), "GF-Guy")
+  expect_identical(by_source("borrowed_site"), "US-Cwt")
+  expect_identical(by_source("gapfill_ta"), "US-MBP")
+  expect_setequal(by_source("gapfill_pi"), c("US-ICh", "US-ICs", "US-NR1"))
+  # and every level in use is a known one, with `sensor` the large remainder
+  expect_true(all(src %in% names(TS_SOURCES)))
+  expect_gt(sum(src == "sensor"), 80)
+})
+
+test_that("ts_measured_truth says whether every row of TS_measured is a sensor reading", {
+  truth <- function(s) ts_measured_truth(get_site_info(s))
+  expect_identical(truth("DE-Tha"), "sensor")
+  expect_identical(truth("CZ-Stn"), "sensor")   # a different depth is still a sensor
+  expect_identical(truth("US-NR1"), "sensor")   # the PI's gap fill of the same sensor
+  # Anything with a derived row anywhere in the column is not a truth.
+  for (s in c("FI-Sod", "US-MBP", "GF-Guy", "US-Cwt", "US-BZo", "CA-ARB", "DE-Hte", "US-Los")) {
+    expect_identical(truth(s), "none", info = s)
+  }
+  # `ts_measured_is_synthetic()` is the same question, as a logical.
+  expect_true(ts_measured_is_synthetic(get_site_info("DE-Hte")))
+  expect_false(ts_measured_is_synthetic(get_site_info("DE-Tha")))
+})
+
+test_that("an unknown or missing ts_source is refused by name", {
+  si <- get_site_info("DE-Tha")
+  si$ts_source <- "guesswork"
+  expect_error(ts_source(si), "guesswork")
+  si$ts_source <- NA_character_
+  expect_error(ts_source(si), "DE-Tha")
 })
 
 # ------------------------------------------------- the estimator's semantics

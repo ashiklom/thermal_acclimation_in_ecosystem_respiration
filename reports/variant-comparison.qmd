@@ -241,11 +241,13 @@ Every choice a recipe made, as the fit recorded it. `ts_reason` is the strategy'
 own explanation; `ts_verdict`/`ts_flags` are the quality screen's; `fill_method`
 and `fill_cv_rmse` are the blocked cross-validation's winner and its out-of-fold
 error where a reconstruction was used. `ts_measured_synthetic` marks the sites
-whose "measured" column is itself a reconstruction step 01 made (`estimate_Ts`,
-`SITES_TS_FROM_TA_*`, `SITES_TS_SYNTHETIC`): the recipes select downstream of
-those and cannot undo them, so at those sites every recipe but `noseason` fits
-the same column. `fill_truth_synthetic` says the same of the CV's truth, and
-`fill_degenerate` that the winner reproduced it to numerical zero.
+whose "measured" column has rows that are not a sensor reading -- `ts_source`
+in `site_info.csv` says which mechanism (`reconstructed`, `lm_ta_cold`,
+`recalibrated`, ...; see `TS_SOURCES` in `R/constants.R`). The recipes select
+downstream of those and cannot undo them, so at those sites every recipe but
+`noseason` fits the same column. `fill_truth_synthetic` says the same of the
+CV's truth, and `fill_degenerate` that the winner reproduced it to numerical
+zero.
 
 ```{r provenance}
 #| echo: false

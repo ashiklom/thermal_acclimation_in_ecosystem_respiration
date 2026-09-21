@@ -53,6 +53,33 @@ redeclared_humidity <- tribble(
   "US-Ho2", NA_character_,    "VPD_PI_1_1_1"
 )
 
+# What each site's `TS_measured` column actually is -- see `TS_SOURCES` in
+# R/constants.R for the levels and what each means for whether the column can
+# serve as a truth. Every site not named here is `sensor`; every `estimate_Ts`
+# site is `reconstructed` (its estimator is `estimate_ts_method`). These rows
+# are the readers' hard-coded branches, written down: the `name_site ==` arms
+# in `prep_fluxnet_family()` and `prep_ustar_df()` and the `SITES_TS_FROM_TA_*`
+# lists in R/constants.R. The readers still dispatch on those for now; a test
+# holds this column to them until they switch to it.
+ts_source_sites <- tribble(
+  ~site_ID, ~ts_source,
+  "CZ-Stn", "sensor_depth2",
+  "FI-Sod", "recalibrated",
+  "GF-Guy", "ta_substitute",
+  "US-Cwt", "borrowed_site",
+  "US-MBP", "gapfill_ta",
+  "US-NR1", "gapfill_pi",
+  "US-ICh", "gapfill_pi",
+  "US-ICs", "gapfill_pi",
+  "US-BZo", "lm_ta_recent",
+  "CA-ARB", "lm_ta_cold",
+  "CA-ARF", "lm_ta_cold",
+  "CA-KLP", "lm_ta_cold",
+  "US-Rms", "lm_ta_cold",
+  "US-SRS", "lm_ta_cold",
+  "US-ChR", "lm_ta_cold"
+)
+
 ts_regression_sites <- c("DE-Hte", "FR-FBn")
 
 # Sites whose growing year does not start on 1 January, and the day of year it
@@ -155,7 +182,24 @@ sites_v2 <- sites |>
     RH = if_else(.data$site_ID %in% redeclared_humidity$site_ID, .data$RH_new, .data$RH),
     VPD = if_else(.data$site_ID %in% redeclared_humidity$site_ID, .data$VPD_new, .data$VPD)
   ) |>
-  select(-"RH_new", -"VPD_new")
+  select(-"RH_new", -"VPD_new") |>
+  left_join(ts_source_sites, by = "site_ID") |>
+  mutate(ts_source = case_when(
+    .data$estimate_Ts == "YES" ~ "reconstructed",
+    !is.na(.data$ts_source) ~ .data$ts_source,
+    TRUE ~ "sensor"
+  ))
+
+# A site cannot be both reconstructed and one of the hand-coded arms: the
+# readers apply exactly one, and the declaration has to say which.
+stopifnot(!any(ts_source_sites$site_ID %in% sites_v2$site_ID[sites_v2$estimate_Ts == "YES"]))
+missing_source <- setdiff(ts_source_sites$site_ID, sites_v2$site_ID)
+if (length(missing_source) > 0) {
+  stop(
+    "ts_source_sites names sites that are not in site_info: ",
+    paste(missing_source, collapse = ", ")
+  )
+}
 
 missing_redeclared <- setdiff(redeclared_humidity$site_ID, sites_v2$site_ID)
 if (length(missing_redeclared) > 0) {
