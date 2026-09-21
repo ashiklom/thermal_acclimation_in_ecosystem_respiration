@@ -210,10 +210,17 @@ test_that("the stuck-value test exempts the zero curtain", {
 # with the verdict forced, on the structure-only path -- which is everything
 # except the Stan call, and the Stan call is column-agnostic.
 
-test_that("memory_fill attaches TS_memfill when the verdict is BAD, and falls back without a fill", {
-  skip_if(is.na(product_file("DE-RuC", "FLUXNET")), "DE-RuC not downloaded")
-  si <- get_site_info("DE-RuC")
-  sd_ <- suppressWarnings(suppressMessages(prep_nee_ac(si)))
+# Over one site per reader: `fill_soil_temp()` reads the step-01 tables, and
+# the two readers build them differently enough -- column set, gap structure,
+# whether NETRAD survives -- that "the fill works" is a claim about each.
+for (reader_ in names(READER_SITES)) {
+  name_site_ <- READER_SITES[[reader_]]
+
+test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is BAD, and falls back without a fill",
+                  reader_, name_site_), {
+  skip_if(!site_raw_available(name_site_), paste(name_site_, "not downloaded"))
+  si <- get_site_info(name_site_)
+  sd_ <- prepped_site(name_site_)
   # A deliberately cheap fill: the plumbing is the point, not the skill.
   fill <- suppressWarnings(suppressMessages(
     fill_soil_temp(sd_, si, max_train = 3000, num_trees = 20)
@@ -221,7 +228,7 @@ test_that("memory_fill attaches TS_memfill when the verdict is BAD, and falls ba
   expect_identical(fill$status, "ok")
   expect_length(fill$ac_ts, nrow(sd_$ac))
   expect_length(fill$night_ts, nrow(sd_$nightNEE))
-  expect_false(fill$truth_synthetic)   # DE-RuC's soil temperature is measured
+  expect_false(fill$truth_synthetic)   # both sites' soil temperature is measured
   expect_setequal(fill$ts_bounds$definition, c("halfhourly", "climatology"))
 
   bad <- sd_
@@ -270,3 +277,5 @@ test_that("memory_fill attaches TS_memfill when the verdict is BAD, and falls ba
     ))
   )
 })
+
+}

@@ -137,11 +137,17 @@ ts_measured_is_synthetic <- function(site_info) {
 #                site, and the sparse gap profile
 #   SE-Deg  176  Warm Winter 2020 in the splice
 #   NL-Loo  176  a two-product splice (FLUXNET+ICOS); TS_linear
+#   US-Kon   84  the AmeriFlux reader: u-star filtering and gap fill, the
+#                compound `FC + SC` column read, RH -> VPD conversion, and the
+#                uncapped growing-season cut-off. Its step-01 features
+#                reproduce the manuscript's AmeriFlux row exactly.
 #
 # The number is (original nyear x round(growing-season length / 14)) taken from
 # the manuscript's own growing_season_feature_*.csv -- a proxy for how many
-# fits a site costs, not a runtime. Step 01 for all six together takes about 40
-# seconds.
+# fits a site costs, not a runtime. Step 01 for the six FLUXNET-family sites
+# together takes about 40 seconds; US-Kon adds a little over a minute on its
+# own, because REddyProc's u-star estimation and gap fill dominate an
+# AmeriFlux site and no other reader pays for them.
 #
 # Two branches are deliberately left out because both are expensive: CH-Dav's
 # pre-gap-scan TS >= 2 C truncation (364) and GF-Guy's year-round growing
@@ -149,4 +155,4 @@ ts_measured_is_synthetic <- function(site_info) {
 # tests/ts-swc-baseline.R instead, which needs no model fits.
 #
 # Set THERMAL_SITES=all to run the full list. See `pipeline_sites()`.
-DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo")
+DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo", "US-Kon")

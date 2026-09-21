@@ -82,3 +82,12 @@ test_that("the sample covers the special growing-season cut-off", {
   expect_true(any(DEV_SITES %in% SITES_GS_NEE_ZERO))
 })
 
+test_that("the sample covers both readers", {
+  # The AmeriFlux reader is a separate path from first read to growing season:
+  # u-star filtering, per-site column names, its own NEE cut-off. While its
+  # sites were excluded from `pipeline_sites()` nothing downstream of step 01
+  # ever ran against one, and a dev run would not have noticed.
+  readers <- vapply(DEV_SITES, function(s) site_reader(get_site_info(s)), "")
+  expect_setequal(unname(readers), c("ameriflux", "fluxnet_family"))
+})
+

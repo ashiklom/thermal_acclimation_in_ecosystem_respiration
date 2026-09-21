@@ -13,6 +13,36 @@ use_project_root <- function(envir = parent.frame()) {
   withr::local_dir(normalizePath(file.path("..", "..")), .local_envir = envir)
 }
 
+# Whether every product a site declares is on disk, for `skip_if()`.
+site_raw_available <- function(name_site) {
+  products <- site_sources(get_site_info(name_site))
+  all(!vapply(products, function(p) is.na(product_file(name_site, p)), logical(1)))
+}
+
+# Step 01 for a real site, computed once per test session.
+#
+# `prep_nee_ac()` is cheap at a FLUXNET-family site -- a few seconds -- and not
+# at an AmeriFlux one, where REddyProc's u-star estimation and gap fill
+# dominate and US-Kon takes over a minute. The real-data tests want both
+# readers, and re-running step 01 inside each `test_that()` would put minutes
+# on the suite, so the result is memoised for the session. Read-only by
+# convention: a test that needs to alter the tables copies first.
+.prepped_cache <- new.env(parent = emptyenv())
+prepped_site <- function(name_site) {
+  hit <- .prepped_cache[[name_site]]
+  if (!is.null(hit)) return(hit)
+  out <- suppressWarnings(suppressMessages(prep_nee_ac(get_site_info(name_site))))
+  .prepped_cache[[name_site]] <- out
+  out
+}
+
+# One site per reader, for the tests that run the real thing end to end.
+# DE-RuC is the cheapest FLUXNET-family site; US-Kon is the AmeriFlux
+# reference -- its step-01 features reproduce the manuscript's
+# growing_season_feature_AmeriFlux.csv row exactly, so a difference there is a
+# real one. Nothing below is site-specific: these are properties of the path.
+READER_SITES <- c(fluxnet_family = "DE-RuC", ameriflux = "US-Kon")
+
 # A seasonal NEE/TS curve with every day-of-year present.
 #
 # Completeness is load-bearing. `detect_growing_season()` floors gStart with the

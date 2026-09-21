@@ -11,10 +11,18 @@ use_project_root()
 structural_cols <- c("site_ID", "growing_year", "window", "status",
                      "nobsv", "extend_days", "TS")
 
-test_that("the structure-only path fits nothing and says so", {
-  skip_if(is.na(product_file("DE-RuC", "FLUXNET")), "DE-RuC not downloaded")
-  si <- get_site_info("DE-RuC")
-  sd_ <- suppressWarnings(suppressMessages(prep_nee_ac(si)))
+# Run over one site per reader. The AmeriFlux reader has its own u-star
+# filtering, its own growing-season cut-off and its own per-site column names,
+# and until its sites entered `pipeline_sites()` nothing downstream of step 01
+# had ever executed against one. `prepped_site()` memoises step 01, so the
+# AmeriFlux record is read once for the file.
+for (reader in names(READER_SITES)) {
+  name_site <- READER_SITES[[reader]]
+
+test_that(sprintf("[%s/%s] the structure-only path fits nothing and says so", reader, name_site), {
+  skip_if(!site_raw_available(name_site), paste(name_site, "not downloaded"))
+  si <- get_site_info(name_site)
+  sd_ <- prepped_site(name_site)
   r <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
 
   expect_named(r, c("outcome", "outcome_siteyear", "window_skips", "settings"))
@@ -37,13 +45,13 @@ test_that("the structure-only path fits nothing and says so", {
       "year_median_nee_too_low", "year_mean_nee_too_low")))
 })
 
-test_that("two structure-only runs agree exactly", {
+test_that(sprintf("[%s/%s] two structure-only runs agree exactly", reader, name_site), {
   # This is the whole point of the mode. The fitted path sets no seed, so its
   # TAS moves by ~3e-4 between identical runs; a difference in these columns is
   # therefore a real difference rather than sampler noise.
-  skip_if(is.na(product_file("DE-RuC", "FLUXNET")), "DE-RuC not downloaded")
-  si <- get_site_info("DE-RuC")
-  sd_ <- suppressWarnings(suppressMessages(prep_nee_ac(si)))
+  skip_if(!site_raw_available(name_site), paste(name_site, "not downloaded"))
+  si <- get_site_info(name_site)
+  sd_ <- prepped_site(name_site)
   a <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
   b <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
 
@@ -53,10 +61,10 @@ test_that("two structure-only runs agree exactly", {
   expect_identical(a$window_skips, b$window_skips)
 })
 
-test_that("settings record the choices that shaped the run", {
-  skip_if(is.na(product_file("DE-RuC", "FLUXNET")), "DE-RuC not downloaded")
-  si <- get_site_info("DE-RuC")
-  sd_ <- suppressWarnings(suppressMessages(prep_nee_ac(si)))
+test_that(sprintf("[%s/%s] settings record the choices that shaped the run", reader, name_site), {
+  skip_if(!site_raw_available(name_site), paste(name_site, "not downloaded"))
+  si <- get_site_info(name_site)
+  sd_ <- prepped_site(name_site)
   tot <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
   dir <- suppressWarnings(suppressMessages(
     total_tas_site(sd_, si, direct = TRUE, fit = FALSE)
@@ -67,10 +75,17 @@ test_that("settings record the choices that shaped the run", {
   # The selected columns belong in the record: they are the step-02 decision
   # that `outcome` alone gives no way to recover.
   expect_equal(tot$settings$ts_col, si$ts_col)
-  expect_equal(tot$settings$nwindow, tot$settings$nwindow)
   expect_true(tot$settings$nwindow >= 1)
   expect_equal(nrow(tot$settings), 1L)
+  # Step 01 and step 02 have to agree on which reader ran: the AmeriFlux path
+  # hands its growing season forward from the u-star season factor, the other
+  # detects it here, and a run that mixed the two would be silently wrong.
+  expect_identical(site_reader(si), reader)
+  expect_equal(tot$settings$gStart, sd_$feature_gs$gStart)
+  expect_equal(tot$settings$gEnd, sd_$feature_gs$gEnd)
 })
+
+}
 
 # `year_rejection()` names which rule dropped a growing year. Asserting only
 # that the answer is *one of* the four names is not enough -- the mutation
