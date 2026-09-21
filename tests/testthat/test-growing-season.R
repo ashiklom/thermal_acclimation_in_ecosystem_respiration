@@ -5,10 +5,12 @@ si <- get_site_info("US-Kon")
 si$gStart <- NA_integer_
 si$gEnd <- NA_integer_
 
+manuscript_fields <- c("gStart", "gEnd", "tStart", "tEnd")
+
 test_that("each cut-off reproduces the original expression it came from", {
   for (variant in c("uncapped", "capped", "zero")) {
     expect_equal(
-      lapply(detect_growing_season(ac, si, nee_threshold = variant), unname),
+      lapply(detect_growing_season(ac, si, nee_threshold = variant)[manuscript_fields], unname),
       original_detect_growing_season(ac, variant),
       info = variant
     )
@@ -38,13 +40,20 @@ test_that("an unrecognised nee_threshold is rejected", {
   expect_error(detect_growing_season(ac, si, nee_threshold = "whatever"))
 })
 
-test_that("site_info gStart/gEnd overrides take precedence", {
+test_that("site_info gStart/gEnd overrides take precedence, and the detected pair survives them", {
+  plain <- detect_growing_season(ac, si, nee_threshold = "capped")
   si2 <- si
   si2$gStart <- 100L
   si2$gEnd <- 300L
   gs <- detect_growing_season(ac, si2, nee_threshold = "capped")
   expect_equal(gs$gStart, 100)
   expect_equal(gs$gEnd, 300)
+  # What `force_detect` reads: the detector's answer, unchanged by the override.
+  expect_equal(gs$gStart_detected, plain$gStart)
+  expect_equal(gs$gEnd_detected, plain$gEnd)
+  # ...and with no override declared the two pairs coincide.
+  expect_equal(plain$gStart_detected, plain$gStart)
+  expect_equal(plain$gEnd_detected, plain$gEnd)
 })
 
 test_that("gStart is floored by the first day-of-year at or above 0 C", {

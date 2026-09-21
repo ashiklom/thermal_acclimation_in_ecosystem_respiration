@@ -22,12 +22,12 @@ test_that("the CSV's original row agrees with original_recipe()", {
 
 test_that("an unknown strategy or a bad id fails by name", {
   expect_error(
-    new_recipe("x", ts = "magic", season = "detect", bounds = "native",
+    new_recipe("x", ts = "magic", season = "detect_or_override", bounds = "native",
                swc = "site_info", year_qc = "site_info"),
     "axis 'ts' is 'magic'"
   )
   expect_error(
-    new_recipe("Bad-Id", ts = "site_info", season = "detect", bounds = "native",
+    new_recipe("Bad-Id", ts = "site_info", season = "detect_or_override", bounds = "native",
                swc = "site_info", year_qc = "site_info"),
     "recipe_id must be"
   )
@@ -86,7 +86,7 @@ fake_fill <- function(ok = TRUE) {
 
 test_that("choose_ts_col follows the recipe and the verdict", {
   si <- list(ts_col = "TS_linear")
-  r <- function(ts) new_recipe("r", ts = ts, season = "detect", bounds = "native",
+  r <- function(ts) new_recipe("r", ts = ts, season = "detect_or_override", bounds = "native",
                                swc = "site_info", year_qc = "site_info")
 
   expect_identical(choose_ts_col(r("site_info"), fake_site_data("BAD"), si)$ts_col, "TS_linear")
@@ -113,18 +113,30 @@ test_that("a site_data without a verdict is refused, not defaulted", {
 })
 
 test_that("choose_window_season changes only the span", {
-  fg <- tibble::tibble(gStart = 120, gEnd = 280)
+  # An NL-Loo-shaped site: the detector said 96, site_info says 120.
+  fg <- tibble::tibble(site_ID = "x", gStart = 120, gEnd = 280,
+                       gStart_detected = 96, gEnd_detected = 280)
   d <- choose_window_season(get_recipe("original"), fg)
+  f <- choose_window_season(get_recipe("forcedetect"), fg)
   w <- choose_window_season(get_recipe("noseason"), fg)
   expect_identical(c(d$gStart, d$gEnd), c(120, 280))
+  expect_identical(c(f$gStart, f$gEnd), c(96, 280))
   expect_identical(c(w$gStart, w$gEnd), c(1, 366))
+  # and the two detect strategies say which they are
+  expect_match(d$reason, "overrides applied")
+  expect_match(f$reason, "overrides ignored")
+})
+
+test_that("force_detect refuses a site_data built before the detected bounds were carried", {
+  stale <- tibble::tibble(site_ID = "x", gStart = 120, gEnd = 280)
+  expect_error(choose_window_season(get_recipe("forcedetect"), stale), "gStart_detected")
 })
 
 test_that("choose_swc_col: era5 is direct-only, site_info defers to the declaration", {
   si_yes <- list(SWC_use = TRUE)
   si_no <- list(SWC_use = FALSE)
   r_orig <- get_recipe("original")
-  r_era5 <- new_recipe("e", ts = "site_info", season = "detect", bounds = "native",
+  r_era5 <- new_recipe("e", ts = "site_info", season = "detect_or_override", bounds = "native",
                        swc = "era5", year_qc = "site_info")
   expect_true(is.na(choose_swc_col(r_era5, si_yes, direct = FALSE)$swc_col))
   expect_identical(choose_swc_col(r_era5, si_yes, direct = TRUE)$swc_col, "SWC_era5")

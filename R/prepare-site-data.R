@@ -486,6 +486,11 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
     site_ID = name_site,
     gStart = gStart,
     gEnd = gEnd,
+    # The detector's own answer, before any site_info override. Equal to
+    # gStart/gEnd at the 93 sites that declare none; the `force_detect` season
+    # strategy lays its windows out on these instead.
+    gStart_detected = gs$gStart_detected,
+    gEnd_detected = gs$gEnd_detected,
     # `unname()` because these arrive from `quantile()` still carrying its
     # "2.5%"/"97.5%" names, which then differ from the same numbers in
     # `ts_bounds` for no reason anyone would enjoy debugging.

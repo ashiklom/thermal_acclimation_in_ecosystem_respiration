@@ -18,7 +18,7 @@ compared row for row.
 | axis | strategies | stage | what it decides |
 |---|---|---|---|
 | `ts` | `site_info` · `screen_best` · `memory_fill` | fit | which soil-temperature column the model is fitted on |
-| `season` | `detect` · `whole_year` | fit | the day-of-year span the 14-day windows tile |
+| `season` | `detect_or_override` · `force_detect` · `whole_year` | fit | the day-of-year span the 14-day windows tile |
 | `bounds` | `native` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of |
 | `swc` | `site_info` · `era5` | fit | which soil-water column the direct model uses |
 | `year_qc` | `site_info` | prep | how years are qualified |
@@ -43,7 +43,19 @@ the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
 
 ### `season`
 
-- `detect` — the detected growing season.
+- `detect_or_override` — the manuscript's season, and the name says what the
+  old name `detect` understated. `detect_growing_season()` derives
+  `gStart`/`gEnd` from the day-of-year NEE climatology, raises `gStart` to the
+  first day whose mean soil temperature is non-negative, and then **overwrites
+  either bound with the literal in `site_info.csv` where one is declared**.
+  Twenty-four of the 117 rows declare at least one — including two of the
+  development sites, FI-Sod (`gEnd = 270`) and NL-Loo (`gStart = 120`) — so at
+  those sites the "detected" season is partly hand-set.
+- `force_detect` — the detector alone, overrides ignored. Step 01 carries the
+  unoverridden pair out of `detect_growing_season()` as
+  `gStart_detected`/`gEnd_detected`, and this strategy lays the windows out on
+  them. Identical to `detect_or_override` at the 93 sites with no override;
+  the difference at the other 24 is the hand-set part of the season.
 - `whole_year` — a full year of DOY, starting where the site's growing year
   starts: 1–366 at an ordinary site, and 183–548 at one whose growing year is
   wrapped (`growing_year_start` in site_info.csv), so that the span is in the
@@ -51,6 +63,10 @@ the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
   detected season still drives the year gap scan (in step 01) and the
   control-year choice, because both need a span to be defined over. See
   *Future work*.
+
+Under every strategy **only the window layout changes**: the
+`detect_or_override` season still drives the year gap scan (in step 01) and the
+control-year choice, because both need a span to be defined over.
 
 ### `bounds`
 

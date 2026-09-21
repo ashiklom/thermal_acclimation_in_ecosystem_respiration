@@ -20,8 +20,10 @@ RECIPES_CSV <- file.path("data-core", "recipes.csv")
 RECIPE_AXES <- list(
   # Which soil-temperature column the model is fitted on.
   ts = c("site_info", "screen_best", "memory_fill"),
-  # The day-of-year span the 14-day windows tile.
-  season = c("detect", "whole_year"),
+  # The day-of-year span the 14-day windows tile. `detect_or_override` is the
+  # manuscript: the detector's bounds, replaced by the site_info.csv literal
+  # wherever one is declared (24 sites). `force_detect` is the detector alone.
+  season = c("detect_or_override", "force_detect", "whole_year"),
   # Which population tStart/tEnd -- the window-skip gate -- are percentiles of.
   bounds = c("native", "climatology", "halfhourly"),
   # Which soil-water column the direct model uses.
@@ -97,7 +99,7 @@ print.recipe <- function(x, ...) {
 original_recipe <- function() {
   new_recipe(
     "original",
-    ts = "site_info", season = "detect", bounds = "native", swc = "site_info",
+    ts = "site_info", season = "detect_or_override", bounds = "native", swc = "site_info",
     year_qc = "site_info",
     description = "Exactly the manuscript logic."
   )

@@ -81,14 +81,22 @@ fill_status <- function(fill) {
 #
 # The day-of-year span the 14-day windows tile.
 #
-#   detect      the detected growing season: today's behaviour.
-#   whole_year  a full year of DOY, starting where the site's growing year
-#               starts. Tests the hypothesis that season detection is
-#               redundant with the fit-stage guards. Only the *window layout*
-#               changes: the detected season still drives the year gap scan
-#               (in step 01) and the control-year choice, because both need a
-#               span to be defined over and a season-free rule for them is a
-#               separate piece of work. See docs/recipes.md.
+#   detect_or_override  the manuscript's season: `detect_growing_season()`'s
+#                       bounds, each replaced by the site_info.csv literal
+#                       where one is declared. Twenty-four sites declare one,
+#                       so this is not "detected" -- hence the name.
+#   force_detect        the detector's bounds alone, overrides ignored. What
+#                       separates the hand-set part of the season from the
+#                       data-driven part; step 01 carries the unoverridden
+#                       pair out as `gStart_detected`/`gEnd_detected`.
+#   whole_year          a full year of DOY, starting where the site's growing
+#                       year starts. Tests the hypothesis that season detection
+#                       is redundant with the fit-stage guards.
+#
+# In every case only the *window layout* changes: the detect-or-override
+# season still drives the year gap scan (in step 01) and the control-year
+# choice, because both need a span to be defined over and a season-free rule
+# for them is a separate piece of work. See docs/recipes.md.
 #
 # The span has to be in the same DOY coordinates as the data. At a site whose
 # growing year is wrapped, DOY runs 183..548 and a literal 1-366 would tile
@@ -100,8 +108,20 @@ choose_window_season <- function(recipe, feature_gs) {
   if (is.null(origin) || is.na(origin)) origin <- 1L
   switch(
     recipe$season,
-    detect = list(gStart = feature_gs[["gStart"]], gEnd = feature_gs[["gEnd"]],
-                  reason = "detected growing season"),
+    detect_or_override = list(gStart = feature_gs[["gStart"]], gEnd = feature_gs[["gEnd"]],
+                              reason = "detected growing season, site_info overrides applied"),
+    force_detect = {
+      detected <- c(feature_gs[["gStart_detected"]], feature_gs[["gEnd_detected"]])
+      if (length(detected) != 2 || anyNA(detected)) {
+        stop(
+          feature_gs[["site_ID"]], ": force_detect needs `gStart_detected`/",
+          "`gEnd_detected` in feature_gs, which this site_data does not carry. ",
+          "Rebuild it with `prep_nee_ac()`, or delete the stale `_targets/` store."
+        )
+      }
+      list(gStart = detected[[1]], gEnd = detected[[2]],
+           reason = "detected growing season, site_info overrides ignored")
+    },
     whole_year = list(gStart = origin, gEnd = origin + 365,
                       reason = sprintf("whole year, DOY %d-%d", origin, origin + 365)),
     stop("Unknown season strategy ", shQuote(recipe$season))

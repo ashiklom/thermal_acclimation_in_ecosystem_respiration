@@ -102,6 +102,16 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
   if (length(nonnegative_ts) > 0) {
     gStart <- max(gStart, min(nee_yearly$DOY[nonnegative_ts]))
   }
+
+  # What the detector said, before site_info.csv has its say. Twenty-four
+  # sites declare a `gStart` or `gEnd` literal that replaces the detected
+  # bound, so the season this function returns is *detected or overridden*,
+  # and the two are only separable if the detected pair travels too. The
+  # `force_detect` season strategy reads them; nothing in the manuscript path
+  # does.
+  gStart_detected <- gStart
+  gEnd_detected <- gEnd
+
   if (!is.na(site_info[["gStart"]])) {
     gStart <- as.numeric(site_info[["gStart"]])
   }
@@ -112,7 +122,10 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
   tStart <- quantile(tmp[[ts_col]], 0.025, na.rm = TRUE)
   tEnd <- quantile(tmp[[ts_col]], 0.975, na.rm = TRUE)
 
-  list(gStart = gStart, gEnd = gEnd, tStart = tStart, tEnd = tEnd)
+  list(
+    gStart = gStart, gEnd = gEnd, tStart = tStart, tEnd = tEnd,
+    gStart_detected = gStart_detected, gEnd_detected = gEnd_detected
+  )
 }
 
 # The growing-season start and end as calendar timestamps, one pair per year,
