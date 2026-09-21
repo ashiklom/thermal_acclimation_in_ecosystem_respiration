@@ -115,7 +115,17 @@ DEFAULT_SITES <- c(
   "NL-Loo", # step-02 rewrite, fluxnet_family, SWC_use YES
   "DE-Tha", # no TS rewrite, fluxnet_family, SWC_use YES
   "FR-Fon", # step-01 predicted soil temperature (random forest path)
-  "CH-Dav"  # step-01 predicted soil temperature; SWC_use NO -> ERA5 when direct
+  "CH-Dav", # step-01 predicted soil temperature; SWC_use NO -> ERA5 when direct
+  # One site per remaining stage-A arm, added before the soil-temperature
+  # refactor so that every arm has a frozen reference. See docs/soil-temperature.md.
+  "DE-Hte", # step-01 lm(TS ~ TA + NETRAD) reconstruction, trained on depth 2
+  "DE-Akm", # step-01 random forest, FLUXNET-family; in DEV_SITES
+  "US-Ha1", # step-01 lm(TS ~ TA) reconstruction, AmeriFlux; TS >= 2 C truncation
+  "US-Los", # step-01 random forest, AmeriFlux; screen verdict BAD
+  "US-Cwt", # step-01 TS from a neighbouring site's coefficients, wholesale
+  "GF-Guy", # step-01 air temperature substituted; gStart/gEnd pinned
+  "CZ-Stn", # step-01 second sensor depth used wholesale
+  "US-NR1"  # step-01 PI gap-fill of the sensor's gaps only
 )
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -194,16 +204,20 @@ selection_matches_oracle <- function(sd_, site_info, name_site) {
   ora <- original_ts_step02(
     sd_$ac, sd_$nightNEE, name_site, fg$gStart, fg$gEnd, fg$tStart, fg$tEnd
   )
-  sel_ac <- resolve_ts_column(sd_$ac, ts_col)
-  sel_night <- resolve_ts_column(sd_$nightNEE, ts_col)
-  rng <- ts_bounds_for(sd_$ts_bounds, ts_col)
+  # The pipeline's side is `get_soil_temperature()` under the manuscript
+  # recipe: one call, `TS_final` out. Its bounds are the selected column's
+  # native ones, which is what the oracle recomputes.
+  soil <- get_soil_temperature(sd_, site_info, recipe = original_recipe())
+  stopifnot(identical(soil$meta$ts_col, ts_col))
 
   same <- function(a, b) isTRUE(all.equal(a, b, tolerance = TOLERANCE))
   checks <- c(
-    ac_TS = same(sel_ac$TS, ora$ac$TS),
-    night_TS = same(sel_night$TS, ora$nightNEE$TS),
-    tStart = same(rng$tStart, unname(ora$tStart)),
-    tEnd = same(rng$tEnd, unname(ora$tEnd)),
+    ac_TS = same(soil$ac$TS_final, ora$ac$TS),
+    night_TS = same(soil$nightNEE$TS_final, ora$nightNEE$TS),
+    tStart = same(soil$meta$tStart, unname(ora$tStart)),
+    tEnd = same(soil$meta$tEnd, unname(ora$tEnd)),
+    # And nothing else soil-temperature-shaped leaves stage B.
+    one_column = identical(ts_candidate_columns(soil$ac), "TS_final"),
     # Step 01 must hand over measured TS untouched, whatever variants it also
     # produced; every filter it applied was computed on that column.
     ts_is_measured = same(sd_$ac$TS, sd_$ac$TS_measured),
@@ -289,8 +303,8 @@ for (name_site in sites) {
   # Step-01 digest: catches any change to what step 01 produces, independently
   # of the step-02 manipulation applied on top.
   step01 <- c(
-    digest_table(sd_$ac, "s1ac", c("TS", "TA", "SWC", "NEE", "NEE_uStar_f")),
-    digest_table(sd_$nightNEE, "s1night", c("TS", "TA", "SWC", "NEE"))
+    digest_table(sd_$ac, "s1ac", c("TS", "TS_linear", "TA", "SWC", "NEE", "NEE_uStar_f")),
+    digest_table(sd_$nightNEE, "s1night", c("TS", "TS_linear", "TA", "SWC", "NEE"))
   )
 
   for (direct in c(FALSE, TRUE)) {
