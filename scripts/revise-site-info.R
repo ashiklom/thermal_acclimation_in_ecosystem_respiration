@@ -32,6 +32,27 @@ netrad_sites <- tribble(
   "US-Los", "NETRAD_1_1_1",
   "US-SRG", "NETRAD"
 )
+# Humidity columns re-declared because the AmeriFlux BASE release the project
+# now holds no longer publishes the one `site_info_orig.csv` names.
+#
+# US-Ho1 and US-Ho2 both asked for `RH_PI_F_2_1_1`, absent from releases 15-5
+# and 10-5. Both records do carry `VPD_PI_1_1_1`, PI-provided at the same
+# measurement position as the declared air temperature (`T_SONIC_1_1_1`), so
+# the sites are switched to the VPD path instead of the RH path. That is the
+# better of the two available substitutions: REddyProc wants VPD, and taking
+# it directly avoids deriving it from a relative humidity measured at a
+# different height. The surviving RH replicates -- `RH_1_1_1`, `RH_PI_2_1_A`
+# and friends -- are the alternative if a PI advises otherwise.
+#
+# Humidity reaches only REddyProc's u-star gap fill, so the choice moves
+# `NEE_uStar_f` and, through it, the direct model's GPP proxy. It is not a
+# predictor in either respiration model.
+redeclared_humidity <- tribble(
+  ~site_ID, ~RH_new,          ~VPD_new,
+  "US-Ho1", NA_character_,    "VPD_PI_1_1_1",
+  "US-Ho2", NA_character_,    "VPD_PI_1_1_1"
+)
+
 ts_regression_sites <- c("DE-Hte", "FR-FBn")
 
 # Sites whose growing year does not start on 1 January, and the day of year it
@@ -128,7 +149,21 @@ sites_v2 <- sites |>
       TRUE ~ "ac"
     )
   ) |>
-  left_join(wrapped_growing_year, by = "site_ID")
+  left_join(wrapped_growing_year, by = "site_ID") |>
+  left_join(redeclared_humidity, by = "site_ID") |>
+  mutate(
+    RH = if_else(.data$site_ID %in% redeclared_humidity$site_ID, .data$RH_new, .data$RH),
+    VPD = if_else(.data$site_ID %in% redeclared_humidity$site_ID, .data$VPD_new, .data$VPD)
+  ) |>
+  select(-"RH_new", -"VPD_new")
+
+missing_redeclared <- setdiff(redeclared_humidity$site_ID, sites_v2$site_ID)
+if (length(missing_redeclared) > 0) {
+  stop(
+    "redeclared_humidity names sites that are not in site_info: ",
+    paste(missing_redeclared, collapse = ", ")
+  )
+}
 
 missing_wrapped <- setdiff(wrapped_growing_year$site_ID, sites_v2$site_ID)
 if (length(missing_wrapped) > 0) {
