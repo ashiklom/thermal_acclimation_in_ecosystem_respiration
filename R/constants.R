@@ -56,11 +56,45 @@ FLUX_PRODUCTS <- list(
 # Sentinel removal stays a numeric comparison (`dat[dat == -9999] <- NA`) rather
 # than moving into readr's `na` argument, because `na` matches the raw string:
 # all 110 tables currently on disk write a bare `-9999`, but a future release
-# writing `-9999.0` would slip straight through a string match.
+# writing `-9999.0` would slip straight through a string match. It lives in
+# `drop_sentinels()` so the FLUXNET-family and AmeriFlux BASE readers cannot
+# drift apart on what counts as missing.
 FLUXNET_COL_TYPES <- readr::cols(
   TIMESTAMP_START = readr::col_character(),
   TIMESTAMP_END = readr::col_character(),
   .default = readr::col_double()
+)
+
+# Values that survive the -9999 sweep but cannot be measurements at all. Three
+# sites put garbage through into REddyProc's plausibility check on the first
+# full run: relative humidity of -10000 at CA-Man (a second sentinel, one digit
+# wider than the documented one) and of 33457 and -33269 at US-UMB.
+#
+# These are bounds on what an instrument can report, not on what is likely, and
+# they are deliberately far outside the data. Two calibrations:
+#
+#   * US-BZo is Alaskan permafrost at 65 N and its -80 C reading may well be
+#     real, so the floor sits at -100 C -- below the -89.2 C recorded at
+#     Vostok, and so below anything a surface station can legitimately report.
+#   * Relative humidity tops out at 150 %, not 100 %. Supersaturation and
+#     rounding put 100-113 % in the record at roughly a quarter of the sites
+#     (22355 half-hours at CA-Cbo alone); clamping there would be a scientific
+#     change dressed up as a QC fix, and it would invalidate most of the
+#     pipeline into the bargain.
+#
+# Nothing else currently on disk is out of bound, which is the point: this
+# catches encoding garbage and leaves measurements alone. SWC and incoming
+# shortwave are not bounded here for the same reason -- slightly negative
+# night-time `SW_IN` of -0 to -5 W/m2 is normal and appears at ~30 sites.
+#
+# Matched against column names by prefix, so `TA`, `TA_F`, `TA_PI_F`,
+# `TA_1_1_1` and `TA_ERA` all take the air-temperature bound. `*_QC` columns
+# are quality flags on a different scale and are skipped.
+IMPLAUSIBLE_BOUNDS <- list(
+  TA      = c(-100, 70),
+  T_SONIC = c(-100, 70),
+  TS      = c(-100, 70),
+  RH      = c(-10, 150)
 )
 
 # Arctic tundra sites with periods of the year where the whole day is daytime

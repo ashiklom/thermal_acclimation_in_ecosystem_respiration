@@ -18,14 +18,32 @@ tar_source()
 # midpoint and is *not yet benchmarked* -- worth timing the next time a full
 # run happens anyway.
 local <- crew_controller_local(workers = 8)
-# Worker count is a knob because the full grid's cost is near one 12 h window
-# at 20 workers -- see ts-variants.html "Running it" for the arithmetic. It is
-# read here, at pipeline definition, and does not enter any target's command.
+# Worker count and worker wall time are knobs because the full grid's cost sits
+# near one scheduler window -- see ts-variants.html "Running it" for the
+# arithmetic, and `submit.sh` for the numbers a full run uses. Both are read
+# here, at pipeline definition, and neither enters any target's command.
+#
+# Keep `THERMAL_SLURM_MINUTES` at or above the controller's own `--time`.
+# Workers all launch at the start of the run, so a worker limit shorter than
+# the controller's kills every one of them at the same moment, mid-fit, and
+# makes crew resubmit the whole fleet at once against a busy partition.
+#
+# `cpus_per_task`, not `n_tasks`. `n_tasks = 4` emits `--ntasks=4`, which asks
+# for four CPUs but places no locality constraint on them: on the first full
+# run, only 26 of 68 workers got all four on one node and the rest were spread
+# over two to four. brms runs its `N_CORES` chains as local processes inside
+# the one R session, which lives on a single node, so those workers were
+# sampling four chains on the one or two CPUs they held there. `--ntasks=1
+# --cpus-per-task=4` is what the comment above always meant.
 slurm <- crew_controller_slurm(
   workers = as.integer(Sys.getenv("THERMAL_SLURM_WORKERS", "20")),
+  # Hand idle workers back instead of holding them through the tail of the run,
+  # when there are fewer tasks left than workers. crew relaunches on demand.
+  seconds_idle = 600,
   options_cluster = crew_options_slurm(
-    time_minutes = 12*60,
-    n_tasks = 4,
+    time_minutes = as.integer(Sys.getenv("THERMAL_SLURM_MINUTES", "1425")),
+    n_tasks = 1,
+    cpus_per_task = N_CORES,
     verbose = TRUE
   )
 )

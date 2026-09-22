@@ -26,7 +26,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     unzip = TRUE
   ) |>
     tibble::as_tibble()
-  a[a == -9999] <- NA
+  a <- drop_sentinels(a)
 
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year.
@@ -82,18 +82,35 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
 
   if (name_site == "US-BZS") {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.
-    bzf_file <- files_AmeriFlux_BASE[grepl('US-BZF', files_AmeriFlux_BASE)]
+    bzf_file <- files_AmeriFlux_BASE[grepl("US-BZF", files_AmeriFlux_BASE)]
     stopifnot(length(bzf_file) == 1)
     a_BZF <- amerifluxr::amf_read_base(bzf_file, parse_timestamp = TRUE, unzip = TRUE) |>
       tibble::as_tibble()
-    a_BZF[a_BZF==-9999] <- NA
-    df <- data.frame(BZS = a$TA_PI_F[between(a$YEAR, 2016, 2019)], BZF = a_BZF$TA_PI_F[between(a_BZF$YEAR, 2016, 2019)])
-    mod <- lm(data=df, BZS ~ BZF)
-    a$TA_PI_F[dplyr::between(a$YEAR, 2012, 2014)] <- predict(
+    a_BZF <- drop_sentinels(a_BZF)
+    # Pair the two sites on the timestamp, not on position. The regression this
+    # replaces built its data frame from two independently subset vectors, so it
+    # depended on the 2016-2019 slices of the two BASE releases coming out the
+    # same length and in the same order -- a property of the files as they
+    # happen to be published, not one either file guarantees. A single extra
+    # half-hour at either site would have silently paired every row afterwards
+    # with the wrong timestamp.
+    bzf_ta <- a_BZF |>
+      dplyr::select("TIMESTAMP", BZF = "TA_PI_F")
+    calib <- a |>
+      dplyr::select("TIMESTAMP", "YEAR", BZS = "TA_PI_F") |>
+      dplyr::inner_join(bzf_ta, by = "TIMESTAMP") |>
+      dplyr::filter(dplyr::between(.data$YEAR, 2016, 2019))
+    mod <- lm(BZS ~ BZF, data = calib)
+    # Same pairing for the prediction. `predict.lm()` keeps NA rows rather than
+    # dropping them, so the result lines up with `gap` row for row.
+    gap <- dplyr::between(a$YEAR, 2012, 2014)
+    a$TA_PI_F[gap] <- predict(
       mod,
-      newdata = data.frame(BZF = a_BZF$TA_PI_F[dplyr::between(a_BZF$YEAR, 2012, 2014)])
+      newdata = data.frame(
+        BZF = bzf_ta$BZF[match(a$TIMESTAMP[gap], bzf_ta$TIMESTAMP)]
+      )
     )
-  } 
+  }
 
   if (name_site == 'US-Ha2') {
     # combine data from two locations

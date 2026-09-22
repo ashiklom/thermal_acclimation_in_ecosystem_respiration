@@ -1,3 +1,40 @@
+# Everything that is not a measurement, removed in one place: the documented
+# -9999 sentinel, plus anything outside `IMPLAUSIBLE_BOUNDS`. Both readers --
+# `read_spliced_products()` for the FLUXNET-format products and
+# `prep_ameriflux()` for AmeriFlux BASE -- go through here, so a sentinel found
+# in one product's files is caught in the other's too.
+#
+# Out-of-bound values become NA rather than being pinned to the bound. A
+# reading of 33457 % carries no information about what the humidity was, and
+# writing 100 % there would launder garbage into a plausible-looking
+# measurement; NA is what it is, and REddyProc gap-fills the hole exactly as it
+# does for -9999. The `warning()` puts the column and the count into
+# `tar_meta(fields = "warnings")`, so a new sentinel in a future release shows
+# up in the run's own record instead of only in REddyProc's console output.
+drop_sentinels <- function(dat) {
+  dat[dat == -9999] <- NA
+  for (prefix in names(IMPLAUSIBLE_BOUNDS)) {
+    bound <- IMPLAUSIBLE_BOUNDS[[prefix]]
+    cols <- grep(paste0("^", prefix, "($|_)"), names(dat), value = TRUE)
+    cols <- cols[!grepl("_QC$", cols)]
+    for (col in cols) {
+      x <- dat[[col]]
+      if (!is.numeric(x)) next
+      bad <- !is.na(x) & (x < bound[[1]] | x > bound[[2]])
+      if (!any(bad)) next
+      warning(
+        sum(bad), " value(s) in ", col, " outside [", bound[[1]], ", ",
+        bound[[2]], "] set to NA: ",
+        paste(utils::head(sort(unique(x[bad])), 5), collapse = ", "),
+        call. = FALSE
+      )
+      x[bad] <- NA
+      dat[[col]] <- x
+    }
+  }
+  dat
+}
+
 # `path` is a parameter so the pipeline can hand in a `format = "file"`
 # target and have an edit to the CSV invalidate the sites that read it.
 # Read straight from disk, the file is invisible to the dependency graph.

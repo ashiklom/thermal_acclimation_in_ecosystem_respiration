@@ -44,7 +44,7 @@ read_spliced_products <- function(site_info) {
     # else. A column that violates the contract surfaces in `problems()`
     # instead of quietly changing type.
     dat <- readr::read_csv(path, col_types = FLUXNET_COL_TYPES, progress = FALSE)
-    dat[dat == -9999] <- NA
+    dat <- drop_sentinels(dat)
     dat <- dat[order(dat$TIMESTAMP_START), ]
     message(
       "  ", product, ": ", nrow(dat), " rows, ",
