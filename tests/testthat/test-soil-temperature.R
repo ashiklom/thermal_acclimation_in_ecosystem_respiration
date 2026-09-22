@@ -339,11 +339,24 @@ test_that("reconstructed routes on estimate_ts_method, gap-fills predictors, and
   expect_match(hte$provenance$stage_a_note, "second depth")
 })
 
+test_that("the PI gap-fill is skipped, and says so, when the release has no PI column", {
+  # US-ICs's BASE 13-5 dropped TS_PI_1. The sensor is still the sensor; its
+  # gaps stay gaps, and the provenance row records that the fill did not run.
+  input <- stage_a_input()
+  bare <- input[, setdiff(names(input), "TS_pi")]
+  expect_message(
+    out <- qualification_soil_temperature(bare, stage_a_site("gapfill_pi")),
+    "left unfilled"
+  )
+  expect_identical(out$TS, input$TS_sensor)
+  expect_identical(out$provenance$stage_a_mode, "none")
+  expect_match(out$provenance$stage_a_note, "no PI gap-filled column")
+})
+
 test_that("an arm that needs a column the record lacks fails by name, up front", {
   input <- stage_a_input()
   bare <- input[, setdiff(names(input), c("TS_depth2", "TS_depth2_QC", "TS_pi", "NETRAD"))]
   expect_error(run_arm("sensor_depth2", bare), "TS_depth2")
-  expect_error(run_arm("gapfill_pi", bare), "TS_pi")
   expect_error(run_arm("reconstructed", bare, estimate_ts_method = "NETRAD"), "NETRAD")
   # ...and a missing required column is refused before any arm runs
   expect_error(run_arm("sensor", input[, setdiff(names(input), "TA")]), "TA")

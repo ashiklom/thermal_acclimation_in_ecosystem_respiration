@@ -350,11 +350,22 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
       )
     },
     # use PI gap-filled data
-    gapfill_pi = {
-      need_input(input, "TS_pi", site_info, "the PI gap-fill")
+    gapfill_pi = if ("TS_pi" %in% names(input)) {
       list(
         TS = write_back_ts(input$TS_sensor, input$TS_pi, "fill_gaps"), TS_QC = qc,
         provenance = ts_provenance_row(site_info, estimator = "swap_pi_gapfill", mode = "fill_gaps")
+      )
+    } else {
+      # The PI's gap-filled product is a column the data provider may stop
+      # publishing: US-ICs's BASE 13-5 has none, where 9-5 did. Skipping
+      # loudly beats erroring, as with FI-Sod's recalibration -- the sensor
+      # is still the sensor, only its gaps stay gaps -- and the provenance
+      # row says the manuscript's fill did not happen here.
+      message(name_site, ": no TS_PI_1 in this release; the sensor's gaps are left unfilled.")
+      list(
+        TS = input$TS_sensor, TS_QC = qc,
+        provenance = ts_provenance_row(site_info, estimator = "swap_pi_gapfill", mode = "none",
+                                       note = "skipped: no PI gap-filled column in this release")
       )
     },
     recalibrated = recalibrate_fi_sod_soil_temp(input, site_info),
