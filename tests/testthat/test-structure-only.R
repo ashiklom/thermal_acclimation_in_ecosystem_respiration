@@ -131,3 +131,35 @@ test_that("year_rejection reports the first failure when several apply", {
   # observation count is tested first, so that is what should be reported.
   expect_equal(year_rejection(make_subset(n = 20), TSref = 99), "year_too_few_obs")
 })
+
+# --------------------------------------------- the across-year regression
+#
+# TAS is the slope of log respiration ratio on window-mean soil temperature
+# with `window` as a factor, which needs two fitted windows. A site that
+# qualified only one has not earned an estimate; that is a status, not a
+# `gls()` error about contrasts.
+fake_windows <- function(windows, years = 2010:2015) {
+  set.seed(1)
+  tidyr::crossing(window = windows, growing_year = years) |>
+    dplyr::mutate(TS = 10 + growing_year - 2012 + rnorm(dplyr::n(), 0, 0.3),
+                  lnRatio = -0.05 * (TS - 10) + rnorm(dplyr::n(), 0, 0.05))
+}
+
+test_that("across_year_tas fits with two or more windows and reports a slope", {
+  out <- across_year_tas(fake_windows(c("120_134", "134_148", "148_162")))
+  expect_identical(out$status, "fitted")
+  expect_true(is.finite(out$TAS))
+  expect_lt(out$TAS, 0)
+  expect_true(is.finite(out$TASp))
+})
+
+test_that("across_year_tas returns NA and a status, not an error, with one window", {
+  out <- across_year_tas(fake_windows("120_134"))
+  expect_true(is.na(out$TAS))
+  expect_true(is.na(out$TASp))
+  expect_match(out$status, "too_few_windows: 1 window")
+  # and when every ratio is NA -- nothing fitted at all
+  none <- fake_windows(c("120_134", "134_148"))
+  none$lnRatio <- NA_real_
+  expect_match(across_year_tas(none)$status, "0 window")
+})

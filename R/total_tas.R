@@ -507,13 +507,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
 
   fit_stats <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)
 
-  mod_ar1 <- nlme::gls(
-    lnRatio ~ TS + window,
-    data = window_results_df,
-    correlation = nlme::corAR1(form = ~ growing_year | window),
-    na.action = na.omit
-  )
-  mod_ar1_smry <- summary(mod_ar1)[["tTable"]]
+  tas <- across_year_tas(window_results_df)
+  settings$tas_status <- tas[["status"]]
 
   outcome <- tibble::tibble(
     site_ID = name_site,
@@ -525,8 +520,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     control_year = control_year,
     window_size = WINDOW_SIZE,
     nwindow = nwindow,
-    TAS = mod_ar1_smry["TS", "Value"],
-    TASp = mod_ar1_smry["TS", "p-value"]
+    TAS = tas[["TAS"]],
+    TASp = tas[["TASp"]]
   )
 
   list(
@@ -537,6 +532,35 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   )
 }
 
+
+# The across-year regression that defines TAS: log respiration ratio on
+# window-mean soil temperature, with `window` as a factor and an AR(1) error
+# within window across years.
+#
+# `window` as a factor needs two fitted windows, and a site can qualify fewer:
+# under a variant that qualifies on a sparse raw sensor, DE-Akm fitted one and
+# `gls()` died with "contrasts can be applied only to factors with 2 or more
+# levels" -- an error about model matrices, from a site that had simply not
+# earned an estimate. That is a result, not a failure, so it comes back as a
+# row with NA TAS and a `status` the settings table carries.
+across_year_tas <- function(window_results_df) {
+  usable <- window_results_df[!is.na(window_results_df[["lnRatio"]]), , drop = FALSE]
+  n_windows <- length(unique(usable[["window"]]))
+  if (n_windows < 2) {
+    return(list(
+      TAS = NA_real_, TASp = NA_real_,
+      status = sprintf("too_few_windows: %d window(s) with a fitted ratio, need 2", n_windows)
+    ))
+  }
+  mod_ar1 <- nlme::gls(
+    lnRatio ~ TS + window,
+    data = window_results_df,
+    correlation = nlme::corAR1(form = ~ growing_year | window),
+    na.action = na.omit
+  )
+  smry <- summary(mod_ar1)[["tTable"]]
+  list(TAS = smry["TS", "Value"], TASp = smry["TS", "p-value"], status = "fitted")
+}
 
 # NOTE: Can refactor this further to remove window_start and window_end? Instead, just pass data directly?
 total_tas_window <- function(
