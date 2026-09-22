@@ -72,3 +72,13 @@ test_that("collect_feature_gs keeps one row per site", {
   expect_identical(got$site_ID, c("DE-RuC", "SE-Deg"))
   expect_equal(nrow(got), 2L)
 })
+
+test_that("collect_window_skips keeps its columns when nothing was skipped", {
+  out <- collect_window_skips(list(window_skips = tibble::tibble()), NULL)
+  expect_equal(nrow(out), 0L)
+  expect_identical(names(out), WINDOW_SKIP_COLS)
+  # so the CSV the reports read has a header
+  f <- withr::local_tempfile(fileext = ".csv")
+  write_result_csv(out, f)
+  expect_identical(names(read.csv(f)), WINDOW_SKIP_COLS)
+})

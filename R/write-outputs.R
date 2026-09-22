@@ -110,8 +110,23 @@ collect_fill_summary <- function(...) {
     dplyr::arrange(.data$site_ID)
 }
 
+# The columns a skip row carries, so that a run with no skips at all still
+# writes a CSV with a header. `bind_rows()` of empty tables is 0 x 0, and
+# `write.csv()` of that is an empty file, which `read.csv()` in the reports
+# refuses ("first five rows are empty") -- batch 3 of the local exploration
+# lost both reports to it.
+WINDOW_SKIP_COLS <- c("site_ID", "recipe_id", "model", "window", "window_start",
+                      "window_end", "reason", "detail")
+
 collect_window_skips <- function(...) {
-  dplyr::bind_rows(lapply(built(...), `[[`, "window_skips"))
+  out <- dplyr::bind_rows(lapply(built(...), `[[`, "window_skips"))
+  if (!nrow(out)) {
+    out <- tibble::tibble(
+      site_ID = character(), recipe_id = character(), model = character(), window = character(),
+      window_start = numeric(), window_end = numeric(), reason = character(), detail = character()
+    )
+  }
+  out
 }
 
 # Growing-season features, one row per site.
