@@ -36,13 +36,18 @@ write_result_csv <- function(dat, path) {
 # The results now carry `recipe_id` and `model`, so every collector sorts on
 # them too. `dplyr::any_of()` keeps the collectors valid for a result built
 # before those columns existed.
+# Under `tar_option_set(error = "null")` an errored fit or step 01 reaches the
+# collectors as NULL. Dropping those here is what lets one failed site leave a
+# gap in the tables instead of taking every table and both reports down.
+built <- function(...) Filter(Negate(is.null), list(...))
+
 collect_outcome <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "outcome")) |>
+  dplyr::bind_rows(lapply(built(...), `[[`, "outcome")) |>
     dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))
 }
 
 collect_outcome_siteyear <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "outcome_siteyear")) |>
+  dplyr::bind_rows(lapply(built(...), `[[`, "outcome_siteyear")) |>
     dplyr::relocate(dplyr::any_of(c("site_ID", "recipe_id", "model"))) |>
     dplyr::relocate(dplyr::any_of(setdiff(OUTCOME_SITEYEAR_COLS, "site_ID")),
                     .after = dplyr::any_of(c("site_ID", "recipe_id", "model"))) |>
@@ -50,7 +55,7 @@ collect_outcome_siteyear <- function(...) {
 }
 
 collect_settings <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "settings")) |>
+  dplyr::bind_rows(lapply(built(...), `[[`, "settings")) |>
     dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))
 }
 
@@ -70,19 +75,19 @@ original_only <- function(tbl, model = NULL, drop = c("recipe_id", "fit_profile"
 
 # Soil-temperature quality verdicts, one row per site.
 collect_ts_qc <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "ts_qc")) |>
+  dplyr::bind_rows(lapply(built(...), `[[`, "ts_qc")) |>
     dplyr::arrange(.data$site_ID)
 }
 
 # What stage A did to each site's soil temperature: one row per site.
 collect_ts_provenance <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "ts_provenance")) |>
+  dplyr::bind_rows(lapply(built(...), `[[`, "ts_provenance")) |>
     dplyr::arrange(.data$site_ID)
 }
 
 # The blocked-CV table behind each site's fill choice: one row per method.
 collect_fill_cv <- function(...) {
-  parts <- Filter(function(f) !is.null(f[["cv"]]), list(...))
+  parts <- Filter(function(f) !is.null(f[["cv"]]), built(...))
   if (!length(parts)) return(tibble::tibble(site_ID = character(), method = character()))
   dplyr::bind_rows(lapply(parts, `[[`, "cv")) |>
     dplyr::arrange(.data$site_ID, .data$rmse)
@@ -90,7 +95,7 @@ collect_fill_cv <- function(...) {
 
 # What each site's fill decided, including the sites where it could not.
 collect_fill_summary <- function(...) {
-  dplyr::bind_rows(lapply(list(...), function(f) {
+  dplyr::bind_rows(lapply(built(...), function(f) {
     tibble::tibble(
       site_ID = f[["site_ID"]],
       status = f[["status"]],
@@ -106,7 +111,7 @@ collect_fill_summary <- function(...) {
 }
 
 collect_window_skips <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "window_skips"))
+  dplyr::bind_rows(lapply(built(...), `[[`, "window_skips"))
 }
 
 # Growing-season features, one row per site.
@@ -117,7 +122,7 @@ collect_window_skips <- function(...) {
 # bounds for every other site. `load_growing_season_features()` checks only that
 # the file exists, not that it covers anything.
 collect_feature_gs <- function(...) {
-  dplyr::bind_rows(lapply(list(...), `[[`, "feature_gs")) |>
+  dplyr::bind_rows(lapply(built(...), `[[`, "feature_gs")) |>
     dplyr::arrange(.data$site_ID)
 }
 
@@ -132,7 +137,7 @@ collect_feature_gs <- function(...) {
 # outside this run are left alone -- they may be a deliberate wider run -- but
 # they are reported, because they will be picked up too.
 write_respiration_all <- function(...) {
-  parts <- list(...)
+  parts <- built(...)
   written <- character()
   sites <- character()
 

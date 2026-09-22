@@ -37,8 +37,14 @@ fqdn <- system2("hostname", stdout = TRUE)
 # ends up assembled from two different versions of the code. targets already
 # skips unchanged work; the way to make a run affordable is to run fewer sites,
 # which is what `pipeline_sites()` does.
+# `error = "null"`, not `"continue"`. Under `continue` an errored fit still
+# stops every target downstream of it -- the collectors, and so both reports --
+# with "could not load dependency"; one site's failure then costs the run its
+# tables. Under `null` the errored target's value is NULL, the collectors drop
+# it (`built()` in R/write-outputs.R), and the failure is a gap in the tables
+# plus a row in `tar_meta(fields = error)`, which is where a failure belongs.
 tar_option_set(
-  error = "continue",
+  error = "null",
   controller = if (grepl("ycrc.yale.edu", fqdn, fixed = TRUE)) slurm else local
 )
 
