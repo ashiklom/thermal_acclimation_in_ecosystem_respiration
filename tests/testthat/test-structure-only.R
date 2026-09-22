@@ -163,3 +163,12 @@ test_that("across_year_tas returns NA and a status, not an error, with one windo
   none$lnRatio <- NA_real_
   expect_match(across_year_tas(none)$status, "0 window")
 })
+
+test_that("across_year_tas reports a singular gls as a status, not an error", {
+  # Two windows but one fitted year each: rank-deficient, as US-PFa was when
+  # qualified on its sparse raw sensor.
+  thin <- fake_windows(c("120_134", "134_148"), years = 2010)
+  out <- across_year_tas(thin)
+  expect_true(is.na(out$TAS))
+  expect_match(out$status, "gls_failed")
+})

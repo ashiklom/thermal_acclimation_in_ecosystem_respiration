@@ -552,12 +552,23 @@ across_year_tas <- function(window_results_df) {
       status = sprintf("too_few_windows: %d window(s) with a fitted ratio, need 2", n_windows)
     ))
   }
-  mod_ar1 <- nlme::gls(
-    lnRatio ~ TS + window,
-    data = window_results_df,
-    correlation = nlme::corAR1(form = ~ growing_year | window),
-    na.action = na.omit
+  # Two windows is necessary, not sufficient: with very few fitted years per
+  # window the design is rank-deficient and `gls()` reports "computed 'gls'
+  # fit is singular" (US-PFa, qualified on its sparse raw sensor). Also a
+  # result -- this site did not earn an estimate under this recipe.
+  mod_ar1 <- tryCatch(
+    nlme::gls(
+      lnRatio ~ TS + window,
+      data = window_results_df,
+      correlation = nlme::corAR1(form = ~ growing_year | window),
+      na.action = na.omit
+    ),
+    error = function(e) e
   )
+  if (inherits(mod_ar1, "error")) {
+    return(list(TAS = NA_real_, TASp = NA_real_,
+                status = paste0("gls_failed: ", conditionMessage(mod_ar1))))
+  }
   smry <- summary(mod_ar1)[["tTable"]]
   list(TAS = smry["TS", "Value"], TASp = smry["TS", "p-value"], status = "fitted")
 }
