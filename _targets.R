@@ -35,15 +35,63 @@ local <- crew_controller_local(workers = 8)
 # the one R session, which lives on a single node, so those workers were
 # sampling four chains on the one or two CPUs they held there. `--ntasks=1
 # --cpus-per-task=4` is what the comment above always meant.
+#
+# Worker logs are not optional. The 2026-09-22 run lost 87 of its 96 workers
+# in the first four seconds and the pipeline then sat for 22 hours having
+# completed nothing, because crew only rescales on a task completion and there
+# were none. The cause had to be reconstructed from `sacct` placement data,
+# since crew.cluster defaults `log_output` and `log_error` to /dev/null and
+# every abort message had gone there. An absolute path, because the worker's
+# working directory is inherited from wherever `sbatch` ran, not set here.
+crew_log_dir <- file.path(getwd(), "_logs")
+dir.create(crew_log_dir, showWarnings = FALSE, recursive = TRUE)
 slurm <- crew_controller_slurm(
   workers = as.integer(Sys.getenv("THERMAL_SLURM_WORKERS", "20")),
   # Hand idle workers back instead of holding them through the tail of the run,
   # when there are fewer tasks left than workers. crew relaunches on demand.
   seconds_idle = 600,
+  # Plain TCP between controller and workers, not crew's default self-signed
+  # TLS. This is from an earlier encounter on this cluster, not from the
+  # 2026-09-22 failure: TLS was implicated in Slurm workers being terminated
+  # far sooner than they should have been, somewhere low in crew's
+  # dependencies (the nanonext/mbedtls layer) and not pinned down beyond
+  # "turning it off made it stop". Recorded here so the next person does not
+  # re-enable it casually -- if it goes back on, watch for workers dying
+  # early rather than for anything that looks like a certificate problem.
+  #
+  # The cost is that task payloads cross the cluster interconnect in the
+  # clear. That is flux tower data on an internal HPC network, so the trade is
+  # an easy one, but it is a trade.
+  tls = crew::crew_tls(mode = "none"),
   options_cluster = crew_options_slurm(
     time_minutes = as.integer(Sys.getenv("THERMAL_SLURM_MINUTES", "1425")),
     n_tasks = 1,
     cpus_per_task = N_CORES,
+    # `%A_%a` -- crew.cluster submits each batch of workers as one job array,
+    # so the array ID plus the task ID is what identifies a worker.
+    log_output = file.path(crew_log_dir, "crew-%A_%a.out"),
+    log_error = file.path(crew_log_dir, "crew-%A_%a.err"),
+    # Ask for memory rather than taking the partition default. Under the
+    # default the workers of the first full run got 20 GB and the biggest of
+    # them peaked at 20971 MB -- flat against the ceiling -- so several were
+    # OUT_OF_MEMORY-killed mid-fit. 32 GB is the observed peak plus room for
+    # the sites that never got far enough to report one.
+    memory_gigabytes_required = 32,
+    # The instant-abort fix. This R links pthreads OpenBLAS
+    # (`libopenblasp-r0.3.33.so`), which sizes its thread pool from the
+    # machine's core count and ignores the cgroup: a worker holding 4 CPUs on
+    # a 96-core node still tried to start ~96 BLAS threads. That is survivable
+    # alone and fatal in a crowd -- on 2026-09-22 every one of the 24 workers
+    # that landed on a1130u31n04 and all 16 on a1132u35n03 aborted (exit 134)
+    # about a second in at ~120 MB RSS, which is R and BLAS loaded and nothing
+    # else, while nodes that drew one or two workers kept them. Stan does the
+    # actual arithmetic here and `backend = "cmdstanr"` runs each chain as its
+    # own single-threaded process, so capping BLAS threads costs the fits
+    # nothing.
+    script_lines = c(
+      "export OPENBLAS_NUM_THREADS=1",
+      "export OMP_NUM_THREADS=1"
+    ),
     verbose = TRUE
   )
 )
