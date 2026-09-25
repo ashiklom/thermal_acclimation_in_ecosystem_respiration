@@ -24,15 +24,15 @@ write_result_csv <- function(dat, path) {
 
 # Site-level TAS, one row per site -- the counterpart to outcome_temp.csv.
 #
-# Sorted by site_ID, and that is load-bearing rather than tidiness.
-# `02_02_compare_different_TAS.R:15-18` grafts the direct model's TAS onto the
-# total model's table *by position*:
-#
-#     outcome$TAS <- outcome_temp_water_gpp$TAS
-#
-# There is no join. If the two files disagree on row order every site silently
-# receives another site's number, and nothing downstream can detect it. Sorting
-# both on the same key is what makes that safe.
+# Sorted by site_ID, which is now tidiness rather than a load-bearing
+# invariant. It used to be the latter: `02_02_compare_different_TAS.R` grafted
+# the direct model's TAS onto the total model's table by position, with no
+# join, so equal row order was the only thing standing between it and giving
+# every site another site's number. Sorting alone could not save it once the
+# two tables differed in *length* -- IT-Noe fitted under `total` and not under
+# `direct` on the 2026-09-24 run, which silently shifted 62 of 113 sites. That
+# script now joins on site_ID, so a row-order change is no longer a
+# correctness problem for it.
 # The results now carry `recipe_id` and `model`, so every collector sorts on
 # them too. `dplyr::any_of()` keeps the collectors valid for a result built
 # before those columns existed.

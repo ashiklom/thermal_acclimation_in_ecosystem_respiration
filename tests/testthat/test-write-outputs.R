@@ -23,20 +23,30 @@ test_that("outcome tables match the manuscript's columns, in order", {
   }
 })
 
-test_that("the two outcome tables share row order", {
-  # `02_02` grafts the direct model's TAS onto the total model's table by
-  # position, so the two files must agree on row order. A run scoped to one
-  # model (THERMAL_MODELS=total) writes the other file as a header only, and
-  # there is then no order to compare; skip rather than compare a character
-  # column with an empty logical one.
+test_that("each outcome table is sorted and carries each site once", {
+  # This used to assert the two files were row-for-row identical, because
+  # `02_02` grafted the direct model's TAS onto the total model's table by
+  # position. It now joins on site_ID, so the two legitimately differ: a site
+  # can fit under one model and fail under the other, as IT-Noe did on the
+  # 2026-09-24 run when its ERA5 fallback was unusable.
+  #
+  # What still has to hold is per-file: sorted, and one row per site. A
+  # duplicate site would silently multiply rows through any join downstream,
+  # and the sort is the column contract the `workflows/` scripts read against.
+  #
+  # A run scoped to one model (THERMAL_MODELS=total) writes the other file as
+  # a header only, which reads as zero rows of logical columns; skip rather
+  # than compare those.
   ft <- file.path("data-proc", "analysis", "outcome_temp.csv")
   fd <- file.path("data-proc", "analysis", "outcome_temp_water_gpp.csv")
   skip_if_not(file.exists(ft) && file.exists(fd), "not written yet")
   tot <- read.csv(ft)
   dir <- read.csv(fd)
   skip_if(nrow(tot) == 0 || nrow(dir) == 0, "one model was not in this run")
-  expect_identical(tot$site_ID, dir$site_ID)
   expect_identical(tot$site_ID, sort(tot$site_ID))
+  expect_identical(dir$site_ID, sort(dir$site_ID))
+  expect_identical(anyDuplicated(tot$site_ID), 0L)
+  expect_identical(anyDuplicated(dir$site_ID), 0L)
 })
 
 test_that("growing_season_features covers every site in the run", {
@@ -60,7 +70,7 @@ test_that("growing_season_features covers every site in the run", {
   expect_false(any(is.na(feats$gStart) | is.na(feats$gEnd)))
 })
 
-test_that("collect_outcome sorts by site so the positional graft is safe", {
+test_that("collect_outcome sorts by site, which is the writers' column contract", {
   mk <- function(s) list(outcome = tibble::tibble(site_ID = s, TAS = seq_along(s)))
   got <- collect_outcome(mk("NL-Loo"), mk("DE-Akm"), mk("FI-Sod"))
   expect_identical(got$site_ID, c("DE-Akm", "FI-Sod", "NL-Loo"))

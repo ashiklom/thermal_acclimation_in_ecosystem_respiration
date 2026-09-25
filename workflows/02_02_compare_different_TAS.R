@@ -12,10 +12,34 @@ outcome_temp <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp.csv'))
 
 outcome_temp_water_gpp <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp_water_gpp.csv'))
 
-outcome <- data.frame(site_ID = outcome_temp$site_ID, TAS_tot = outcome_temp$TAS, TAS_totp = outcome_temp$TASp)
+# Joined on site_ID, not grafted by row position. These two tables are written
+# by separate targets, and a site that fits under one model can fail under the
+# other: on the 2026-09-24 run IT-Noe lost every `direct` fit to a missing ERA5
+# fallback, so outcome_temp.csv had 114 rows against the other's 113. Under the
+# old positional assignment that shifted the direct TAS of all 63 sites sorted
+# below IT-Noe onto the wrong site, silently and without changing a row count
+# anyone was looking at.
+#
+# An inner join, because every quantity below is a within-site contrast between
+# the two models -- `TAS_app` most of all -- so a site carrying only one of them
+# has nothing to contribute and would only propagate NA into the t-tests.
+total_tas <- outcome_temp %>%
+  dplyr::select(site_ID, TAS_tot = TAS, TAS_totp = TASp)
+direct_tas <- outcome_temp_water_gpp %>%
+  dplyr::select(site_ID, TAS, TASp)
 
-outcome$TAS <- outcome_temp_water_gpp$TAS
-outcome$TASp <- outcome_temp_water_gpp$TASp
+outcome <- dplyr::inner_join(total_tas, direct_tas, by = "site_ID")
+
+# Loud, because a shrinking denominator changes every t-test below and the
+# manuscript's numbers are all on 117 sites.
+dropped <- setdiff(union(total_tas$site_ID, direct_tas$site_ID), outcome$site_ID)
+if (length(dropped)) {
+  warning(
+    length(dropped), " site(s) fitted under only one model and are excluded: ",
+    paste(dropped, collapse = ", "), ". n = ", nrow(outcome), " sites.",
+    call. = FALSE
+  )
+}
 
 # outcome$TAS_water <- outcome_temp_gpp$TAS - outcome$TAS
 # outcome$TAS_gpp <- outcome_temp_water$TAS - outcome$TAS

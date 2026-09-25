@@ -379,7 +379,7 @@ if (is.null(future_er)) {
   `r TAS_NOISE`; the random-forest soil-temperature branch is non-deterministic
   run to run.
 - **Missing MODIS.** The spectral predictors have no downloader in this repo.
-- **`02_02` grafts by position.** It assigns the direct model's TAS onto the total
-  model's table by row position rather than by `site_ID`. The writers sort both
-  tables on `site_ID` so that this is safe; do not change that without changing
-  `02_02`.
+- **Sites missing from one model.** A site can fit under `total` and fail under
+  `direct`, or the reverse, so the two outcome tables need not hold the same
+  sites. `02_02` joins on `site_ID` and excludes those sites with a warning,
+  rather than grafting by row position as it did before 2026-09-25.
