@@ -55,8 +55,12 @@ test_that("type guessing gets the all-sentinel column wrong", {
 })
 
 test_that("the ERA5 contract turns a non-numeric SWC column into an error", {
-  # col_double() makes the bad value NA rather than silently typing the column
-  # character, and the unit guard then refuses it by name.
+  # col_double() makes every bad value NA rather than silently typing the
+  # column character. A column that is *entirely* unparseable is then
+  # indistinguishable from one the provider returned empty, so the all-NA
+  # guard is what refuses it -- the unit guard never sees a number. The unit
+  # guard has its own fixture, with real out-of-range values, in
+  # test-era5-swc.R.
   path <- withr::local_tempfile(fileext = ".csv")
   writeLines(
     c("time,site,SWC", "1990-01-01,X-Tst,0.25 m3/m3", "1990-01-02,X-Tst,0.31 m3/m3"),
@@ -64,7 +68,7 @@ test_that("the ERA5 contract turns a non-numeric SWC column into an error", {
   )
   expect_error(
     suppressWarnings(read_era5_swc("X-Tst", path)),
-    "not a volumetric fraction"
+    "all values are NA"
   )
 })
 

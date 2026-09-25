@@ -168,8 +168,17 @@ if (is.null(orig_run) || !nrow(orig_run)) {
   if (!nrow(cmp)) {
     skip_note("Oracle comparison", "No site in this run appears in the manuscript's outcome tables.")
   } else {
+    # `agrees` is NA wherever this run produced no TAS -- a pair whose fit hit
+    # `gls_failed` or `too_few_windows`, which `tas_status` in the settings
+    # table names. Those are neither agreement nor disagreement, so they are
+    # counted separately rather than dropped: without `na.rm` a single one of
+    # them made this whole line read "NA of 227".
+    n_na <- sum(is.na(cmp$agrees))
     cat(sprintf("%d of %d site-model pairs agree with the manuscript to within the sampler noise floor (%.0e).\n\n",
-                sum(cmp$agrees == "yes"), nrow(cmp), TAS_NOISE))
+                sum(cmp$agrees == "yes", na.rm = TRUE), nrow(cmp), TAS_NOISE))
+    if (n_na) {
+      cat(sprintf("%d pair(s) produced no TAS in this run and are neither; see `tas_status`.\n\n", n_na))
+    }
     if (fast_run) cat("Under the `fast` profile disagreement is expected and says nothing.\n\n")
     print(knitr::kable(cmp, digits = 5))
   }

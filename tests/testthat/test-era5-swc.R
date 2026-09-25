@@ -28,6 +28,23 @@ test_that("an unknown site is an error, not a silent empty join", {
   expect_error(read_era5_swc("NO-Such", era5_path), "No ERA5 soil water data")
 })
 
+test_that("a site whose rows are all NA is named as such, not as a unit problem", {
+  # ERA5-Land is masked to land and `scripts/download-era5-swc.py` takes the
+  # nearest cell without consulting that mask, so a coastal site draws a sea
+  # cell and gets a full date range of NaN. This has to read differently from
+  # an absent site: re-downloading fixes the one and not the other. Before the
+  # check existed it surfaced as `max(NA, na.rm = TRUE)` being -Inf and was
+  # reported as "not a volumetric fraction", which sends the reader to the
+  # units of a file that has no numbers in it at all.
+  tmp <- withr::local_tempfile(fileext = ".csv")
+  write.csv(
+    data.frame(time = c("1990-01-01", "1990-01-02"), site = "X-Tst", SWC = NA_real_),
+    tmp, row.names = FALSE
+  )
+  expect_error(read_era5_swc("X-Tst", tmp), "all values are NA")
+  expect_error(read_era5_swc("X-Tst", tmp), "land mask")
+})
+
 test_that("the converted US-Kon series matches the manuscript's own ERA5 file", {
   manuscript <- file.path(
     "..", "original", "Demo_code_data_for_1site", "ERA5_daily_swc_1990_2024_1site.csv"

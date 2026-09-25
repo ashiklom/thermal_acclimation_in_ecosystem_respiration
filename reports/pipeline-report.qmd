@@ -83,6 +83,13 @@ orig_feat <- if (have(file.path(ORIG, "growing_season_feature_AmeriFlux.csv"))) 
 } else NULL
 
 sites <- if (!is.null(outcome_total)) outcome_total$site_ID else character()
+
+# Every site the pipeline could have run, i.e. every row of the declaration
+# file, against the ones that came through with an outcome. The gap is sites
+# whose download, step 01 or fits errored; `tar_meta(fields = error)` says
+# which. Reported as a count rather than as a callout about the default
+# six-site sample, which was static text and so fired on full runs too.
+sites_declared <- nrow(read.csv(file.path("data-core", "site_info.csv")))
 ```
 
 ## Run metadata
@@ -106,15 +113,10 @@ tibble::tibble(
 )
 ```
 
-::: {.callout-important}
-## This is a subset run
-
-The pipeline runs a **six-site development sample** by default, chosen to be cheap
-and to cover every code branch — not to be representative of the 117-site
-analysis. Almost nothing below is comparable to the manuscript on its own terms:
-site-level numbers are, aggregate and cross-site statistics are not. Set
-`THERMAL_SITES=all` for the full list.
-:::
+`r length(sites)` of the `r sites_declared` sites declared in
+`data-core/site_info.csv` produced an outcome in this run. Anything below that
+pools across sites is computed on those `r length(sites)`, and the manuscript's
+published numbers are computed on all 117.
 
 ## External inputs
 
