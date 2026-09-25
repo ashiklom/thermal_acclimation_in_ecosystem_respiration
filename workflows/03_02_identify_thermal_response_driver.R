@@ -64,7 +64,13 @@ summary(lm(data=acclimation, TAS ~ IGBP_new))          # p-value: 0.0425
 
 
 #------------------------correlation among predictor variables------------------
-data.cor <- acclimation[, c(4, 7:20, 22)]
+# By name, not `acclimation[, c(4, 7:20, 22)]`. Those indices were relative to
+# whatever column order `03_01` happened to write, and the two `mutate()` calls
+# above append to this frame, so the slice was one reordering away from
+# correlating the wrong variables under the right labels.
+data.cor <- acclimation[, c('ELEV', 'MAP', 'NEE', 'NEE_day', 'NEE_night', 'MATA',
+                            'SSTA', 'IATA', 'DRTA', 'warm_rate', 'warm_ratep',
+                            'EVI', 'NDVI', 'LAI', 'GPP', 'TAS_tot')]
 cor(data.cor)
 
 #---------------contribution of direct and apparent thermal responses to TAS_tot----------
@@ -161,7 +167,10 @@ matrix.boot <- matrix(0, nrow=255, ncol=200)
 for (i in 1:200) {
   print(i)
   data_sample <- analysis(strat_bootstrap$splits[[i]])
-  data_sample <- data_sample[, 1:6]
+  # `climate_vegetation` is the bootstrap stratifier, not a predictor, and the
+  # `randomForest(TAS ~ .)` below would take it as one. Dropped by name rather
+  # than by `[, 1:6]`, which only worked while it happened to sit last.
+  data_sample <- data_sample[, setdiff(names(data_sample), "climate_vegetation")]
   rf <- randomForest(formula = TAS ~ ., data=data_sample, do.trace=FALSE, mtry=1, nodesize=30, ntree=500, importance=TRUE)   # I have to add importance=TRUE here, to get type 1 RI values!
   # partial plot values
   tmp1 <- partialPlot(rf, pred.data=data, x.var="ELEV", plot=FALSE)
@@ -282,7 +291,10 @@ matrix.boot <- matrix(0, nrow=255, ncol=200)
 for (i in 1:200) {
   print(i)
   data_sample <- analysis(strat_bootstrap$splits[[i]])
-  data_sample <- data_sample[, 1:6]
+  # `climate_vegetation` is the bootstrap stratifier, not a predictor, and the
+  # `randomForest(TAS ~ .)` below would take it as one. Dropped by name rather
+  # than by `[, 1:6]`, which only worked while it happened to sit last.
+  data_sample <- data_sample[, setdiff(names(data_sample), "climate_vegetation")]
   rf <- randomForest(formula = TAS_tot ~ ., data=data_sample, do.trace=FALSE, mtry=1, nodesize=30, ntree=500, importance=TRUE)   # I have to add importance=TRUE here, to get type 1 RI values!
   # partial plot values
   tmp1 <- partialPlot(rf, pred.data=data, x.var="ELEV", plot=FALSE)
@@ -367,7 +379,10 @@ matrix.boot <- matrix(0, nrow=255, ncol=200)
 for (i in 1:200) {
   print(i)
   data_sample <- analysis(strat_bootstrap$splits[[i]])
-  data_sample <- data_sample[, 1:6]
+  # `climate_vegetation` is the bootstrap stratifier, not a predictor, and the
+  # `randomForest(TAS ~ .)` below would take it as one. Dropped by name rather
+  # than by `[, 1:6]`, which only worked while it happened to sit last.
+  data_sample <- data_sample[, setdiff(names(data_sample), "climate_vegetation")]
   rf <- randomForest(formula = TAS_app ~ ., data=data_sample, do.trace=FALSE, mtry=1, nodesize=30, ntree=500, importance=TRUE)   # I have to add importance=TRUE here, to get type 1 RI values!
   # partial plot values
   tmp1 <- partialPlot(rf, pred.data=data, x.var="ELEV", plot=FALSE)

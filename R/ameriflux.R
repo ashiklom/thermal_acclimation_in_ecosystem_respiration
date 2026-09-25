@@ -181,9 +181,22 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
+    # By name, not `c(2, 4)`: a column added upstream in REddyProc would
+    # silently change which two came through, and `seasonYear` has to be one
+    # of them for the join below to key on anything at all.
+    #
+    # `many-to-one` because `ac$uStarTh <- ac_u$uStar` after this branch reads
+    # `ac_u` positionally against `ac`. That is only sound while the join
+    # leaves the row count alone, which needs one threshold per year. If
+    # REddyProc ever returns several -- bootstrap replicates, u-star scenarios
+    # -- this says so by name instead of failing as a length mismatch three
+    # lines later.
     ac_u <- ac_u |>
       dplyr::mutate(seasonYear = lubridate::year(.data$DateTime)) |>
-      dplyr::left_join(uStarTh[uStarTh$aggregationMode == "year", c(2, 4)], by = "seasonYear")
+      dplyr::left_join(
+        uStarTh[uStarTh$aggregationMode == "year", c("seasonYear", "uStar")],
+        by = "seasonYear", relationship = "many-to-one"
+      )
   } else {
     ac_u$season <- REddyProc::usCreateSeasonFactorYdayYear(
       ac_u$DateTime - 15*60,  # it sets back 15 min.
@@ -200,10 +213,13 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
-    # TODO: Use column names, not column indices
     ac_u <- ac_u |>
-      dplyr::left_join(uStarTh[, c("season", "uStar")], by = "season")
+      dplyr::left_join(uStarTh[, c("season", "uStar")], by = "season",
+                       relationship = "many-to-one")
   }
+  # Positional, and safe only because `ac_u` descends from `ac` row-for-row
+  # (`mutate(.keep = "none")` above) and both joins are guarded many-to-one,
+  # so neither can have changed the row count or the order.
   ac$uStarTh <- ac_u$uStar
 
   # `dt` and `gs` are results of this function, not properties of the table, so

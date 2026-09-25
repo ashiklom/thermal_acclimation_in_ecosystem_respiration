@@ -67,11 +67,18 @@ for (ssp in ssps) {
   #----------------extract temperature change at our study sites----------------
   icell <- adjacent(Tmin_change2010_2050, cellFromXY(Tmin_change2010_2050, xy), include=TRUE)
   tmp <- terra::extract(Tmin_change2010_2050, c(icell))
+  # One layer per month, so `tmp` must have exactly 12 columns. Asserted rather
+  # than assumed: this used to loop over `1:ncol(tmp)` and then stamp the names
+  # Tmin1..Tmin12 onto columns 2:13 afterwards, so anything that changed the
+  # width -- a `terra::extract()` that returns an ID column, say -- would have
+  # shifted every month by one and left a 14th column unnamed, silently.
+  stopifnot(ncol(tmp) == 12)
+  # Rows align with `site_info` by construction: `xy` is built from it at the
+  # top of this script, and `tapply` groups in ascending numeric order.
   Tmin_month <- data.frame(site_ID=site_info$site_ID)
-  for (i in 1:ncol(tmp)) {
-    Tmin_month[,i+1] <- as.vector(tapply(tmp[,i], rep(1:nrow(xy), times=5), mean, na.rm=T))
+  for (i in 1:12) {
+    Tmin_month[[paste0('Tmin', i)]] <- as.vector(tapply(tmp[,i], rep(1:nrow(xy), times=5), mean, na.rm=T))
   }
-  colnames(Tmin_month)[2:13] <- paste0('Tmin', 1:12)
   dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
   write.csv(Tmin_month, file=file.path('data-proc', 'analysis', paste0('Tmin_month_', ssp, '_wc.csv')), row.names=FALSE)
   #

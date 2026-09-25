@@ -96,7 +96,13 @@ for (i in 1:length(files)) {
       night_pattern$TSp[is.na(night_pattern$TSp)] <- TSp_pred[is.na(night_pattern$TSp)]
     }
     #
-    temp_change   <- data.frame(MONTH=1:12, TAmnc=as.numeric(acclimation[iacclimation, which(colnames(acclimation) %in% (paste0('Tmin', 1:12)))]))
+    # Indexed by name in month order, not by `which(colnames %in% ...)`, which
+    # returns columns in *table* order. That happened to match `MONTH = 1:12`
+    # only because 04_01 writes Tmin1..Tmin12 ascending; a writer that emitted
+    # them alphabetically (Tmin1, Tmin10, Tmin11, Tmin12, Tmin2, ...) would
+    # have mis-assigned 9 of the 12 months, and the result would still look
+    # like a plausible seasonal cycle.
+    temp_change   <- data.frame(MONTH=1:12, TAmnc=as.numeric(acclimation[iacclimation, paste0('Tmin', 1:12)]))
     #
     night_pattern <- night_pattern %>% left_join(temp_change, by="MONTH")
     #

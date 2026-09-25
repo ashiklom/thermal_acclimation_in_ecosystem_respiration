@@ -323,7 +323,14 @@ data.TAS_tot <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp.csv'))
 data.TAS_tot <- data.TAS_tot %>% rename("TAS_tot" = "TAS", "TAS_totp" = "TASp")
 data.TAS <- read.csv(file.path('data-proc', 'analysis', 'outcome_temp_water_gpp.csv'))
 
-acclimation <- site_info[, 1:7] %>% left_join(stat.climate[, c(1:8, 18:19)], by = "site_ID") %>% 
+# Columns by name, not by index. These two slices used to be `site_info[, 1:7]`
+# and `stat.climate[, c(1:8, 18:19)]`, so inserting a column into site_info.csv
+# or into the `stat.climate` frame declared above silently changed what the
+# driver analysis was handed -- and `03_02` then slices *this* table by index
+# in turn.
+acclimation <- site_info[, c('site_ID', 'LAT', 'LONG', 'ELEV', 'IGBP', 'Climate_class', 'MAP')] %>%
+  left_join(stat.climate[, c('site_ID', 'NEE', 'NEE_day', 'NEE_night', 'MATA',
+                             'SSTA', 'IATA', 'DRTA', 'warm_rate', 'warm_ratep')], by = "site_ID") %>%
   left_join(data.spectral[, c("ID", "EVI", "NDVI", "LAI", "GPP")], by=c("site_ID" = "ID")) %>% 
   left_join(stat.soil[, c('site_ID', 'SOC')], by = "site_ID") %>% 
   left_join(data.TAS_tot[, c('site_ID', 'TAS_tot', 'TAS_totp')], by = "site_ID") %>% 
