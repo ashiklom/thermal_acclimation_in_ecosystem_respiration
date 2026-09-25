@@ -51,6 +51,24 @@ read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_sw
     )
   }
 
+  # Rows present but every value empty. ERA5-Land is masked to land, and the
+  # extractor in `scripts/download-era5-swc.py` takes the nearest grid cell
+  # without regard to that mask, so a site close enough to the coast draws a
+  # sea cell and gets a full date range of NaN. IT-Noe (Sardinia, 40.61N
+  # 8.15E) is the one site of 117 where this happens today.
+  #
+  # Checked before the unit guard below, which would otherwise catch this
+  # case via `max(NA, na.rm = TRUE)` being -Inf and report it as a units
+  # problem -- which sends the reader somewhere unhelpful.
+  if (all(is.na(swc$SWC))) {
+    stop(
+      "ERA5 data found but all values are NA for site ", name_site, " in ", path,
+      " (", nrow(swc), " rows, ", min(swc$time), " to ", max(swc$time), "). ",
+      "The nearest ERA5-Land cell is most likely outside the land mask; ",
+      "re-downloading will not change this."
+    )
+  }
+
   # Guard against silently ingesting data that has already been rescaled, or
   # that is in some other unit entirely. ERA5 volumetric soil water is
   # physically bounded well below 1.

@@ -36,9 +36,11 @@ resolve_swc_column <- function(dat, swc_col, name_site) {
   if (identical(swc_col, "SWC_era5") && all(is.na(dat[[swc_col]]))) {
     stop(
       name_site, " has no measured soil water, so the direct model needs the ",
-      "ERA5-Land fallback, but no ERA5 soil water was found for it in ",
-      file.path("data-raw", "ERA5_daily_swc.csv"),
-      ". Run `pixi run download_era5` for this site."
+      "ERA5-Land fallback, but its ERA5 soil water is entirely NA. ",
+      "`prep_nee_ac()` says which case this is when it builds the site: either ",
+      "no rows for the site in ", file.path("data-raw", "ERA5_daily_swc.csv"),
+      ", which `pixi run download_era5` fixes, or rows whose values are all NA, ",
+      "which it does not -- see `read_era5_swc()`."
     )
   }
   dat[["SWC"]] <- dat[[swc_col]]
