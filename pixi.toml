@@ -51,6 +51,11 @@ download-icos = {
   cmd = ["uv", "run", "scripts/download-icos.py"]
 }
 
+download-appeears = {
+  description = "Submit/poll/download the AppEEARS MODIS point extraction (NDVI/EVI/LAI/Fpar/GPP)",
+  cmd = ["uv", "run", "scripts/download-appeears.py"]
+}
+
 audit-coverage = {
   description = "Report per-site record coverage against the manuscript's year counts",
   cmd = ["Rscript", "scripts/audit-icos-coverage.R"]

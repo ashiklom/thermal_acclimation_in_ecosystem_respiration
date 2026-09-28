@@ -110,8 +110,10 @@ at least the original's year count.
 
 ### Non-flux inputs
 
-Four datasets outside the flux archives feed the downstream analysis. Three now
-have downloaders and targets; one does not, and that is deliberate.
+Four datasets outside the flux archives feed the downstream analysis. Three
+have downloaders and `targets` targets; the fourth has a downloader script but
+no target, because it's an asynchronous submit/poll/download cycle rather than
+a single blocking fetch (see below).
 
 | input | target | source |
 |---|---|---|
@@ -133,7 +135,7 @@ accepts either, but its comment specifies 2000-2020, and substituting the
 climatology would shift every projected temperature change by the warming
 between the two baselines without any error being raised.
 
-### MODIS, and why it is not downloaded
+### MODIS, and why it has no `targets` target
 
 `03_01` uses NDVI, EVI, LAI, Fpar and GPP from three AppEEARS point extractions:
 
@@ -143,17 +145,29 @@ data-raw/towers-MOD15A2H-061-results.csv    Fpar, LAI
 data-raw/towers-MYD17A2HGF-061-results.csv  GPP
 ```
 
-AppEEARS is not a file server. It needs an Earthdata Login and an asynchronous
-submit/poll/download cycle, and a request has to name the products, layers, the
-117 site coordinates and a date range. Rather than half-implement that, `03_01`
+AppEEARS is not a file server: fetching these means an asynchronous
+submit/poll/download cycle rather than a single blocking request, which is why
+it isn't wired into `targets` like the other three inputs above. `03_01`
 emits `NA` for those five predictors when the tables are absent and says so.
 
 The knock-on is worth stating plainly: `03_02` calls `randomForest()` with the
 default `na.action = na.fail` and `LAI` is one of its five predictors, so the
-driver analysis cannot run until these are supplied. To fill the gap by hand,
-submit an AppEEARS *point* sample for the coordinates in `data-core/site_info.csv`
-over the study period for the three products above, request CSV output, and drop
-the results into `data-raw/` under the names shown.
+driver analysis cannot run until these are supplied.
+
+```bash
+pixi run download-appeears
+```
+
+runs `scripts/download-appeears.py`, which submits a *point* task for the
+coordinates in `data-core/site_info.csv` over the study period for the three
+products above, polls until it finishes, and downloads the results into
+`data-raw/` under the names shown. AppEEARS's own login endpoint
+(`/api/login`, username/password) is currently broken, so the script
+authenticates with the `appeears_token` bearer token already present in
+`_creds.toml` instead of trying to obtain one itself. That token is short-lived
+and has to be refreshed by hand from a logged-in AppEEARS browser session
+(Developer tools -> Application -> Session storage -> session -> token) if the
+script reports an authentication failure.
 
 ---
 

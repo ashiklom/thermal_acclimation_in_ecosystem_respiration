@@ -306,9 +306,11 @@ outputs <- list(
 # in the graph -- the cost is re-hashing ~4.8 GB of raster on each run, which is
 # a few seconds and buys proper invalidation if a file is replaced.
 #
-# MODIS/AppEEARS is deliberately absent: it needs an Earthdata login and an
-# asynchronous task, and `03_01` degrades to NA spectral predictors without it.
-# See docs/data-provenance.md.
+# MODIS/AppEEARS is deliberately absent from this list: it's an asynchronous
+# submit/poll/download task rather than a single blocking fetch, so it doesn't
+# fit the `tar_file()` pattern here. Run `pixi run download-appeears` by hand
+# instead; `03_01` degrades to NA spectral predictors without it. See
+# docs/data-provenance.md.
 external <- list(
   tar_file(ameriflux_bif_file, download_ameriflux_bif()),
   tar_file(gsoc_file, download_gsoc()),
