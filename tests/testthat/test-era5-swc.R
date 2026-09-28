@@ -110,3 +110,13 @@ test_that("latest_record_end tolerates errored sites", {
   expect_equal(latest_record_end(as.Date("2020-01-01"), NULL, as.Date("2021-06-30")), as.Date("2021-06-30"))
   expect_true(is.na(latest_record_end(NULL, NULL)))
 })
+
+test_that("a site's record ends at its last measured NEE, not its padding", {
+  prep <- list(ac = tibble::tibble(
+    YEAR = 2026, MONTH = c(8, 8, 12), DAY = c(21, 22, 31), NEE = c(1, 2, NA)
+  ))
+  expect_equal(site_record_end(prep), as.Date("2026-08-22"))
+  prep$ac$NEE <- NA
+  expect_true(is.na(site_record_end(prep)))
+  expect_equal(latest_record_end(as.Date(NA), as.Date("2020-01-01")), as.Date("2020-01-01"))
+})

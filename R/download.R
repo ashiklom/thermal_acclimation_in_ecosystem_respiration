@@ -375,12 +375,16 @@ ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path =
 # (`error = "null"`), and if every site errored there is no date to extend to.
 latest_record_end <- function(...) {
   ends <- do.call(c, list(...))
-  if (!length(ends)) return(as.Date(NA))
-  max(ends)
+  if (!length(ends) || all(is.na(ends))) return(as.Date(NA))
+  max(ends, na.rm = TRUE)
 }
 
-# Last day of a site's step-01 record, for `ensure_era5_coverage()`.
+# Last day of a site's step-01 record with measured NEE, for
+# `ensure_era5_coverage()`. Not simply the last row: step 01 pads the record
+# out to whole years, so that is always a 31 December, usually in the future.
 site_record_end <- function(prep) {
   ac <- prep[["ac"]]
+  ac <- ac[!is.na(ac$NEE), ]
+  if (!nrow(ac)) return(as.Date(NA))
   max(as.Date(ISOdate(ac$YEAR, ac$MONTH, ac$DAY)))
 }
