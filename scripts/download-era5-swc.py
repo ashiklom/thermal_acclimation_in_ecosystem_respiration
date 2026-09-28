@@ -13,23 +13,35 @@
 # ]
 # ///
 
-# uv run --with-requirements workflows/97-download-era5-swc.py --with ipython -- ipython
+# uv run --with-requirements scripts/download-era5-swc.py --with ipython -- ipython
+
+import os
 
 import pandas as pd
 import tomllib
 import xarray as xr
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
+
+if "SLURM_CPUS_PER_TASK" in os.environ:
+    cluster = LocalCluster(n_workers=int(os.environ["SLURM_CPUS_PER_TASK"]))
+    dclient = Client(cluster)
+else:
+    dclient = Client()
 
 with open("_creds.toml", "r") as f:
     creds = tomllib.loads(f.read())
 
 CDS_API_KEY = creds["cds_api_key"]
-dclient = Client()
 
 site_info = pd.read_csv("data-core/site_info.csv")
 site_lat = xr.DataArray(site_info["LAT"], dims="site")
 site_lon = xr.DataArray(site_info["LONG"], dims="site")
 site_dim = xr.DataArray(site_info["site_ID"], dims="site")
+
+# Special case -- too close to shore; need to find the closest non-water pixel.
+it_noe = site_info["site_ID"] == "IT-Noe"
+it_noe_lat = site_info.loc[it_noe, "LAT"].item()
+it_noe_lon = site_info.loc[it_noe, "LONG"].item()
 
 chunks = "geo"
 soil_water_url = f"https://arco.datastores.ecmwf.int/cadl-arco-{chunks}-005/arco/reanalysis_era5_land/sfc-soil-water/{chunks}Chunked.zarr"
