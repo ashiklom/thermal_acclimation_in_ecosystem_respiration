@@ -15,7 +15,21 @@
 
 # uv run --with-requirements scripts/download-era5-swc.py --with ipython -- ipython
 
+# Usage:
+#   uv run scripts/download-era5-swc.py                     extend to the store's end
+#   uv run scripts/download-era5-swc.py --through 2026-08-31
+#   uv run scripts/download-era5-swc.py --full              re-extract everything
+#
+# Incremental by default. Sites already in data-raw/ERA5_daily_swc.csv are
+# extended from the day after their last row; sites in site_info.csv but not in
+# the file are extracted over the whole range. When there is nothing new to
+# add, the file is left untouched -- not rewritten with the same contents --
+# because the pipeline tracks it by hash and a rewrite would be free, but
+# anything keyed on mtime would not be.
+
+import argparse
 import os
+from pathlib import Path
 
 import pandas as pd
 import tomllib
@@ -28,6 +42,14 @@ from dask.distributed import Client, LocalCluster
 # across a process boundary. Process-based workers also cannot start here at
 # all: dask launches its nannies with `spawn`, which re-imports this module,
 # and this script runs at module level rather than under a `__main__` guard.
+START = pd.Timestamp("1990-01-01")
+OUT = Path("data-raw/ERA5_daily_swc.csv")
+
+parser = argparse.ArgumentParser(description="Extract daily ERA5-Land layer-1 soil water at every site.")
+parser.add_argument("--through", help="Last date to extract (YYYY-MM-DD). Default: the store's last day.")
+parser.add_argument("--full", action="store_true", help="Ignore the existing file and re-extract everything.")
+args = parser.parse_args()
+
 n_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 4))
 cluster = LocalCluster(n_workers=n_workers, processes=False)
 dclient = Client(cluster)
@@ -57,7 +79,6 @@ if unknown_coastal:
         f"{', '.join(sorted(unknown_coastal))}"
     )
 
-is_coastal = site_info["site_ID"].isin(COASTAL_SITES)
 
 chunks = "geo"
 soil_water_url = f"https://arco.datastores.ecmwf.int/cadl-arco-{chunks}-005/arco/reanalysis_era5_land/sfc-soil-water/{chunks}Chunked.zarr"
@@ -71,7 +92,17 @@ dat = xr.open_zarr(
 )
 
 
-def extract_daily(site_ids, lats, lons):
+# The last *complete* day in the store. ERA5-Land runs a few days behind real
+# time and the store's final day can be partial, so it is dropped: a daily mean
+# over half a day of hours would be written once and then never corrected by a
+# later incremental run.
+store_end = pd.Timestamp(dat["time"].values.max()).normalize() - pd.Timedelta(days=1)
+end = min(pd.Timestamp(args.through), store_end) if args.through else store_end
+if args.through and pd.Timestamp(args.through) > store_end:
+    print(f"ERA5-Land store ends {store_end.date()}; clipping --through {args.through} to that.")
+
+
+def extract_daily(site_ids, lats, lons, start):
     """Daily mean layer-1 soil water at the nearest cell to each coordinate.
 
     Returns a wide frame indexed by date with one column per site ID.
@@ -80,52 +111,67 @@ def extract_daily(site_ids, lats, lons):
     m3/m3. It is returned here in that native unit; the analysis convention is
     percent (0-100), and `read_era5_swc()` in R/total_tas.R does the conversion.
     """
+    if len(site_ids) == 0 or start > end:
+        return pd.DataFrame(index=pd.DatetimeIndex([], name="time"))
     extracted_ds = (dat
                     .sel(latitude=xr.DataArray(lats, dims="site"),
                          longitude=xr.DataArray(lons, dims="site"),
                          method="nearest")
-                    .sel(time=slice("1990-01-01", "2026-07-01"))
+                    # `end` is a date; the slice has to reach its last hour.
+                    .sel(time=slice(start, end + pd.Timedelta(hours=23)))
                     .assign_coords(site=xr.DataArray(site_ids, dims="site")))
     daily = extracted_ds["swvl1"].resample(time="1D").mean()
     return daily.to_pandas()
 
 
-# Regular sites: the tower coordinate is inside the land mask, so the nearest
-# cell is the right cell.
-regular = site_info.loc[~is_coastal]
-daily_regular = extract_daily(
-    regular["site_ID"].to_numpy(),
-    regular["LAT"].to_numpy(),
-    regular["LONG"].to_numpy(),
-)
+def extract_group(sites, start):
+    """`extract_daily()` over `sites`, split into regular and coastal ones."""
+    sites = site_info.loc[site_info["site_ID"].isin(sites)]
+    coastal_mask = sites["site_ID"].isin(COASTAL_SITES)
+    existing = None
+if OUT.exists() and not args.full:
+    existing = pd.read_csv(OUT, parse_dates=["time"])
 
-# Coastal sites: identical extraction, but off the substituted land coordinate
-# instead of the tower coordinate.
-coastal = site_info.loc[is_coastal, "site_ID"].to_numpy()
-daily_coastal = extract_daily(
-    coastal,
-    [COASTAL_SITES[s][0] for s in coastal],
-    [COASTAL_SITES[s][1] for s in coastal],
-)
+all_sites = site_info["site_ID"].tolist()
+pieces = []
+if existing is None:
+    new_sites, old_sites = all_sites, []
+else:
+    have = set(existing["site"])
+    new_sites = [s for s in all_sites if s not in have]
+    old_sites = [s for s in all_sites if s in have]
+    # One extension start for all existing sites. The file is always written
+    # whole, so its sites share an end date; a per-site start would only matter
+    # after a hand edit, and the drop_duplicates below covers that.
+    last = existing.loc[existing["site"].isin(old_sites), "time"].max()
+    old_start = last + pd.Timedelta(days=1)
+    if old_sites and old_start <= end:
+        print(f"Extending {len(old_sites)} site(s) from {old_start.date()} to {end.date()}.")
+        pieces.append(extract_group(old_sites, old_start))
 
-# A substituted coordinate that is still in the water would hand the analysis
-# layer a silently empty column, so refuse to write one.
-still_sea = [s for s in coastal if daily_coastal[s].isna().all()]
-if still_sea:
-    raise ValueError(
-        "COASTAL_SITES coordinates are still outside the ERA5-Land land mask "
-        f"for: {', '.join(still_sea)}. Re-run "
-        "`scripts/find-coastal-land-pixel.py` for these sites."
-    )
+if new_sites:
+    print(f"Extracting {len(new_sites)} new site(s) from {START.date()} to {end.date()}.")
+    pieces.append(extract_group(new_sites, START))
 
-# Reindexed to the site_info order so the output layout does not depend on how
-# the sites were split across the two branches.
-daily_pd = (pd.concat([daily_regular, daily_coastal], axis=1)
-            .reindex(columns=site_info["site_ID"].to_numpy()))
+if not pieces:
+    print(f"{OUT} already covers every site through {end.date()}; nothing to do.")
+    raise SystemExit(0)
 
-daily_pd.columns.name = "site"
+frames = ([existing] if existing is not None else []) + pieces
+daily_long = (pd.concat(frames, ignore_index=True)
+              .drop_duplicates(subset=["time", "site"], keep="last"))
+# Only sites still in site_info, in site_info order, then by date -- so the
+# layout does not depend on the order in which sites were added.
+order = {s: i for i, s in enumerate(all_sites)}
+daily_long = daily_long.loc[daily_long["site"].isin(order)]
+daily_long = (daily_long
+              .assign(_o=daily_long["site"].map(order))
+              .sort_values(["time", "_o"])
+              .drop(columns="_o"))
 
-daily_long = daily_pd.stack()
-daily_long.name = "SWC"
-
-daily_long.to_csv("data-raw/ERA5_daily_swc.csv")
+# Write beside the target and rename, so an interrupted run never leaves a
+# truncated file that the next incremental run would then extend.
+tmp = OUT.with_suffix(".csv.part")
+daily_long.to_csv(tmp, index=False, date_format="%Y-%m-%d")
+tmp.replace(OUT)
+print(f"Wrote {OUT}: {daily_long['site'].nunique()} site(s), through {daily_long['time'].max().date()}.")

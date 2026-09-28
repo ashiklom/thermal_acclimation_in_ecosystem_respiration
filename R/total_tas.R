@@ -25,8 +25,12 @@ BRM_FORMULA_DIRECT <- brms::bf(
 # rescaled on read. `data-raw/` deliberately holds the provider's native units.
 ERA5_SWC_TO_PERCENT <- 100
 
-read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_swc.csv")) {
-  swc <- readr::read_csv(
+ERA5_SWC_CSV <- file.path(DIR_RAWDATA, "ERA5_daily_swc.csv")
+
+# The whole ERA5 table, every site. Parsed once per pipeline run and sliced per
+# site by `read_era5_swc(table = )`, rather than re-read for each of 117 sites.
+load_era5_table <- function(path = ERA5_SWC_CSV) {
+  readr::read_csv(
     path,
     col_types = readr::cols(
       time = readr::col_date(),
@@ -34,8 +38,14 @@ read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_sw
       SWC = readr::col_double()
     ),
     progress = FALSE
-  ) |>
-    dplyr::filter(.data$site == name_site)
+  )
+}
+
+# `path` names the file in error messages; `table`, if given, is its already
+# parsed contents (`load_era5_table()`).
+read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
+  if (is.null(table)) table <- load_era5_table(path)
+  swc <- dplyr::filter(table, .data$site == name_site)
 
   if (nrow(swc) == 0) {
     stop("No ERA5 soil water data for site ", name_site, " in ", path, ".")

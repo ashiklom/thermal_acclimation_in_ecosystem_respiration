@@ -170,8 +170,23 @@ site_targets <- tar_map(
   # invalidates exactly the sites whose row could have changed.
   tar_target(site_info, get_site_info(site_name, path = site_info_file)),
   tar_target(site_dl, download_site(site_info), format = "file"),
-  tar_target(site_data, {site_dl; prep_nee_ac(site_info)}, format = "qs"),
+  # Step 01 in two parts: the expensive prep, then the ERA5 soil water joined
+  # on. Separate so that extending the ERA5 file -- which happens whenever any
+  # site's flux record outruns it -- only re-runs the cheap join, and only at
+  # the sites whose own days gained values. See `site_era5_swc()`.
+  tar_target(site_prep, {site_dl; prep_nee_ac(site_info, era5 = NULL)}, format = "qs"),
+  tar_target(site_end, site_record_end(site_prep)),
+  tar_target(site_era5, site_era5_swc(site_prep, site_name, path = era5_swc_file, table = era5_swc_tbl)),
+  tar_target(site_data, attach_era5_swc(site_prep, site_era5), format = "qs"),
   tar_target(site_fill, fill_soil_temp(site_data, site_info), format = "qs")
+)
+
+# ERA5-Land soil water: one file for every site, extended only when some
+# site's flux record runs past its end (or a site is missing from it).
+era5_targets <- list(
+  tar_combine(era5_through, site_targets$site_end, command = latest_record_end(!!!.x)),
+  tar_file(era5_swc_file, ensure_era5_coverage(era5_through, site_info_path = site_info_file)),
+  tar_target(era5_swc_tbl, load_era5_table(era5_swc_file), format = "qs")
 )
 
 # One target per recipe, read from the registry file so that editing a row
@@ -193,7 +208,9 @@ variant_prep_targets <- if (nrow(variant_prep_grid)) {
   tar_map(
     values = variant_prep_grid,
     names = c("site_name", "prep_label"),
-    tar_target(site_data_v, {site_dl_sym; prep_nee_ac(site_info_sym, recipe = recipe_sym)}, format = "qs"),
+    tar_target(site_prep_v, {site_dl_sym; prep_nee_ac(site_info_sym, recipe = recipe_sym, era5 = NULL)}, format = "qs"),
+    tar_target(site_era5_v, site_era5_swc(site_prep_v, site_name, path = era5_swc_file, table = era5_swc_tbl)),
+    tar_target(site_data_v, attach_era5_swc(site_prep_v, site_era5_v), format = "qs"),
     tar_target(site_fill_v, fill_soil_temp(site_data_v, site_info_sym), format = "qs")
   )
 } else {
@@ -335,6 +352,7 @@ list(
   tar_file(recipes_file, RECIPES_CSV),
   external,
   site_targets,
+  era5_targets,
   recipe_targets,
   variant_prep_targets,
   fit_targets,

@@ -303,3 +303,48 @@ download_ameriflux_bif <- function(overwrite = FALSE) {
     verbose = TRUE
   )
 }
+
+# ------------------------------------------------------------ ERA5-Land SWC
+#
+# One file for every site, extracted by `scripts/download-era5-swc.py`. It is
+# extended only when it has to be: when a site in site_info is missing from it,
+# or when some site's flux record runs past its last day (`through`). A daily
+# rerun of the pipeline therefore does not touch the file unless a flux
+# download actually brought newer data. The script itself is incremental and
+# leaves the file alone when it has nothing to add.
+ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path = ERA5_SWC_CSV) {
+  sites <- get_site_info(path = site_info_path)[["site_ID"]]
+  if (file.exists(path)) {
+    have <- load_era5_table(path)
+    missing_sites <- setdiff(sites, have$site)
+    last <- max(have$time)
+    if (!length(missing_sites) && (is.na(through) || last >= through)) {
+      return(path)
+    }
+    message(
+      "  ERA5: file ends ", last, "; flux data runs to ", through,
+      if (length(missing_sites)) paste0("; ", length(missing_sites), " site(s) missing")
+    )
+  } else {
+    message("  ERA5: ", path, " not found; extracting every site")
+  }
+  args <- c("run", "scripts/download-era5-swc.py")
+  if (!is.na(through)) args <- c(args, "--through", format(as.Date(through)))
+  status <- system2("uv", args, stdout = "", stderr = "")
+  if (!identical(status, 0L)) stop("ERA5 extraction failed (exit ", status, ").")
+  path
+}
+
+# The latest of the sites' record ends. An errored site contributes NULL
+# (`error = "null"`), and if every site errored there is no date to extend to.
+latest_record_end <- function(...) {
+  ends <- do.call(c, list(...))
+  if (!length(ends)) return(as.Date(NA))
+  max(ends)
+}
+
+# Last day of a site's step-01 record, for `ensure_era5_coverage()`.
+site_record_end <- function(prep) {
+  ac <- prep[["ac"]]
+  max(as.Date(ISOdate(ac$YEAR, ac$MONTH, ac$DAY)))
+}

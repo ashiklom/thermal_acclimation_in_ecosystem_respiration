@@ -164,7 +164,12 @@ prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
 # both bounds definitions so that it can. Two recipes with the same
 # `recipe_prep_key()` therefore share one result of this function, which is
 # what keeps a sites x recipes grid affordable.
-prep_nee_ac <- function(site_info, recipe = original_recipe()) {
+#
+# `era5` is the ERA5-Land soil water: a path, a site's table as returned by
+# `read_era5_swc()`, or NULL to leave it off -- which is what the pipeline does,
+# attaching it afterwards with `attach_era5_swc()` so that extending the ERA5
+# file does not re-run this function at every site. See `site_era5_swc()`.
+prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_CSV) {
   name_site <- site_info[["site_ID"]]
 
   # The one prep axis has one strategy. This is where a `computed` year
@@ -381,36 +386,9 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
 
   # ------------------------------------------------- SWC column variants
   #
-  # Measured soil water and the ERA5-Land reanalysis are carried side by side
-  # rather than one replacing the other. The second step used to drop `SWC` and
-  # join the reanalysis in its place, which made the two impossible to compare
-  # and meant the same join ran again for every model variant. Both columns are
-  # in PERCENT; see `ERA5_SWC_TO_PERCENT`.
+  # `SWC_measured` here; `SWC_era5` beside it, from `attach_era5_swc()`.
   ac_final[["SWC_measured"]] <- ac_final[["SWC"]]
   measured_final[["SWC_measured"]] <- measured_final[["SWC"]]
-
-  # Absent reanalysis is not fatal here: the total model never reads soil
-  # water, so only the direct model is entitled to complain, and it does --
-  # see `resolve_swc_column()`.
-  era5 <- tryCatch(
-    read_era5_swc(name_site),
-    error = function(e) {
-      message("  ERA5 soil water unavailable (", conditionMessage(e), ")")
-      NULL
-    }
-  )
-  if (is.null(era5)) {
-    ac_final[["SWC_era5"]] <- NA_real_
-    measured_final[["SWC_era5"]] <- NA_real_
-  } else {
-    era5 <- dplyr::rename(era5, SWC_era5 = "SWC")
-    n_ac <- nrow(ac_final)
-    n_night <- nrow(measured_final)
-    ac_final <- dplyr::left_join(ac_final, era5, by = c("YEAR", "MONTH", "DAY"))
-    measured_final <- dplyr::left_join(measured_final, era5, by = c("YEAR", "MONTH", "DAY"))
-    # A daily table joined onto half-hourly rows must annotate, never multiply.
-    stopifnot(nrow(ac_final) == n_ac, nrow(measured_final) == n_night)
-  }
 
   declared_ts <- site_info[["ts_col"]]
   if (!declared_ts %in% ts_bounds_tbl[["ts_col"]]) {
@@ -448,7 +426,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
   ts_qc <- ts_quality(ac_final, ts_col = "TS_measured", ta_col = "TA") |>
     dplyr::mutate(site_ID = name_site, .before = 1)
 
-  list(
+  out <- list(
     ac = ac_final,
     nightNEE = measured_final,
     feature_gs = feature_gs,
@@ -458,4 +436,58 @@ prep_nee_ac <- function(site_info, recipe = original_recipe()) {
     ts_provenance = prepared[["ts_provenance"]]
   )
 
+  if (is.null(era5)) return(out)
+  if (is.character(era5)) era5 <- site_era5_swc(out, name_site, path = era5)
+  attach_era5_swc(out, era5)
+}
+
+
+# ERA5 soil water for one site, restricted to the days its flux record covers.
+#
+# The restriction is what lets the ERA5 file grow without costing anything. The
+# file is extended whenever any site's flux record outruns it, and the new
+# days are days no *other* site has flux data for; clipped to its own record,
+# a site's slice is unchanged by that, so targets skips everything downstream
+# of it. `table` is the parsed file (`load_era5_table()`), if the caller has
+# it; otherwise `path` is read.
+#
+# Absent reanalysis is not fatal here: the total model never reads soil water,
+# so only the direct model is entitled to complain, and it does -- see
+# `resolve_swc_column()`. NULL means "unavailable" to `attach_era5_swc()`.
+site_era5_swc <- function(prep, name_site, path = ERA5_SWC_CSV, table = NULL) {
+  era5 <- tryCatch(
+    read_era5_swc(name_site, path = path, table = table),
+    error = function(e) {
+      message("  ERA5 soil water unavailable (", conditionMessage(e), ")")
+      NULL
+    }
+  )
+  if (is.null(era5)) return(NULL)
+  days <- dplyr::distinct(prep[["ac"]], .data$YEAR, .data$MONTH, .data$DAY)
+  dplyr::semi_join(era5, days, by = c("YEAR", "MONTH", "DAY"))
+}
+
+# Join a site's ERA5 soil water (`site_era5_swc()`) onto step 01's tables as
+# `SWC_era5`, in PERCENT; see `ERA5_SWC_TO_PERCENT`. Measured soil water and
+# the reanalysis are carried side by side rather than one replacing the other:
+# the second step used to drop `SWC` and join the reanalysis in its place,
+# which made the two impossible to compare and meant the same join ran again
+# for every model variant.
+attach_era5_swc <- function(prep, era5) {
+  for (tbl in c("ac", "nightNEE")) {
+    dat <- prep[[tbl]]
+    if (is.null(era5)) {
+      dat[["SWC_era5"]] <- NA_real_
+    } else {
+      n <- nrow(dat)
+      dat <- dplyr::left_join(
+        dat, dplyr::rename(era5, SWC_era5 = "SWC"),
+        by = c("YEAR", "MONTH", "DAY")
+      )
+      # A daily table joined onto half-hourly rows must annotate, never multiply.
+      stopifnot(nrow(dat) == n)
+    }
+    prep[[tbl]] <- dat
+  }
+  prep
 }

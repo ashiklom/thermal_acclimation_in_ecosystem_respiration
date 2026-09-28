@@ -60,3 +60,53 @@ test_that("the converted US-Kon series matches the manuscript's own ERA5 file", 
   expect_equal(min(ours$SWC), min(theirs$SWC), tolerance = 0.02)
   expect_equal(max(ours$SWC), max(theirs$SWC), tolerance = 0.02)
 })
+
+# A step-01 result reduced to what the ERA5 join reads.
+fake_prep <- function(days) {
+  d <- as.Date(days)
+  hh <- tibble::tibble(
+    YEAR = lubridate::year(rep(d, each = 2)),
+    MONTH = lubridate::month(rep(d, each = 2)),
+    DAY = lubridate::day(rep(d, each = 2))
+  )
+  list(ac = hh, nightNEE = hh[1, ])
+}
+
+test_that("a site's ERA5 slice is clipped to its own flux days", {
+  # The point of the clip: extending the file past a site's record must leave
+  # that site's slice -- and so everything downstream of it -- unchanged.
+  tbl <- tibble::tibble(
+    time = as.Date(c("2020-01-01", "2020-01-02", "2020-01-03", "2020-01-01")),
+    site = c("X-Tst", "X-Tst", "X-Tst", "Y-Tst"),
+    SWC = c(0.1, 0.2, 0.3, 0.9)
+  )
+  prep <- fake_prep(c("2020-01-01", "2020-01-02"))
+  short <- site_era5_swc(prep, "X-Tst", table = tbl[1:2, ])
+  long <- site_era5_swc(prep, "X-Tst", table = tbl)
+  expect_identical(short, long)
+  expect_equal(long$SWC, c(10, 20))
+})
+
+test_that("the ERA5 join annotates rows and never multiplies them", {
+  prep <- fake_prep(c("2020-01-01", "2020-01-02"))
+  era5 <- tibble::tibble(YEAR = 2020, MONTH = 1, DAY = 1:2, SWC = c(10, 20))
+  out <- attach_era5_swc(prep, era5)
+  expect_equal(nrow(out$ac), 4)
+  expect_equal(out$ac$SWC_era5, c(10, 10, 20, 20))
+  expect_equal(out$nightNEE$SWC_era5, 10)
+})
+
+test_that("unavailable ERA5 becomes an all-NA column, not an error", {
+  prep <- fake_prep("2020-01-01")
+  tbl <- tibble::tibble(time = as.Date("2020-01-01"), site = "Y-Tst", SWC = 0.5)
+  era5 <- suppressMessages(site_era5_swc(prep, "X-Tst", table = tbl))
+  expect_null(era5)
+  out <- attach_era5_swc(prep, era5)
+  expect_true(all(is.na(out$ac$SWC_era5)))
+  expect_true(all(is.na(out$nightNEE$SWC_era5)))
+})
+
+test_that("latest_record_end tolerates errored sites", {
+  expect_equal(latest_record_end(as.Date("2020-01-01"), NULL, as.Date("2021-06-30")), as.Date("2021-06-30"))
+  expect_true(is.na(latest_record_end(NULL, NULL)))
+})
