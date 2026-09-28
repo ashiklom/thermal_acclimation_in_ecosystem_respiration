@@ -1,5 +1,32 @@
 # Custom pre-processing for Ameriflux_BASE data
 
+# Site-specific windows, as inclusive `TIMESTAMP_START` bounds (NA = open).
+#
+# Both used to be row ranges into one BASE release, which do not survive a
+# re-download. They are resolved here against the releases that were on disk
+# when they were converted (US-Myb BASE-BADM 17-5, US-Jo2 2-5), both gap-free
+# half-hourly records, so each window selects exactly the rows the range did:
+#
+#   US-Myb  a[17521:245424, ]   2011-01-01 00:00 .. 2023-12-31 23:30
+#   US-Jo2  a[123453:124049]    2017-01-15 22:00 .. 2017-01-28 08:00
+#
+# US-Myb's upper row was the end of the record when the range was written, not
+# a choice: the intent is "drop the first year". Release 17-5 runs through
+# 2025, and the row range was silently discarding 2024-2025, so the end is left
+# open here.
+US_MYB_WINDOW <- c("201101010000", NA)
+US_JO2_BAD_TA_WINDOW <- c("201701152200", "201701280800")
+
+# Rows of an `amf_read_base()` table whose TIMESTAMP_START lies in `window`.
+# `amf_read_base()` parses TIMESTAMP_START as a number, and YYYYMMDDHHMM is
+# exactly representable as a double, so the comparison is done numerically.
+ameriflux_in_window <- function(a, window) {
+  ts <- as.numeric(a$TIMESTAMP_START)
+  lo <- as.numeric(window[[1]])
+  hi <- as.numeric(window[[2]])
+  (is.na(lo) | ts >= lo) & (is.na(hi) | ts <= hi)
+}
+
 prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   files_AmeriFlux_BASE <- list.files(
@@ -30,8 +57,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
 
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year.
-    # TODO: Use proper filter here, not magic numbers
-    a <- a[17521:245424, ]
+    a <- a[ameriflux_in_window(a, US_MYB_WINDOW), ]
     # combine TS data at two depth
     a$TS_2_1_1[is.na(a$TS_2_1_1)] <- a$TS_2_2_1[is.na(a$TS_2_1_1)] * 0.9324892 + 0.9077066
   }
@@ -75,10 +101,10 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     a <- a |> dplyr::filter(.data$YEAR > 1999)
   }
   if (name_site == "US-Jo2") {
-    # TA data from 123453~124049 has problems use Tsonic data 
-    # TODO: Use timestamps here instead.
-    a$TA[123453:124049] <- a$T_SONIC[123453:124049] * 1.0183316 - 0.9299
-  }   
+    # TA data in this window has problems; use Tsonic data
+    bad_ta <- ameriflux_in_window(a, US_JO2_BAD_TA_WINDOW)
+    a$TA[bad_ta] <- a$T_SONIC[bad_ta] * 1.0183316 - 0.9299
+  }
 
   if (name_site == "US-BZS") {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.

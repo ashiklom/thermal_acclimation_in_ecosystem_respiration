@@ -267,3 +267,33 @@ test_that("every AmeriFlux site's declared columns exist in its record", {
   }
   expect_equal(offenders, character())
 })
+
+test_that("site windows select by timestamp, with an open end", {
+  a <- tibble::tibble(TIMESTAMP_START = c(201012312330, 201101010000, 202512312330))
+  expect_equal(ameriflux_in_window(a, US_MYB_WINDOW), c(FALSE, TRUE, TRUE))
+  a <- tibble::tibble(TIMESTAMP_START = c(201701152130, 201701152200, 201701280800, 201701280830))
+  expect_equal(ameriflux_in_window(a, US_JO2_BAD_TA_WINDOW), c(FALSE, TRUE, TRUE, FALSE))
+})
+
+# The windows replaced row ranges; on the releases they were resolved against,
+# they must pick exactly those rows. Skipped once a site's release moves on,
+# since the row ranges mean nothing on any other file.
+row_range_cases <- list(
+  list(site = "US-Myb", release = "AMF_US-Myb_BASE-BADM_17-5.zip",
+       window = US_MYB_WINDOW, rows = 17521:245424, open_end = TRUE),
+  list(site = "US-Jo2", release = "AMF_US-Jo2_BASE-BADM_2-5.zip",
+       window = US_JO2_BAD_TA_WINDOW, rows = 123453:124049, open_end = FALSE)
+)
+for (case in row_range_cases) {
+  test_that(sprintf("%s window reproduces the original row range", case$site), {
+    path <- file.path(DIR_RAWDATA, "Ameriflux", case$site, case$release)
+    skip_if_not(file.exists(path), paste(case$release, "not on disk"))
+    a <- suppressMessages(amerifluxr::amf_read_base(path, parse_timestamp = TRUE, unzip = TRUE))
+    got <- which(ameriflux_in_window(a, case$window))
+    if (case$open_end) {
+      expect_equal(got[seq_along(case$rows)], case$rows)
+    } else {
+      expect_equal(got, case$rows)
+    }
+  })
+}
