@@ -23,8 +23,10 @@ this can be wired into cron or CI.
 With `--catalog FILE` it instead writes the remote side only -- one row per
 site and product, `site_ID,product,remote_id` -- for the pipeline's
 `remote_catalog` target, and always refreshes the fluxnet-shuttle snapshot
-first. `remote_id` is empty where the provider could not be asked; the
-pipeline reads that as "keep what we have", never as "changed".
+first. The file is rewritten only when something in it changed, so a quiet
+day leaves the pipeline with nothing outdated. A provider that cannot be asked
+keeps its previous ids (blank the first time), which the pipeline reads as
+"keep what we have", never as "changed".
 
 What "what we hold" means: the downloaders record the `remote_id` they fetched
 in a `.remote_id` file in the site's product directory. Where there is none --
@@ -282,16 +284,50 @@ def lookup_all(pairs: list[tuple[str, str]]) -> tuple[dict[str, dict[str, str]],
 
 
 def write_catalog(path: Path, pairs, remote, failed) -> int:
-    rows = [
-        {"site_ID": site, "product": product,
-         "remote_id": remote.get(product, {}).get(site, "")}
-        for site, product in pairs
-    ]
+    """Write the catalogue to `path`, touching the file only if it changed.
+
+    Leaving an unchanged file alone is the point: the pipeline tracks it, and
+    a no-change scan must leave `tar_outdated()` empty. For the same reason a
+    product whose lookup failed keeps the remote_id it had in the previous
+    catalogue instead of going blank for a day and back -- which would look
+    like two changes. Rows for sites not scanned this time (`--sites`) are
+    carried over as they were.
+    """
+    previous = {}
+    old = None
+    if path.exists():
+        old = pd.read_csv(path, dtype=str, keep_default_na=False)
+        previous = {(r.site_ID, r.product): r.remote_id for r in old.itertuples()}
+
+    rows = {}
+    for site, product in pairs:
+        if product in failed:
+            rid = previous.get((site, product), "")
+        else:
+            rid = remote.get(product, {}).get(site, "")
+        rows[(site, product)] = rid
+    for key, rid in previous.items():
+        rows.setdefault(key, rid)
     for product, why in failed.items():
-        print(f"! {product} lookup failed, left blank: {why}", file=sys.stderr)
+        print(f"! {product} lookup failed, previous ids kept: {why}", file=sys.stderr)
+
+    new = pd.DataFrame(
+        [{"site_ID": s, "product": p, "remote_id": r} for (s, p), r in sorted(rows.items())],
+        columns=["site_ID", "product", "remote_id"],
+    )
+    if old is not None and new.equals(old.reset_index(drop=True)):
+        print(f"{path}: no change.", file=sys.stderr)
+        return 0
+    if old is not None:
+        before = set(previous.items())
+        changed = sorted({k for k, v in rows.items() if (k, v) not in before})
+        for site, product in changed:
+            print(f"  changed  {site:8s} {product:14s} {previous.get((site, product), '') or '-'}"
+                  f" -> {rows[(site, product)] or '-'}", file=sys.stderr)
     tmp = path.with_suffix(path.suffix + ".part")
-    pd.DataFrame(rows, columns=["site_ID", "product", "remote_id"]).to_csv(tmp, index=False)
+    new.to_csv(tmp, index=False)
     tmp.replace(path)
+    print(f"{path}: written.", file=sys.stderr)
     return 0
 
 
