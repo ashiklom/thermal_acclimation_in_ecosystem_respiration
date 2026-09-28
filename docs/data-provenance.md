@@ -121,6 +121,7 @@ a single blocking fetch (see below).
 | FAO GSOC v1.5.0 | `gsoc_file` | FAO Google Cloud bucket, ~760 MB |
 | WorldClim 2.1 tmin | `worldclim_files` | geodata.ucdavis.edu, ~4.8 GB |
 | MODIS EVI/NDVI/LAI/GPP | *none* | NASA AppEEARS — see below |
+| ERA5-Land layer-1 soil water | `era5_swc_file` | ARCO ERA5-Land zarr, CDS key — see below |
 
 Two details worth keeping. The BIF filename carries the date it was produced and
 arrives as `.xlsx`, so `03_01` discovers it by pattern rather than naming it —
@@ -178,7 +179,17 @@ script reports an authentication failure.
 
 ---
 
-## The monthly check
+ERA5-Land soil water (`data-raw/ERA5_daily_swc.csv`, every site in one file) is
+extended by `scripts/download-era5-swc.py`, incrementally: sites already in the
+file get the days after their last row, up to the store's last complete day;
+sites missing from it get the full range from 1990; and a run with nothing to
+add leaves the file untouched. The pipeline calls it through
+`ensure_era5_coverage()` only when some site's flux record runs past the file's
+end, and joins each site's slice on *clipped to that site's own flux days*
+(`site_era5_swc()`), so extending the file re-runs nothing at a site whose days
+gained no values.
+
+## Checking by hand
 
 ```bash
 pixi run check-updates
@@ -215,6 +226,17 @@ How each product is compared:
   ```
 - **WW2020** — a closed 2022 release. Checked for membership and filename, but
   an `UPDATE` here would mean the collection itself was revised.
+- **AmeriFlux BASE** — AmeriFlux publishes no BASE version string through any
+  public endpoint, only which years each site has published. The check compares
+  that year span and count (`years:2010-2025:16`), so it catches every added
+  year and misses a reprocessing that re-releases the same years.
+- **TERN** — the latest version from `terndata.flux`.
+
+What "on disk" means: each download records the provider's id for what it
+fetched in `data-raw/<PRODUCT>/<site>/.remote_id`. Data fetched before that
+existed falls back to its archive's filename. That is exact for ICOS, WW2020
+and FLUXNET, and never matches for AmeriFlux or TERN, so those are fetched
+again once.
 
 ### Acting on the result
 
@@ -236,6 +258,63 @@ If a station has just been labelled, or its span has grown, also re-check
 whether it still needs `WW2020` underneath — `scripts/audit-icos-coverage.R`
 prints span-by-span coverage against the manuscript's year counts and says
 `RECOVERED` or `short` per site.
+
+## Keeping it current automatically
+
+```bash
+scripts/scan-and-run.sh              # scan; run the pipeline only if anything changed
+scripts/scan-and-run.sh --scan-only  # scan and report, run nothing
+```
+
+This is what to put in cron, or in `scrontab` on YCRC (the header of the script
+has an entry to copy). Each run does three things:
+
+1. `check-data-updates.py --catalog` asks every provider what it publishes, in
+   one request per provider (about 40 s, mostly the fluxnet-shuttle listing),
+   and writes `data-raw/remote_catalog.csv` **only if something changed**. A
+   provider that cannot be reached keeps its previous ids, so an outage never
+   looks like a release.
+2. `tar_outdated()`. If it comes back empty, which is every day nothing was
+   published, the script exits.
+3. Otherwise it submits `submit.sh`, or runs `pixi run targets` where there is
+   no `sbatch`. Inside the pipeline, `remote_catalog_file` feeds a per-site
+   `site_remote` slice that is compared by value, so only the sites whose rows
+   changed re-run `site_dl`.
+
+   `download_site()` then:
+   - moves the stale copy to `data-raw/_superseded/<PRODUCT>/<site>/<stamp>/`;
+   - fetches the new release and records its id;
+   - if the fetch fails, puts the old copy back and warns.
+
+   `site_dl` hashes the files, so everything downstream re-runs only where the
+   bytes changed.
+
+The grid is `submit.sh`'s. Any `THERMAL_*` variable already set wins, which is
+how to try it small:
+
+```bash
+THERMAL_SITES=dev THERMAL_RECIPES=original THERMAL_FIT=fast scripts/scan-and-run.sh
+```
+
+The scan is deliberately outside the pipeline. An always-run scan target would
+make `tar_outdated()` report everything downstream of it on every run, so a
+day with nothing new could never be told apart from one with an update.
+
+Things an update does *not* do for you:
+
+- **Review the new years.** `year_removed`, `gStart`/`gEnd` and the gap
+  thresholds were set by hand against the manuscript's years.
+  `data-proc/analysis/new_siteyears.csv` (also in the run report) lists every
+  fitted site-year past the manuscript's last year at its site.
+- **Revise overlapping years.** The splice keeps the earlier product wherever
+  two overlap, so a new ICOS release contributes only the rows after the
+  FLUXNET record ends.
+- **Reproduce the manuscript.** `data-raw/` is updated in place, so after an
+  update the `original` recipe no longer runs on the manuscript's inputs. The
+  superseded archives are kept for that reason. `pixi run ts-baseline` skips
+  the digests of any site whose data changed since the baseline was written
+  and lists them; `reconcile` never asserted equality in the first place.
+- **Re-run `workflows/`.** The `03_*` and `04_*` scripts are not targets.
 
 ---
 
