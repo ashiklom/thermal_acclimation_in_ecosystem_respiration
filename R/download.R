@@ -2,7 +2,14 @@
 #
 # Most sites need more than one product: see `FLUX_PRODUCTS` in R/constants.R
 # and docs/data-provenance.md for why.
-download_site <- function(site_info, overwrite = FALSE) {
+#
+# `remote` is the site's slice of the remote catalogue (`remote_for_site()`),
+# product -> remote_id. A product already on disk is re-fetched when its
+# recorded remote_id differs from the provider's current one: the old copy is
+# moved to data-raw/_superseded/ first, and moved back if the new download
+# fails, so a flaky provider costs a warning and never the data we had. An NA
+# remote_id -- the provider could not be asked -- keeps what is on disk.
+download_site <- function(site_info, remote = NULL, overwrite = FALSE) {
   name_site <- site_info[["site_ID"]]
   downloaders <- list(
     AmeriFlux_BASE = download_ameriflux,
@@ -19,8 +26,35 @@ download_site <- function(site_info, overwrite = FALSE) {
     if (is.null(fn)) {
       stop("No download method for product `", product, "` (site ", name_site, ").")
     }
-    message("Fetching ", product, " for ", name_site)
-    fn(name_site, overwrite = overwrite)
+    want <- if (product %in% names(remote)) remote[[product]] else NA_character_
+    have <- local_remote_id(name_site, product)
+    present <- !is.na(product_file(name_site, product))
+
+    if (present && !overwrite && !is.na(want) && !identical(have, want)) {
+      message("Updating ", product, " for ", name_site, ": ", have, " -> ", want)
+      moved <- supersede_product(name_site, product)
+      fetched <- tryCatch(
+        {
+          fn(name_site, overwrite = FALSE)
+          !is.na(product_file(name_site, product))
+        },
+        error = function(e) {
+          warning("Update of ", product, " for ", name_site, " failed; keeping ",
+                  have, ". ", conditionMessage(e), call. = FALSE)
+          FALSE
+        }
+      )
+      if (fetched) {
+        record_remote_id(name_site, product, want)
+      } else {
+        restore_product(moved, name_site, product)
+      }
+    } else if (!present || overwrite) {
+      message("Fetching ", product, " for ", name_site)
+      fn(name_site, overwrite = overwrite)
+      record_remote_id(name_site, product, want)
+    }
+
     got <- product_file(name_site, product)
     if (is.na(got)) {
       stop(

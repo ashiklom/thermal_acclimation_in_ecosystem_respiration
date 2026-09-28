@@ -169,7 +169,13 @@ site_targets <- tar_map(
   # needs it. It depends on `site_info_file`, so editing site_info.csv
   # invalidates exactly the sites whose row could have changed.
   tar_target(site_info, get_site_info(site_name, path = site_info_file)),
-  tar_target(site_dl, download_site(site_info), format = "file"),
+  # This site's slice of the remote catalogue. Compared by value, so a site
+  # whose providers published nothing new is up to date from here down.
+  tar_target(site_remote, remote_for_site(remote_catalog, site_name), deployment = "main"),
+  # Runs again whenever `site_remote` changes, but its value is the files'
+  # hashes: a run that re-fetches nothing, or fails and restores the old copy,
+  # leaves everything downstream up to date.
+  tar_target(site_dl, download_site(site_info, remote = site_remote), format = "file"),
   # Step 01 in two parts: the expensive prep, then the ERA5 soil water joined
   # on. Separate so that extending the ERA5 file -- which happens whenever any
   # site's flux record outruns it -- only re-runs the cheap join, and only at
@@ -347,8 +353,17 @@ reports <- list(
   tar_quarto(variant_report, path = "reports/variant-comparison.qmd", quiet = FALSE)
 )
 
+# What every provider publishes, as of the last scan. The scan itself runs
+# outside the pipeline (`scripts/scan-and-run.sh`) and rewrites the file only
+# when something changed; see R/remote-catalog.R for why.
+remote_targets <- list(
+  tar_file(remote_catalog_file, ensure_remote_catalog(site_info_file)),
+  tar_target(remote_catalog, read_remote_catalog(remote_catalog_file), deployment = "main")
+)
+
 list(
   tar_file(site_info_file, SITE_INFO_CSV),
+  remote_targets,
   tar_file(recipes_file, RECIPES_CSV),
   external,
   site_targets,

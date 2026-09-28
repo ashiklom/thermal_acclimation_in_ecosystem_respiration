@@ -117,16 +117,20 @@ CMD+=(--sites "${SITES[@]}")
 echo "Downloading FLUXNET data..."
 "${CMD[@]}"
 
-# Unzip each archive into its site-specific FLUXNET directory.
+# Unzip each requested site's archive into its site-specific FLUXNET
+# directory. Only the sites just downloaded: re-extracting every archive in
+# the directory rewrites tables that have not changed, which is slow and makes
+# every other site's files look touched.
 echo "Extracting FLUXNET data into site-specific directories..."
-for zipfile in "$OUTPUT_DIR"/ICOS_*_FLUXNET_*.zip "$OUTPUT_DIR"/EUF_*_FLUXNET_*.zip; do
-    if [[ -f "$zipfile" ]]; then
-        echo "  Extracting $(basename "$zipfile")..."
-        site=$(basename "$zipfile" | sed -E 's/^(ICOS|EUF)_([^_]+)_.*/\2/')
-        unzip_dir="$OUTPUT_DIR/$site"
-        mkdir -p "$unzip_dir"
-        unzip -o -j "$zipfile" "*.csv" -d "$unzip_dir" 2>/dev/null || true
-    fi
+for site in "${SITES[@]}"; do
+    for zipfile in "$OUTPUT_DIR"/ICOS_"${site}"_FLUXNET_*.zip "$OUTPUT_DIR"/EUF_"${site}"_FLUXNET_*.zip; do
+        if [[ -f "$zipfile" ]]; then
+            echo "  Extracting $(basename "$zipfile")..."
+            unzip_dir="$OUTPUT_DIR/$site"
+            mkdir -p "$unzip_dir"
+            unzip -o -j "$zipfile" "*.csv" -d "$unzip_dir" 2>/dev/null || true
+        fi
+    done
 done
 
 echo "Done. Extracted files:"
