@@ -68,6 +68,7 @@ siteyear_total <- from_target(or_null(tar_read(outcome_siteyear_temp_csv)))
 run_settings <- from_target(or_null(tar_read(run_settings_csv)))
 window_skips <- from_target(or_null(tar_read(window_skips_csv)))
 feature_gs <- from_target(or_null(tar_read(growing_season_features_csv)))
+new_siteyears <- from_target(or_null(tar_read(new_siteyears_csv)))
 acclimation <- read_if(file.path(PROC, "acclimation_data.csv"))
 tmin_future <- read_if(file.path(PROC, "Tmin_month_ssp245_wc.csv"))
 future_er <- read_if(file.path(PROC, "acclimation_data_future_ssp245.csv"))
@@ -216,6 +217,25 @@ if (!is.null(outcome_total) && !is.null(orig_total)) {
     labs(x = "TAS, manuscript", y = "TAS, this run",
          title = "Points off the diagonal differ from the manuscript") +
     theme_minimal()
+}
+```
+
+### Site-years newer than the manuscript
+
+```{r new-siteyears}
+#| echo: false
+#| output: asis
+if (is.null(new_siteyears)) {
+  cat("No fitted site-year falls after the manuscript's last year at its site.\n")
+} else {
+  cat(
+    "These site-years came with data releases newer than the manuscript's. ",
+    "The site-level QC in `site_info.csv` (`year_removed`, `gStart`/`gEnd`, ",
+    "the gap thresholds) was set by hand against the manuscript's years and ",
+    "has never been checked against these. Review them before trusting TAS ",
+    "values that include them.\n\n", sep = ""
+  )
+  print(knitr::kable(new_siteyears))
 }
 ```
 

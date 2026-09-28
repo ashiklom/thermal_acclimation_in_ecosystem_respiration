@@ -274,7 +274,9 @@ combined <- list(
   tar_combine(ts_qc_tbl, site_targets$site_data, command = collect_ts_qc(!!!.x)),
   tar_combine(ts_provenance_tbl, site_targets$site_data, command = collect_ts_provenance(!!!.x)),
   tar_combine(fill_cv_tbl, site_targets$site_fill, command = collect_fill_cv(!!!.x)),
-  tar_combine(fill_summary_tbl, site_targets$site_fill, command = collect_fill_summary(!!!.x))
+  tar_combine(fill_summary_tbl, site_targets$site_fill, command = collect_fill_summary(!!!.x)),
+  tar_file(manuscript_siteyear_files, MANUSCRIPT_SITEYEAR_CSVS),
+  tar_target(new_siteyears_tbl, collect_new_siteyears(variant_siteyear_tbl, manuscript_siteyear_files))
 )
 
 outputs <- list(
@@ -295,6 +297,8 @@ outputs <- list(
            write_result_csv(fill_cv_tbl, file.path(DIR_ANALYSIS, "fill_cv.csv"))),
   tar_file(fill_summary_csv,
            write_result_csv(fill_summary_tbl, file.path(DIR_ANALYSIS, "fill_summary.csv"))),
+  tar_file(new_siteyears_csv,
+           write_result_csv(new_siteyears_tbl, file.path(DIR_ANALYSIS, "new_siteyears.csv"))),
 
   # -- the manuscript layout: the `original` recipe only --
   tar_file(outcome_temp_csv,

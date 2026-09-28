@@ -193,3 +193,42 @@ write_respiration_all <- function(...) {
 
   sort(written)
 }
+
+# The manuscript's site-year tables: what the site-level QC in site_info.csv
+# (`year_removed`, gStart/gEnd, the gap thresholds in
+# `compute_gap_thresholds()`) was set by hand against.
+MANUSCRIPT_SITEYEAR_CSVS <- file.path(
+  "data-proc-original",
+  c("outcome_siteyear_temp.csv", "outcome_siteyear_temp_water_gpp.csv")
+)
+
+# Site-years this run fitted that come after the manuscript's last year at the
+# site -- or at a site the manuscript did not have. These arrive with new data
+# releases and pass only the automatic checks, never the manual review the
+# manuscript's years got, so they are listed for someone to look at before the
+# results that include them are trusted. Years *inside* the manuscript's span
+# that differ from it are a different question, which `pixi run reconcile`
+# answers.
+collect_new_siteyears <- function(siteyear_tbl, manuscript_paths = MANUSCRIPT_SITEYEAR_CSVS) {
+  last <- dplyr::bind_rows(lapply(manuscript_paths, utils::read.csv)) |>
+    dplyr::group_by(.data$site_ID) |>
+    dplyr::summarise(manuscript_last_year = max(.data$growing_year), .groups = "drop")
+  empty <- tibble::tibble(
+    site_ID = character(), growing_year = integer(), manuscript_last_year = integer(),
+    n_windows_fitted = integer(), recipes = character(), models = character()
+  )
+  if (is.null(siteyear_tbl) || !nrow(siteyear_tbl)) return(empty)
+  fitted <- siteyear_tbl |> dplyr::filter(!is.na(.data$growing_year), !is.na(.data$ERref))
+  if (!nrow(fitted)) return(empty)
+  fitted |>
+    dplyr::left_join(last, by = "site_ID") |>
+    dplyr::filter(is.na(.data$manuscript_last_year) | .data$growing_year > .data$manuscript_last_year) |>
+    dplyr::group_by(.data$site_ID, .data$growing_year, .data$manuscript_last_year) |>
+    dplyr::summarise(
+      n_windows_fitted = dplyr::n(),
+      recipes = paste(sort(unique(.data$recipe_id)), collapse = ","),
+      models = paste(sort(unique(.data$model)), collapse = ","),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(.data$site_ID, .data$growing_year)
+}

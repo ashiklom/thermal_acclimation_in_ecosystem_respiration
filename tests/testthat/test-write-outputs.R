@@ -92,3 +92,20 @@ test_that("collect_window_skips keeps its columns when nothing was skipped", {
   write_result_csv(out, f)
   expect_identical(names(read.csv(f)), WINDOW_SKIP_COLS)
 })
+
+test_that("new site-years are those past the manuscript's last year, fitted only", {
+  ms <- withr::local_tempfile(fileext = ".csv")
+  write.csv(data.frame(site_ID = c("A", "A"), growing_year = c(2010, 2012)), ms, row.names = FALSE)
+  sy <- tibble::tibble(
+    site_ID = c("A", "A", "A", "A", "B"),
+    recipe_id = "original", model = c("total", "total", "direct", "total", "total"),
+    growing_year = c(2011L, 2013L, 2013L, 2014L, 2001L),
+    ERref = c(1, 1, 1, NA, 1)
+  )
+  out <- collect_new_siteyears(sy, ms)
+  # 2011 is inside the manuscript's span; 2014 was not fitted; B is new
+  expect_equal(paste(out$site_ID, out$growing_year), c("A 2013", "B 2001"))
+  expect_equal(out$models, c("direct,total", "total"))
+  expect_true(is.na(out$manuscript_last_year[out$site_ID == "B"]))
+  expect_equal(nrow(collect_new_siteyears(sy[0, ], ms)), 0)
+})
