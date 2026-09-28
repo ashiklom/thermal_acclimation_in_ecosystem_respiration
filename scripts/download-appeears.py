@@ -7,23 +7,22 @@
 #   "requests",
 # ]
 # ///
-"""Submit and download the AppEEARS point extraction that 03_01 needs.
+"""Submit, track, and download the AppEEARS point extraction that 03_01 needs.
 
-`03_01_prepare_data_for_driver_analysis.R` reads NDVI/EVI/LAI/Fpar/GPP from
-three CSVs that AppEEARS produces for a single "point" task requesting all
-three products together (docs/data-provenance.md has the background). There
-is no downloader for this because AppEEARS is an asynchronous submit/poll/
-download API, not a file server, and its login endpoint
-(`/api/login`, username/password) is currently broken. So this script skips
-login entirely and authenticates with the `appeears_token` already sitting in
-`_creds.toml` -- get a fresh one from a logged-in AppEEARS browser session via
-Developer tools -> Application -> Session storage -> session -> token if the
-one there has expired (AppEEARS tokens are short-lived).
+AppEEARS tasks for this request take days to process, so this is split into
+subcommands rather than blocking: `submit` returns immediately, and `status` /
+`download` can be run whenever. Without --task-id, `status` and `download` act
+on the most recent task named "towers".
+
+Authenticates with `appeears_token` from `_creds.toml` because the AppEEARS
+login endpoint is broken. The token is short-lived; refresh it from a logged-in
+browser session (Developer tools -> Application -> Session storage -> session
+-> token).
 """
 
 import argparse
+import json
 import sys
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -54,14 +53,30 @@ START_DATE = "01-01-2000"
 END_DATE = "07-01-2026"
 
 
+class AppEEARS:
+    def __init__(self, token: str):
+        self.session = requests.Session()
+        self.session.headers["Authorization"] = f"Bearer {token}"
+
+    def get(self, path: str, **kwargs) -> requests.Response:
+        resp = self.session.get(f"{API}/{path}", **kwargs)
+        resp.raise_for_status()
+        return resp
+
+    def post(self, path: str, **kwargs) -> requests.Response:
+        resp = self.session.post(f"{API}/{path}", **kwargs)
+        resp.raise_for_status()
+        return resp
+
+
 def load_token() -> str:
     with open("_creds.toml", "rb") as f:
         creds = tomllib.load(f)
     return creds["appeears_token"]
 
 
-def auth_headers(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}"}
+def print_json(obj) -> None:
+    print(json.dumps(obj, indent=2))
 
 
 def build_task() -> dict:
@@ -86,77 +101,100 @@ def build_task() -> dict:
     }
 
 
-def submit_task(token: str) -> str:
-    resp = requests.post(
-        f"{API}/task", json=build_task(), headers=auth_headers(token)
-    )
-    resp.raise_for_status()
-    task_id = resp.json()["task_id"]
-    print(f"submitted task {task_id}")
-    return task_id
+def summarize_task(task: dict) -> dict:
+    # Drops the full coordinate list, which is 117 entries of noise.
+    params = task.get("params", {})
+    summary = {k: v for k, v in task.items() if k != "params"}
+    summary["dates"] = params.get("dates")
+    summary["layers"] = params.get("layers")
+    summary["n_coordinates"] = len(params.get("coordinates", []))
+    return summary
 
 
-def wait_for_task(token: str, task_id: str, poll_seconds: int, timeout_seconds: int) -> None:
-    deadline = time.monotonic() + timeout_seconds
-    while True:
-        # /api/status/{id} reports per-step progress but no overall status;
-        # /api/task/{id} is the one that carries status in
-        # {"processing", "done", "error", "expired", ...}.
-        resp = requests.get(f"{API}/task/{task_id}", headers=auth_headers(token))
-        resp.raise_for_status()
-        status = resp.json()["status"]
-        print(f"task {task_id}: {status}")
-        if status == "done":
-            return
-        if status in ("error", "expired"):
-            raise RuntimeError(f"AppEEARS task {task_id} ended with status '{status}'")
-        if time.monotonic() > deadline:
-            raise TimeoutError(
-                f"task {task_id} did not finish within {timeout_seconds}s; "
-                f"rerun with --task-id {task_id} to keep waiting"
-            )
-        time.sleep(poll_seconds)
+def list_tasks(api: AppEEARS, limit: int) -> list[dict]:
+    tasks = api.get("task", params={"limit": limit}).json()
+    return sorted(tasks, key=lambda t: t["created"], reverse=True)
 
 
-def download_results(token: str, task_id: str, out_dir: Path) -> None:
-    resp = requests.get(f"{API}/bundle/{task_id}", headers=auth_headers(token))
-    resp.raise_for_status()
-    files = {f["file_name"]: f["file_id"] for f in resp.json()["files"]}
+def resolve_task_id(api: AppEEARS, task_id: str | None) -> str:
+    if task_id:
+        return task_id
+    towers = [t for t in list_tasks(api, limit=100) if t["task_name"] == TASK_NAME]
+    if not towers:
+        sys.exit(f"no AppEEARS tasks named '{TASK_NAME}' found; run `submit` first")
+    return towers[0]["task_id"]
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for spec in PRODUCTS.values():
-        name = spec["result_csv"]
-        if name not in files:
-            print(f"WARNING: {name} not found in task bundle, skipping", file=sys.stderr)
-            continue
-        file_resp = requests.get(
-            f"{API}/bundle/{task_id}/{files[name]}",
-            headers=auth_headers(token),
-            stream=True,
-        )
-        file_resp.raise_for_status()
-        dest = out_dir / name
+
+def cmd_submit(api: AppEEARS, args) -> None:
+    task = build_task()
+    resp = api.post("task", json=task).json()
+    print_json({**resp, **summarize_task(task)})
+
+
+def cmd_status(api: AppEEARS, args) -> None:
+    task_id = resolve_task_id(api, args.task_id)
+    summary = summarize_task(api.get(f"task/{task_id}").json())
+    if summary["status"] != "done":
+        # Per-step progress lives on a separate endpoint from the task status.
+        summary["progress"] = api.get(f"status/{task_id}").json().get("progress")
+    print_json(summary)
+
+
+def cmd_list(api: AppEEARS, args) -> None:
+    print_json([
+        {k: t.get(k) for k in ("task_id", "task_name", "task_type", "status", "created", "updated")}
+        for t in list_tasks(api, args.limit)
+    ])
+
+
+def cmd_download(api: AppEEARS, args) -> None:
+    task_id = resolve_task_id(api, args.task_id)
+    status = api.get(f"task/{task_id}").json()["status"]
+    if status != "done":
+        sys.exit(f"task {task_id} is '{status}', not 'done'; nothing to download yet")
+
+    files = {f["file_name"]: f["file_id"] for f in api.get(f"bundle/{task_id}").json()["files"]}
+    expected = [spec["result_csv"] for spec in PRODUCTS.values()]
+    missing = [name for name in expected if name not in files]
+    if missing:
+        sys.exit(f"task {task_id} bundle is missing {', '.join(missing)}")
+
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    for name in expected:
+        dest = args.out_dir / name
+        resp = api.get(f"bundle/{task_id}/{files[name]}", stream=True)
         with open(dest, "wb") as f:
-            for chunk in file_resp.iter_content(chunk_size=1 << 16):
+            for chunk in resp.iter_content(chunk_size=1 << 16):
                 f.write(chunk)
         print(f"wrote {dest}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--task-id",
-        help="Resume polling/downloading an already-submitted task instead of submitting a new one",
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--poll-seconds", type=int, default=30)
-    parser.add_argument("--timeout-seconds", type=int, default=3600)
-    parser.add_argument("--out-dir", type=Path, default=Path("data-raw"))
-    args = parser.parse_args()
+    sub = parser.add_subparsers(dest="command", required=True)
 
-    token = load_token()
-    task_id = args.task_id or submit_task(token)
-    wait_for_task(token, task_id, args.poll_seconds, args.timeout_seconds)
-    download_results(token, task_id, args.out_dir)
+    sub.add_parser("submit", help="Submit a new point task and print its ID as JSON")
+
+    p = sub.add_parser("status", help="Print status of a task (default: most recent) as JSON")
+    p.add_argument("--task-id")
+
+    p = sub.add_parser("list", help="Print one page of recent tasks as JSON")
+    p.add_argument("--limit", type=int, default=10)
+
+    p = sub.add_parser("download", help="Download a finished task's CSVs (default: most recent)")
+    p.add_argument("--task-id")
+    p.add_argument("--out-dir", type=Path, default=Path("data-raw"))
+
+    args = parser.parse_args()
+    api = AppEEARS(load_token())
+    {
+        "submit": cmd_submit,
+        "status": cmd_status,
+        "list": cmd_list,
+        "download": cmd_download,
+    }[args.command](api, args)
 
 
 if __name__ == "__main__":

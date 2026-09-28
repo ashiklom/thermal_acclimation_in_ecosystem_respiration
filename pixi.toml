@@ -52,7 +52,7 @@ download-icos = {
 }
 
 download-appeears = {
-  description = "Submit/poll/download the AppEEARS MODIS point extraction (NDVI/EVI/LAI/Fpar/GPP)",
+  description = "AppEEARS MODIS point extraction (NDVI/EVI/LAI/Fpar/GPP): submit | status | list | download",
   cmd = ["uv", "run", "scripts/download-appeears.py"]
 }
 

@@ -154,14 +154,21 @@ The knock-on is worth stating plainly: `03_02` calls `randomForest()` with the
 default `na.action = na.fail` and `LAI` is one of its five predictors, so the
 driver analysis cannot run until these are supplied.
 
+`scripts/download-appeears.py` fetches them. The task takes AppEEARS several
+days to process (the 2026-09 run took about four), so the script doesn't wait.
+It has four subcommands:
+
 ```bash
-pixi run download-appeears
+pixi run download-appeears submit     # submit the task, print its ID as JSON, exit
+pixi run download-appeears status     # status/progress of the latest "towers" task
+pixi run download-appeears list       # one page of recent tasks
+pixi run download-appeears download   # fetch the three CSVs into data-raw/
 ```
 
-runs `scripts/download-appeears.py`, which submits a *point* task for the
-coordinates in `data-core/site_info.csv` over the study period for the three
-products above, polls until it finishes, and downloads the results into
-`data-raw/` under the names shown. AppEEARS's own login endpoint
+`status` and `download` take `--task-id` to target a specific task instead of
+the most recent one named `towers`. `submit` sends a *point* request for the
+coordinates in `data-core/site_info.csv` over 2000-2026 for the three products
+above. `download` refuses to run until the task is `done`. AppEEARS's own login endpoint
 (`/api/login`, username/password) is currently broken, so the script
 authenticates with the `appeears_token` bearer token already present in
 `_creds.toml` instead of trying to obtain one itself. That token is short-lived

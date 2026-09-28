@@ -308,8 +308,9 @@ outputs <- list(
 #
 # MODIS/AppEEARS is deliberately absent from this list: it's an asynchronous
 # submit/poll/download task rather than a single blocking fetch, so it doesn't
-# fit the `tar_file()` pattern here. Run `pixi run download-appeears` by hand
-# instead; `03_01` degrades to NA spectral predictors without it. See
+# fit the `tar_file()` pattern here. Use `pixi run download-appeears submit`,
+# then `... download` days later; `03_01` degrades to NA spectral predictors
+# without it. See
 # docs/data-provenance.md.
 external <- list(
   tar_file(ameriflux_bif_file, download_ameriflux_bif()),
