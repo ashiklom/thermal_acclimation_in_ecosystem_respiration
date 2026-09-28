@@ -350,7 +350,9 @@ ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path =
   sites <- get_site_info(path = site_info_path)[["site_ID"]]
   if (file.exists(path)) {
     have <- load_era5_table(path)
-    missing_sites <- setdiff(sites, have$site)
+    # All-NA counts as missing, as in the script: a sea cell extracted before
+    # its COASTAL_SITES entry existed.
+    missing_sites <- setdiff(sites, have$site[!is.na(have$SWC)])
     last <- max(have$time)
     if (!length(missing_sites) && (is.na(through) || last >= through)) {
       return(path)

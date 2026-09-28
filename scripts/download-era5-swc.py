@@ -128,7 +128,42 @@ def extract_group(sites, start):
     """`extract_daily()` over `sites`, split into regular and coastal ones."""
     sites = site_info.loc[site_info["site_ID"].isin(sites)]
     coastal_mask = sites["site_ID"].isin(COASTAL_SITES)
-    existing = None
+    # Regular sites: the tower coordinate is inside the land mask, so the
+    # nearest cell is the right cell.
+    regular = sites.loc[~coastal_mask]
+    daily_regular = extract_daily(
+        regular["site_ID"].to_numpy(),
+        regular["LAT"].to_numpy(),
+        regular["LONG"].to_numpy(),
+        start,
+    )
+    # Coastal sites: identical extraction, but off the substituted land
+    # coordinate instead of the tower coordinate.
+    coastal = sites.loc[coastal_mask, "site_ID"].to_numpy()
+    daily_coastal = extract_daily(
+        coastal,
+        [COASTAL_SITES[s][0] for s in coastal],
+        [COASTAL_SITES[s][1] for s in coastal],
+        start,
+    )
+    # A substituted coordinate that is still in the water would hand the
+    # analysis layer a silently empty column, so refuse to write one.
+    still_sea = [s for s in coastal if daily_coastal[s].isna().all()]
+    if still_sea:
+        raise ValueError(
+            "COASTAL_SITES coordinates are still outside the ERA5-Land land mask "
+            f"for: {', '.join(still_sea)}. Re-run "
+            "`scripts/find-coastal-land-pixel.py` for these sites."
+        )
+    wide = pd.concat([daily_regular, daily_coastal], axis=1)
+    wide.index.name = "time"
+    wide.columns.name = "site"
+    long = wide.stack()
+    long.name = "SWC"
+    return long.reset_index()
+
+
+existing = None
 if OUT.exists() and not args.full:
     existing = pd.read_csv(OUT, parse_dates=["time"])
 
@@ -137,7 +172,10 @@ pieces = []
 if existing is None:
     new_sites, old_sites = all_sites, []
 else:
-    have = set(existing["site"])
+    # A site whose rows are all NaN counts as missing. That is what a sea cell
+    # extracted before its COASTAL_SITES entry existed looks like, and
+    # extending it would only append good days to a record that stays empty.
+    have = set(existing.loc[existing["SWC"].notna(), "site"])
     new_sites = [s for s in all_sites if s not in have]
     old_sites = [s for s in all_sites if s in have]
     # One extension start for all existing sites. The file is always written
@@ -168,6 +206,11 @@ daily_long = (daily_long
               .assign(_o=daily_long["site"].map(order))
               .sort_values(["time", "_o"])
               .drop(columns="_o"))
+
+# float32 is what ERA5 stores and what the file has always held; without the
+# cast, rows read back from the existing file are written out as float64 and
+# every old value changes its last digits.
+daily_long["SWC"] = daily_long["SWC"].astype("float32")
 
 # Write beside the target and rename, so an interrupted run never leaves a
 # truncated file that the next incremental run would then extend.
