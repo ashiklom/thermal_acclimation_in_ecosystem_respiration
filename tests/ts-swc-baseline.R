@@ -361,6 +361,24 @@ for (name_site in sites) {
 report <- dplyr::bind_rows(rows) |> dplyr::arrange(.data$site_ID, .data$direct)
 outfile <- file.path("tests", "fixtures", "ts-swc-baseline.csv")
 
+# Which data release each site's baseline rows were computed from. data-raw/ is
+# updated in place when providers publish (`scripts/scan-and-run.sh`), and a
+# digest computed on one release says nothing about the next; comparing them
+# would report every new year of data as a regression. So each site's releases
+# are recorded on --write, and on comparison a site whose releases have moved
+# on is reported and skipped rather than failed. The selection checks above are
+# computed fresh on both sides and run regardless.
+data_ids_file <- file.path("tests", "fixtures", "ts-swc-baseline-data.csv")
+site_data_ids <- function(name_site) {
+  products <- site_sources(get_site_info(name_site))
+  tibble::tibble(
+    site_ID = name_site,
+    product = products,
+    data_id = vapply(products, function(p) local_remote_id(name_site, p), "")
+  )
+}
+current_ids <- dplyr::bind_rows(lapply(unique(report$site_ID), site_data_ids))
+
 sel_report <- dplyr::bind_rows(selection)
 selection_failed <- FALSE
 if (nrow(sel_report)) {
@@ -429,6 +447,13 @@ if (write_mode || !file.exists(outfile)) {
   body <- body[order(sub(",.*$", "", body), body)]
   writeLines(c(header, body), outfile)
   cat("  WROTE baseline:", outfile, "(", length(body), "rows )\n")
+
+  ids <- current_ids
+  if (file.exists(data_ids_file)) {
+    old_ids <- readr::read_csv(data_ids_file, col_types = "ccc")
+    ids <- dplyr::bind_rows(dplyr::filter(old_ids, !.data$site_ID %in% ids$site_ID), ids)
+  }
+  readr::write_csv(dplyr::arrange(ids, .data$site_ID, .data$product), data_ids_file, na = "")
   quit(status = if (selection_failed) 1 else 0)
 }
 
@@ -437,6 +462,33 @@ if (write_mode || !file.exists(outfile)) {
 ref <- readr::read_csv(outfile, show_col_types = FALSE)
 key <- c("site_ID", "direct")
 common_sites <- intersect(report$site_ID, ref$site_ID)
+
+recorded_ids <- if (file.exists(data_ids_file)) {
+  readr::read_csv(data_ids_file, col_types = "ccc")
+} else {
+  current_ids[0, ]
+}
+id_key <- function(d) paste(d$product, d$data_id, sep = "=")
+data_moved <- Filter(function(site) {
+  now <- dplyr::filter(current_ids, .data$site_ID == site)
+  then <- dplyr::filter(recorded_ids, .data$site_ID == site)
+  !setequal(id_key(now), id_key(then))
+}, common_sites)
+if (length(data_moved)) {
+  cat("\n============ DATA CHANGED SINCE BASELINE ============\n")
+  moved <- dplyr::full_join(
+    dplyr::filter(recorded_ids, .data$site_ID %in% data_moved),
+    dplyr::filter(current_ids, .data$site_ID %in% data_moved),
+    by = c("site_ID", "product"), suffix = c("_baseline", "_now")
+  )
+  print(as.data.frame(moved), row.names = FALSE)
+  cat(
+    "\n  Digests not compared for these sites: they were computed on other data.\n",
+    " Re-baseline them once reviewed:\n",
+    "   Rscript tests/ts-swc-baseline.R --write --sites", paste(data_moved, collapse = ","), "\n"
+  )
+  common_sites <- setdiff(common_sites, data_moved)
+}
 cmp <- dplyr::inner_join(
   report |> dplyr::filter(.data$site_ID %in% common_sites),
   ref |> dplyr::filter(.data$site_ID %in% common_sites),
