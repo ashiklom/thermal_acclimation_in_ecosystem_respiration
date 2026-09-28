@@ -51,11 +51,12 @@ read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_sw
     )
   }
 
-  # Rows present but every value empty. ERA5-Land is masked to land, and the
-  # extractor in `scripts/download-era5-swc.py` takes the nearest grid cell
-  # without regard to that mask, so a site close enough to the coast draws a
-  # sea cell and gets a full date range of NaN. IT-Noe (Sardinia, 40.61N
-  # 8.15E) is the one site of 117 where this happens today.
+  # Rows present but every value empty. ERA5-Land is masked to land, so a site
+  # close enough to the coast draws a sea cell and gets a full date range of
+  # NaN. Sites known to need a substituted land coordinate are listed in
+  # `COASTAL_SITES` in `scripts/download-era5-swc.py`, which extracts them off
+  # that coordinate instead of the tower's; reaching this guard means a site
+  # needs an entry there that it does not have.
   #
   # Checked before the unit guard below, which would otherwise catch this
   # case via `max(NA, na.rm = TRUE)` being -Inf and report it as a units
@@ -64,8 +65,10 @@ read_era5_swc <- function(name_site, path = file.path("data-raw", "ERA5_daily_sw
     stop(
       "ERA5 data found but all values are NA for site ", name_site, " in ", path,
       " (", nrow(swc), " rows, ", min(swc$time), " to ", max(swc$time), "). ",
-      "The nearest ERA5-Land cell is most likely outside the land mask; ",
-      "re-downloading will not change this."
+      "The nearest ERA5-Land cell is most likely outside the land mask. ",
+      "Run `scripts/find-coastal-land-pixel.py ", name_site, "` and add the ",
+      "result to COASTAL_SITES in scripts/download-era5-swc.py, then ",
+      "re-download; re-downloading on its own will not change this."
     )
   }
 
