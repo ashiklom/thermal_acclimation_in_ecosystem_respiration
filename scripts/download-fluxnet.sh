@@ -3,16 +3,15 @@
 # Download FLUXNET-Archive data with the fluxnet-shuttle CLI, and extract each
 # site's tables into data-raw/FLUXNET/<site>/. Run inside the pixi environment:
 #
-#   pixi run bash scripts/download-fluxnet.sh
 #   pixi run bash scripts/download-fluxnet.sh --sites FR-Pue CZ-RAJ
-#   pixi run bash scripts/download-fluxnet.sh --overwrite
+#
+# Whether a site needs downloading at all is decided by the caller
+# (`download_site()` in R/download.R); this always fetches what it is given.
 
 set -euo pipefail
 
-# Defaults
 SNAPSHOT_FILE=""
 OUTPUT_DIR="data-raw/FLUXNET"
-OVERWRITE=false
 SITES=()
 
 # Parse arguments
@@ -30,23 +29,14 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -o|--overwrite)
-            OVERWRITE=true
+            # Accepted for the R caller; the shuttle always re-downloads.
             shift
             ;;
-        -d|--output-dir)
-            OUTPUT_DIR="$2"
-            shift 2
-            ;;
         -h|--help)
-            echo "Usage: $0 [OPTIONS] [--sites SITE1 SITE2 ...]"
+            echo "Usage: $0 --sites SITE1 [SITE2 ...] [--snapshot FILE]"
             echo ""
-            echo "Download FLUXNET data using fluxnet-shuttle CLI"
-            echo ""
-            echo "Options:"
-            echo "  -s, --sites SITE1 SITE2  Space-separated list of site IDs to download"
-            echo "  -f, --snapshot FILE      Path to snapshot CSV file (default: fluxnet_shuttle_snapshot_*.csv)"
-            echo "  -o, --overwrite          Overwrite existing files"
-            echo "  -d, --output-dir DIR     Output directory (default: data-raw/FLUXNET)"
+            echo "  -s, --sites SITE1 SITE2  Site IDs to download (required)"
+            echo "  -f, --snapshot FILE      Snapshot CSV (default: the newest data-raw/fluxnet_shuttle_snapshot_*.csv)"
             echo "  -h, --help               Show this help message"
             exit 0
             ;;
@@ -56,6 +46,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ ${#SITES[@]} -eq 0 ]]; then
+  echo "Error: --sites is required." >&2
+  exit 2
+fi
 
 # Resolve the snapshot file.
 if [[ -n "$SNAPSHOT_FILE" ]]; then
@@ -82,35 +77,6 @@ mkdir -p "$OUTPUT_DIR"
 
 # Build command
 CMD=(fluxnet-shuttle download --snapshot-file "$SNAPSHOT_FILE" --output-dir "$OUTPUT_DIR" --quiet)
-
-# If sites are not specified, download all missing FLUXNET sites from site_info.csv
-if [[ ! ${#SITES[@]} -gt 0 ]]; then
-  PRESENT=()
-  while IFS= read -r line; do
-    site="$line"
-    present=$(find data-raw/FLUXNET -name "*_${site}_FLUXNET_*.zip")
-    if [[ -n "$present" ]] && [[ "$OVERWRITE" != "true" ]]; then
-      PRESENT+=($site)
-    else
-      SITES+=($site)
-    fi
-  done < <(Rscript - <<'EOF'
-sites <- readr::read_csv("data-core/site_info.csv", col_select = c("site_ID", "source"), show_col_types = FALSE)
-fluxnet_sites <- sites |>
-  dplyr::filter(.data$source == "FLUXNET") |>
-  dplyr::arrange(.data$site_ID) |>
-  dplyr::pull(.data$site_ID)
-cat(fluxnet_sites, sep="\n")
-EOF
-)
-  echo "Skipping existing sites: ${PRESENT[*]}"
-  echo "Sites to download: ${SITES[*]}"
-fi
-
-if [[ ! "${#SITES[@]}" -gt 0 ]]; then
-  echo "No sites to download. Exiting."
-  exit 0
-fi
 
 CMD+=(--sites "${SITES[@]}")
 

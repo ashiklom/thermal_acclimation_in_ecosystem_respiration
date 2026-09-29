@@ -236,7 +236,7 @@ again once.
 # one product for one site
 pixi run download-icos -- --product icos   --sites DE-Tha --overwrite
 pixi run download-icos -- --product ww2020 --sites GF-Guy
-pixi run bash scripts/download-fluxnet.sh --sites DE-Tha --overwrite
+pixi run bash scripts/download-fluxnet.sh --sites DE-Tha
 
 # or let the pipeline fetch whatever a site declares
 pixi run R -e 'targets::tar_source(); download_site(get_site_info("DE-Tha"), overwrite = TRUE)'
