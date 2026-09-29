@@ -66,13 +66,8 @@ prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
   a <- read_spliced_products(site_info)
 
   dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
-  a$TIMESTAMP <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
-  a$YEAR <- lubridate::year(a$TIMESTAMP)
-  a$MONTH <- lubridate::month(a$TIMESTAMP)
-  a$DAY <- lubridate::day(a$TIMESTAMP)
-  a$DOY <- wrap_growing_doy(lubridate::yday(a$TIMESTAMP), growing_year_start(site_info))
-  a$HOUR <- lubridate::hour(a$TIMESTAMP)
-  a$MINUTE <- lubridate::minute(a$TIMESTAMP)
+  a <- add_timestamp_columns(a, dt)
+  a$DOY <- wrap_growing_doy(a$DOY, growing_year_start(site_info))
 
   # Soil temperature, stage A: the sensor after its per-site repairs, or a
   # reconstruction where the site has none. Which is `ts_source` in
@@ -125,7 +120,8 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
 
   # Both readers return `list(ac =, dt =, ts_provenance =)`; the AmeriFlux one
   # also returns the growing season its u-star filtering was built on.
-  if (site_reader(site_info) == "ameriflux") {
+  is_ameriflux <- site_reader(site_info) == "ameriflux"
+  if (is_ameriflux) {
     prepared <- prep_ameriflux(site_info, ts_qc = recipe$ts_qc)
     ac <- prepared[["ac"]]
     gs <- prepared[["gs"]]
@@ -187,7 +183,6 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   # preserved here -- before the gap scan at CH-Dav (so it can change which
   # years qualify), after it at US-Ha1 and US-GLE.
   truncate_cold <- name_site %in% SITES_TS_MIN_2C
-  is_ameriflux <- site_reader(site_info) == "ameriflux"
   if (truncate_cold) {
     tStart <- max(tStart, TS_MIN_VALID)
     if (!is_ameriflux) {
@@ -315,11 +310,13 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     tEnd = unname(tEnd),
     nyear = length(good_years),
     # The DOY origin of these bounds, for `choose_window_season()`.
-    growing_year_start = growing_year_start(site_info)
+    growing_year_start = growing_year_start(site_info),
+    # The record's time step, as the reader measured it.
+    dt_minutes = as.numeric(dt, units = "mins")
   )
 
   # The verdict the `screen_best`/`memory_fill` strategies branch on.
-  ts_qc <- ts_quality(ac_final, ts_col = "TS_measured", ta_col = "TA") |>
+  ts_qc <- ts_quality(ac_final, dt_hours = as.numeric(dt, units = "hours")) |>
     dplyr::mutate(site_ID = name_site, .before = 1)
 
   out <- list(

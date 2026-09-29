@@ -13,6 +13,7 @@ parse_removed_years <- function(value) {
   }))
 }
 
+# Calendar columns from the midpoint of each interval (`dt` is the time step).
 add_timestamp_columns <- function(a, dt) {
   a$TIMESTAMP <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
   a$YEAR <- lubridate::year(a$TIMESTAMP)

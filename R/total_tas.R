@@ -233,6 +233,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   recipe <- recipe %||% original_recipe()
   validate_recipe(recipe)
   fs <- fit_settings(fit_profile)
+  model_name <- if (direct) "direct" else "total"
 
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
@@ -287,11 +288,9 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   wStart <- win[["gStart"]]
   wEnd <- win[["gEnd"]]
 
-  # calculate daily daytime NEE and rolling average
-  # Is the data 30 minute or hourly? TODO: Check this logic!
-  dt <- if (ac$MINUTE[2] - ac$MINUTE[1] != 30) 60 else 30
+  # Daily daytime NEE (umol/m2/s), and its rolling mean.
+  dt <- feature_gs[["dt_minutes"]]
 
-  # unit is umol / m2 / s
   ac_day <- ac |>
     dplyr::filter(.data$daytime) |>
     dplyr::summarise(
@@ -347,12 +346,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
 
   control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
 
-  # determine moving window size and number of windows
-  if (dt == 30) {
-    nobs_threshold <- 100
-  } else {
-    nobs_threshold <- 60
-  }
+  # Minimum observations per window-year, by time step.
+  nobs_threshold <- if (dt == 30) 100 else 60
 
   # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
   nwindow <- max(round((wEnd - wStart + 1) / WINDOW_SIZE), 1)
@@ -362,7 +357,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   settings <- tibble::tibble(
     site_ID = name_site,
     recipe_id = recipe$recipe_id,
-    model = if (direct) "direct" else "total",
+    model = model_name,
     fit_profile = fs$profile,
     ts_col = ts_meta[["ts_col"]],
     swc_col = if (is.na(swc_col)) NA_character_ else swc_col,
@@ -423,7 +418,6 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     stop("No results produced, possibly because all windows were skipped.")
   }
 
-  model_name <- if (direct) "direct" else "total"
   window_results_df <- window_results |>
     lapply(`[[`, "outcome_siteyear") |>
     dplyr::bind_rows() |>
@@ -461,7 +455,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   outcome <- tibble::tibble(
     site_ID = name_site,
     recipe_id = recipe$recipe_id,
-    model = if (direct) "direct" else "total",
+    model = model_name,
     fit_profile = fs$profile,
     RMSE = fit_stats[["RMSE"]],
     R2 = fit_stats[["Rsquared"]],

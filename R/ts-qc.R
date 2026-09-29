@@ -117,8 +117,7 @@ ts_verdict_from <- function(diag) {
 
 # The verdict on the column step 01 leaves as measured -- the one a run would
 # fit on. The raw-record screen for unseen sites is scripts/ts-qc-screen.R.
-ts_quality <- function(ac, ts_col = "TS_measured", ta_col = "TA") {
-  dt_hours <- if (length(unique(ac$MINUTE)) > 1) 0.5 else 1
+ts_quality <- function(ac, dt_hours, ts_col = "TS_measured", ta_col = "TA") {
   ts_diagnostics(ac, ac[[ts_col]], ac[[ta_col]], dt_hours = dt_hours) |>
     ts_verdict_from() |>
     dplyr::mutate(ts_col = ts_col, .before = 1)

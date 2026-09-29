@@ -284,7 +284,7 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
   gStart <- fg$gStart; gEnd <- fg$gEnd
   in_gs <- dplyr::between(feats$DOY, gStart, gEnd)
   gs <- feats[in_gs, , drop = FALSE]
-  min_obs_day <- if (length(unique(gs$MINUTE)) > 1) 40 else 20
+  min_obs_day <- if (fg$dt_minutes < 60) 40 else 20
 
   blocks <- ts_fill_blocks(feats, blocking)
   scores <- list()
