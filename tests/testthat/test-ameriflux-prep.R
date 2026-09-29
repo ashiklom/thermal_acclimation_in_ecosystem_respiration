@@ -297,3 +297,22 @@ for (case in row_range_cases) {
     }
   })
 }
+
+test_that("gaps are filled from the same time a fixed number of days later", {
+  ts <- as.POSIXct("2010-01-01", tz = "UTC") + 86400 * 0:9
+  x <- c(NA, 2, NA, 4, 5, 6, NA, 8, 9, 10)
+  # three days on: row 1 <- row 4, row 3 <- row 6, row 7 <- row 10
+  expect_equal(fill_from_later(x, ts, days = 3), c(4, 2, 6, 4, 5, 6, 10, 8, 9, 10))
+  # matched on time, not position: a missing row leaves the gap unfilled
+  expect_equal(fill_from_later(x[-4], ts[-4], days = 3), c(NA, 2, 6, 5, 6, 10, 8, 9, 10))
+})
+
+test_that("US-Jo2's SW_IN fill reproduces the original row offset on its release", {
+  path <- file.path(DIR_RAWDATA, "Ameriflux", "US-Jo2", "AMF_US-Jo2_BASE-BADM_2-5.zip")
+  skip_if_not(file.exists(path), "AMF_US-Jo2_BASE-BADM_2-5.zip not on disk")
+  a <- suppressMessages(amerifluxr::amf_read_base(path, parse_timestamp = TRUE, unzip = TRUE))
+  x <- a$SW_IN
+  by_row <- x
+  by_row[is.na(x)] <- x[which(is.na(x)) + 365 * 48 * 4]
+  expect_identical(fill_from_later(x, a$TIMESTAMP, days = 365 * 4), by_row)
+})

@@ -298,9 +298,10 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
   }
 
   # US-Jo2 has no SW_IN before 2013, which REddyProc cannot run without: fill
-  # it from the same half-hour four years (365 * 48 * 4 rows) later.
+  # it from the same half-hour 1460 days later. (The original took the row
+  # 365 * 48 * 4 further on, which is the same row only on a gap-free record.)
   if (name_site == "US-Jo2") {
-    ac$SW_IN[is.na(ac$SW_IN)] <- ac$SW_IN[which(is.na(ac$SW_IN)) + 365 * 48 * 4]
+    ac$SW_IN <- fill_from_later(ac$SW_IN, ac$TIMESTAMP, days = 365 * 4)
   } else if (name_site == "US-KM4") {
     # use PI gap-filled data
     ac$SW_IN[is.na(ac$SW_IN)] <- a$SW_IN_PI_F[is.na(ac$SW_IN)]
@@ -360,4 +361,13 @@ site_sunlight_times <- function(site_info, dates) {
 site_utc_offset <- function(site_info) {
   zone <- lutz::tz_lookup_coords(lat = site_info[["LAT"]], lon = site_info[["LONG"]], method = "accurate")
   lutz::tz_offset(as.Date("2000-01-01"), zone)$utc_offset_h
+}
+
+# Fill the gaps in `x` with its value at the same time of day `days` later,
+# matched on `timestamp`; NA where there is no such row.
+fill_from_later <- function(x, timestamp, days) {
+  gap <- which(is.na(x))
+  later <- match(timestamp[gap] + as.difftime(days, units = "days"), timestamp)
+  x[gap] <- x[later]
+  x
 }
