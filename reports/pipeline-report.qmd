@@ -88,8 +88,7 @@ sites <- if (!is.null(outcome_total)) outcome_total$site_ID else character()
 # Every site the pipeline could have run, i.e. every row of the declaration
 # file, against the ones that came through with an outcome. The gap is sites
 # whose download, step 01 or fits errored; `tar_meta(fields = error)` says
-# which. Reported as a count rather than as a callout about the default
-# six-site sample, which was static text and so fired on full runs too.
+# which.
 sites_declared <- nrow(read.csv(file.path("data-core", "site_info.csv")))
 ```
 
@@ -396,11 +395,10 @@ if (is.null(future_er)) {
 
 - **Subset run.** Any statistic that pools across sites is not comparable to the
   manuscript, whose published numbers are all computed on exactly 117 sites.
-- **No sampler seed.** `predict_soil_temp()` takes a `seed` argument that its only
-  caller omits, and nothing seeds the Stan fits. Re-running moves TAS by roughly
-  `r TAS_NOISE`; the random-forest soil-temperature branch is non-deterministic
-  run to run.
-- **Missing MODIS.** The spectral predictors have no downloader in this repo.
+- **No sampler seed.** Nothing seeds the Stan fits, so re-running moves TAS by
+  roughly `r TAS_NOISE`.
+- **MODIS.** The spectral predictors come from `pixi run download-appeears`,
+  outside the pipeline; without them `03_01` writes NA and `03_02` cannot run.
 - **Sites missing from one model.** A site can fit under `total` and fail under
   `direct`, or the reverse, so the two outcome tables need not hold the same
   sites. `02_02` joins on `site_ID` and excludes those sites with a warning,
