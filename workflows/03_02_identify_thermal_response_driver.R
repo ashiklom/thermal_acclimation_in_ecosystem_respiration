@@ -77,9 +77,19 @@ invisible(caret::train(
 
 acclimation$climate_vegetation <- paste0(acclimation$Climate_class, "_", acclimation$IGBP)
 
+# A forest, or NULL with a warning if it cannot be fitted, so a failure costs
+# that result rather than the whole script. A site with no TAS in
+# acclimation_data.csv fails randomForest()'s na.fail at every fit of that
+# response, so its importances and partial dependence come out NA/absent.
 fit_rf <- function(formula, data) {
-  randomForest::randomForest(formula = formula, data = data, do.trace = FALSE,
-                             mtry = 1, nodesize = 30, ntree = 500, importance = TRUE)
+  tryCatch(
+    randomForest::randomForest(formula = formula, data = data, do.trace = FALSE,
+                               mtry = 1, nodesize = 30, ntree = 500, importance = TRUE),
+    error = function(e) {
+      warning("random forest for ", deparse(formula), " failed: ", conditionMessage(e), call. = FALSE)
+      NULL
+    }
+  )
 }
 
 # Partial dependence of `response` on each predictor, with a bootstrap
@@ -98,11 +108,14 @@ boot_partial <- function(response, pred_data, times = 200) {
     # The stratifier is not a predictor.
     data_sample <- data_sample[, setdiff(names(data_sample), "climate_vegetation")]
     rf <- fit_rf(formula, data_sample)
+    if (is.null(rf)) return(NULL)
     # do.call: partialPlot() reads `x.var` with substitute().
     lapply(vars, function(v) {
       do.call(randomForest::partialPlot, list(rf, pred.data = pred_data, x.var = v, plot = FALSE))
     })
   })
+  curves <- Filter(Negate(is.null), curves)
+  if (!length(curves)) return(NULL)
   do.call(rbind, lapply(names(vars), function(label) {
     x <- curves[[1]][[label]]$x
     y <- sapply(curves, function(curve) curve[[label]]$y)
@@ -117,15 +130,21 @@ boot_partial <- function(response, pred_data, times = 200) {
 rf_importance <- function(trs_type, data) {
   formula <- stats::as.formula(paste(names(data)[[1]], "~ ."))
   ri <- matrix(NA_real_, nrow = 50, ncol = ncol(data) - 1)
+  last <- NULL
   for (i in 1:50) {
     rf0 <- fit_rf(formula, data)
+    if (is.null(rf0)) next
+    last <- rf0
     ri_nonnegative <- pmax(randomForest::importance(rf0, type = 1, scale = TRUE), 0)
     ri[i, ] <- ri_nonnegative / sum(ri_nonnegative) * 100
   }
-  print(caret::postResample(pred = predict(rf0, data), obs = data[[1]]))
+  if (is.null(last)) {
+    return(data.frame(TRS_type = trs_type, var = names(data)[-1], varImp = NA_real_))
+  }
+  print(caret::postResample(pred = predict(last, data), obs = data[[1]]))
   data.frame(
     TRS_type = trs_type,
-    var = rownames(randomForest::importance(rf0, type = 1, scale = TRUE)),
+    var = rownames(randomForest::importance(last, type = 1, scale = TRUE)),
     varImp = colMeans(ri, na.rm = TRUE)
   )
 }
@@ -141,10 +160,11 @@ data_TAS_app <- acclimation[, c("TAS_app", "LAI", "ELEV", "MATA", "SOC", "warm_r
 varImp_app <- rf_importance("TAS_app", data_TAS_app)
 partial_app <- boot_partial("TAS_app", data_TAS_app)
 
+with_type <- function(trs_type, partial) if (!is.null(partial)) data.frame(TRS_type = trs_type, partial)
 partial_output <- rbind(
-  data.frame(TRS_type = "TAS_direct", partial_direct),
-  data.frame(TRS_type = "TAS_total", partial_total),
-  data.frame(TRS_type = "TAS_app", partial_app)
+  with_type("TAS_direct", partial_direct),
+  with_type("TAS_total", partial_total),
+  with_type("TAS_app", partial_app)
 )
 varImp_output <- rbind(varImp_direct, varImp_total, varImp_app)
 
