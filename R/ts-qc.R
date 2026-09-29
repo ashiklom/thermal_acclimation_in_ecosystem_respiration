@@ -7,7 +7,7 @@
 # the surface, pulled out of the ground, or reporting air temperature under
 # another name has an amplitude ratio near 1 and a lag near 0, whatever its
 # column is called. The full derivation and the calibration over all 117 sites
-# is in ts-rework.html (findings F5, F9, F11).
+# is in docs/ts-rework.html (findings F5, F9, F11).
 #
 # Two of the three structural rules first proposed were falsified by the data
 # and are *not* here: the amplitude-vs-lag consistency test (the two estimates
@@ -18,7 +18,7 @@
 # against the project's hand-made calls, plus the air-like rule whose three
 # "false positives" were judged to be detections.
 
-# Thresholds. First pass, calibrated only as far as ts-rework.html describes.
+# Thresholds. First pass, calibrated only as far as docs/ts-rework.html describes.
 TS_QC_AIRLIKE_AMP <- 0.85    # buried soil damps; this much amplitude is not soil
 TS_QC_AIRLIKE_LAG <- 0.75    # ... and it should lag, in hours
 TS_QC_FLAT_AMP <- 0.03       # no diurnal signal at all

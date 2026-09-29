@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soil temperature rework &mdash; plan, progress, findings</title>
+<style>
+  :root{
+    --ink:#16181d; --ink-2:#4a5058; --line:#e2e5ea; --bg:#ffffff; --bg-2:#f7f8fa;
+    --blocker:#b3261e; --high:#b5610a; --med:#7a6a00; --low:#4a5058; --ok:#1f6f43;
+    --accent:#2b4c7e; --todo:#8a8f98;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 1.25rem 5rem;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .wrap{max-width:62rem;margin:0 auto}
+  header{padding:3rem 0 1.5rem;border-bottom:2px solid var(--ink)}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 .5rem;letter-spacing:-.01em}
+  .sub{color:var(--ink-2);font-size:.95rem;margin:0}
+  h2{font-size:1.35rem;margin:3rem 0 .25rem;padding-bottom:.35rem;border-bottom:1px solid var(--line);letter-spacing:-.01em}
+  h3{font-size:1.05rem;margin:2rem 0 .4rem}
+  h4{font-size:.95rem;margin:1.4rem 0 .3rem;color:var(--accent)}
+  p{margin:.6rem 0}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.875em}
+  code{background:var(--bg-2);padding:.1em .35em;border-radius:3px;border:1px solid var(--line)}
+  pre{background:var(--bg-2);border:1px solid var(--line);border-left:3px solid var(--accent);
+      border-radius:4px;padding:.8rem 1rem;overflow-x:auto;font-size:.82rem;line-height:1.5;margin:.7rem 0}
+  pre code{background:none;border:none;padding:0}
+  table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.9rem}
+  th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--bg-2);font-weight:600;font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-2)}
+  .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em}
+  .tag{display:inline-block;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+       padding:.15em .5em;border-radius:3px;color:#fff;white-space:nowrap}
+  .t-done{background:var(--ok)} .t-prog{background:var(--high)} .t-todo{background:var(--todo)}
+  .t-key{background:var(--blocker)} .t-info{background:var(--accent)}
+  .finding{border:1px solid var(--line);border-radius:6px;padding:1rem 1.15rem;margin:1.1rem 0;background:var(--bg)}
+  .finding.key{border-left:4px solid var(--blocker)}
+  .finding.done{border-left:4px solid var(--ok);background:#fbfdfc}
+  .finding.prog{border-left:4px solid var(--high)}
+  .finding h3{margin:0 0 .5rem;font-size:1.02rem;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+  .note{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:.9rem 1.1rem;margin:1.2rem 0}
+  .note strong:first-child{color:var(--accent)}
+  .status{border:2px solid var(--accent);border-radius:6px;padding:1rem 1.3rem;margin:1.5rem 0;background:#f7f9fc}
+  .status h3{margin:0 0 .5rem;font-size:1rem;color:var(--accent)}
+  ul,ol{margin:.5rem 0;padding-left:1.4rem}
+  li{margin:.3rem 0}
+  .lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2)}
+  footer{margin-top:4rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.82rem;color:var(--ink-2)}
+  .toc{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:1rem 1.3rem;margin:1.5rem 0}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Soil temperature rework<br>Plan, progress and findings</h1>
+  <p class="sub">Branch <code>ts-rework</code>, worktree <code>./ts-rework</code>, branched from <code>fix-refactor-blockers</code> at <code>8a8b013</code>. Started 2026-09-19. This document is updated as work lands.</p>
+</header>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#why">Why: what is wrong with the current soil-temperature path</a></li>
+    <li><a href="#plan">The plan, and the order it is being done in</a></li>
+    <li><a href="#progress">Progress log</a></li>
+    <li><a href="#findings">Findings</a></li>
+    <li><a href="#setup">Worktree and environment setup</a></li>
+  </ol>
+</div>
+
+<div class="status">
+<h3>Status</h3>
+<p style="margin:.3rem 0"><strong>Steps 0&ndash;3 are done.</strong> Eight commits on <code>ts-rework</code>; the suite passes 386/386 and the frozen TS/SWC oracle stayed byte-identical to its committed baseline through every change. Steps 4 (ERA5-anchored filling) and 5 (uncertainty propagation) are not started.</p>
+<p style="margin:.3rem 0"><strong>Three results worth acting on.</strong></p>
+<ol style="margin:.3rem 0 .6rem">
+<li><strong>The substitution changes the published number.</strong> TAS moves by far more than sampler noise at four of five sites fitted both ways: &minus;39% at the one site where TAS is statistically significant, and a sign flip at another. Fitted <code>alpha</code> deflates at five of five, exactly as the inflated within-cell spread predicts.</li>
+<li><strong>More than half the sites whose soil temperature is discarded show no defect in it.</strong> 27 of 50 hand-flagged sites pass every physical test; nine are unambiguously healthy, including NL-Loo's 508,416 gap-free observations over 29 years.</li>
+<li><strong>The replacement is cheap and already available.</strong> Adding running means of air temperature over 3, 7 and 30 days &mdash; no new data, no new dependency &mdash; cuts out-of-fold error by a median 58% and wins at 42 of 43 sites.</li>
+</ol>
+</div>
+
+<h2 id="why">1. Why: what is wrong with the current soil-temperature path</h2>
+
+<p>The pipeline reconstructs soil temperature at a large fraction of its sites, and the reconstruction is almost always a function of <em>air</em> temperature:</p>
+
+<table>
+<thead><tr><th>Group</th><th class="num">Sites</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td><code>ts_col = "TS_linear"</code></td><td class="num">35</td><td>Measured <code>TS</code> overlaid with a <code>TS ~ TA</code> regression in step&nbsp;02.</td></tr>
+<tr><td><code>estimate_Ts = YES</code></td><td class="num">16</td><td><code>fix_soil_temp()</code> in step&nbsp;01: random forest on <code>TA + NETRAD</code> (8), <code>lm(TS ~ TA + NETRAD)</code> (2), <code>TS ~ TA</code> otherwise.</td></tr>
+<tr><td><code>SITES_TS_FROM_TA_*</code></td><td class="num">7</td><td>AmeriFlux sites whose <code>TS</code> column is <em>constructed</em> from <code>TA</code> wholesale.</td></tr>
+<tr><td>Manual <code>year_removed</code></td><td class="num">20</td><td>Hand-entered year exclusions.</td></tr>
+<tr><td>Manual <code>gStart</code>/<code>gEnd</code></td><td class="num">18 / 17</td><td>Hand-entered growing-season overrides.</td></tr>
+</tbody>
+</table>
+
+<p>Out of 117 sites. Three problems follow.</p>
+
+<div class="finding key">
+<h3><span class="tag t-key">Key risk</span> A TS that is a function of TA may not support the direct/indirect decomposition</h3>
+<p><code>BRM_FORMULA_DIRECT</code> separates a direct thermal response from indirect effects mediated by GPP and soil water. GPP is itself strongly driven by air temperature. Where <code>TS</code> is an affine function of <code>TA</code>, the variation that decomposition rests on has been collapsed by construction, and the estimate at those sites may not be the same quantity as at sites with real measurements.</p>
+<p><strong>This is testable now</strong>, cheaply, because <code>prep_nee_ac()</code> already carries <code>TS_measured</code> and <code>TS_linear</code> side by side and <code>total_tas_site()</code> takes a <code>ts_col=</code> override. Fit good-TS sites both ways and measure how far TAS moves. That result determines how much the rest of this work is worth, which is why it is first.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">Key defect</span> The random-forest skill estimate is measured on a split that cannot fail</h3>
+<p><code>predict_soil_temp()</code> (<code>R/predict-soil-temp.R:112-117</code>) samples up to 60,000 half-hourly rows and splits them 70/30 <em>at random</em>. Half-hourly soil temperature is heavily autocorrelated, so a held-out row's neighbours are in the training set. The reported R&sup2; measures interpolation between adjacent half-hours, not the multi-year extrapolation the model is actually used for. The number is not wrong arithmetic; it is answering a different question from the one asked.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">Generalisation</span> None of the per-site decisions exist for a new site</h3>
+<p>Every branch above is keyed on a site name or a hand-filled <code>site_info.csv</code> column. A new site has none of them, so the pipeline cannot run at all. The fix is to make each decision the <em>output</em> of a screening function, demote <code>site_info.csv</code> to an override file, and validate the screener against the 117 existing manual calls &mdash; which are, conveniently, a labelled dataset that already exists.</p>
+</div>
+
+<h2 id="plan">2. The plan, and the order it is being done in</h2>
+
+<p>Ordered so that each step's result can change whether the next is worth doing.</p>
+
+<table>
+<thead><tr><th style="width:3rem">#</th><th>Step</th><th>Why here</th><th style="width:6rem">Status</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td>Worktree, cloned <code>data-raw</code>, working environment, green baseline.</td><td>Nothing is measurable without it.</td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">1</td><td><strong>Does TS-from-TA change TAS?</strong> Materialise <code>TS_linear</code> everywhere as a diagnostic, then compare measured vs. regressed on good-TS sites &mdash; first descriptively, then structurally (<code>fit = FALSE</code>), then with real fits.</td><td>Sizes the whole problem. If TAS barely moves, most of what follows is not worth building. <strong>It moves.</strong></td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">2</td><td><strong>Blocked cross-validation</strong> replacing the random split, scored on metrics that matter downstream (window-mean bias, within-window variance ratio, growing-season percentiles) rather than pooled RMSE.</td><td>Re-scores every gap-filling method that follows; without it, method selection is measuring the wrong thing.</td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">3</td><td><strong>Structural QC diagnostics</strong> &mdash; diurnal amplitude ratio and phase lag, effective-depth consistency, cross-depth coherence, snow decoupling, change-point detection on the residual against a reference &mdash; scored against the 117 manual calls.</td><td>Turns the manual inspection into a reviewable exception list, and is what makes new sites possible.</td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">4</td><td><strong>ERA5-Land-anchored gap filling</strong> with lagged/running-mean covariates and stochastic imputation, selected per site by step&nbsp;2's CV.</td><td>The replacement for <code>TS ~ TA</code>. Needs 2 and 3 to be scoreable and targetable.</td><td><span class="tag t-todo">To do</span></td></tr>
+<tr><td class="num">5</td><td><strong>Uncertainty propagation</strong> of reconstructed TS into the brms fits.</td><td>Most invasive; its value depends on step&nbsp;1's answer.</td><td><span class="tag t-todo">To do</span></td></tr>
+</tbody>
+</table>
+
+<h2 id="progress">3. Progress log</h2>
+
+<h3>Step 0 &mdash; setup <span class="tag t-done">Done</span></h3>
+<ul>
+<li>Branch <code>ts-rework</code> and worktree <code>./ts-rework</code> created from <code>fix-refactor-blockers</code> (<code>8a8b013</code>).</li>
+<li><code>data-raw</code> (23&nbsp;GB), <code>data-proc</code> (2.6&nbsp;GB), <code>_targets</code> (191&nbsp;MB) and <code>_creds.toml</code> copied from <code>refactor/</code>.</li>
+<li>Baseline <code>pixi run test</code>: <strong>378 pass, 0 fail</strong>, before any change.</li>
+</ul>
+
+<h3>Step 1 &mdash; does TS-from-TA change TAS? <span class="tag t-prog">In progress</span></h3>
+
+<p><strong>1a. <code>TS_linear</code> is now built at every site</strong> (<code>R/prepare-site-data.R</code>, <code>R/soil-temp-columns.R</code>). It was previously built only at the 35 sites that select it, which is precisely the set where no measured column survives to compare against. Building it everywhere changes nothing a normal run fits &mdash; <code>ts_col</code> still comes from <code>site_info.csv</code>, <code>resolve_ts_column()</code> still selects by name, and the assertion that <code>TS</code> leaves step&nbsp;01 as the measured column still holds &mdash; but it makes the comparison possible at the 66 sites with genuinely measured soil temperature.</p>
+
+<p>The one subtlety is the fitting domain. A site that <em>declares</em> <code>TS_linear</code> must declare <code>ts_linear_domain</code> too, and <code>ts_fit_data()</code> rejects a missing one; silently defaulting would let a half-filled row through and change that site's coefficients without a word. So <code>ts_linear_domain_for()</code> returns the declaration unchanged at declared sites and defaults to <code>"ac"</code> only where the column is a diagnostic. An un-fittable regression is fatal at a declared site and a logged skip anywhere else.</p>
+
+<p><strong>1b. The metrics are chosen for what the model does with the column</strong>, not for generic goodness of fit. <code>total_tas_site()</code> fits <code>NEE ~ exp(alpha&middot;TS + beta&middot;TS&sup2;)&middot;C0</code> inside each (14-day window &times; growing year) cell and then regresses the log-ratio of respiration against the <em>cell-mean</em> TS across years. The column therefore enters on two independent axes:</p>
+
+<table>
+<thead><tr><th>Axis</th><th>Statistic</th><th>What a distortion does</th></tr></thead>
+<tbody>
+<tr><td>Within a cell, the spread of TS identifies <code>alpha</code>.</td><td><code>within_sd_ratio</code> &mdash; median over cells of sd(linear)/sd(measured).</td><td>Inflate the spread and the fitted sensitivity deflates: the same NEE range is explained by a wider temperature range.</td></tr>
+<tr><td>Across years within a window, the spread of cell means is the regressor TAS is the slope against.</td><td><code>across_year_spread_ratio</code> &mdash; median over windows of sd(linear)/sd(measured) of the cell means.</td><td>Compress it and <strong>|TAS| inflates mechanically</strong>, whatever the respiration data say.</td></tr>
+</tbody>
+</table>
+
+<p>Alongside them, two physical diagnostics that say <em>why</em> the columns differ, and which are the same statistics step&nbsp;3 will use for quality screening:</p>
+<ul>
+<li><strong>Diurnal amplitude ratio</strong> A(TS)/A(TA), median over growing-season days. Shallow soil damps the diurnal wave, so a measured sensor should sit well below 1. A regression on TA cannot damp anything: its amplitude ratio is the regression slope.</li>
+<li><strong>Diurnal phase lag</strong>, from the first harmonic of the hour-of-day climatology rather than <code>which.max</code>, which jumps by whole hours on a 24-point profile. Measured soil lags air by hours; a regression on TA lags it by exactly zero.</li>
+</ul>
+
+<p>Both amplitudes are taken over a <em>common</em> set of sufficiently-complete days. Computed independently they are not comparable: <code>TS_linear</code> is non-missing wherever either TA or measured TS is, so it clears the completeness threshold on strictly more days than TA does, and the ratio then mixes the damping with which days each column happened to cover. On the first pass this alone moved US-Kon's apparent linear amplitude ratio from 0.86 to a figure inconsistent with its own regression slope; on a common day set it lands on the slope, as it must.</p>
+
+<p><strong>1c. A structural diff</strong> (<code>scripts/ts-structural-diff.R</code>) runs <code>total_tas_site(fit = FALSE)</code> under each column. That walks the real window and year loop with no sampling, so it reports exactly which windows the skip gate dropped, which years <code>year_rejection()</code> rejected and for which of its four reasons, and how many (window &times; year) cells would have been fitted. The substitution moves both the window means and the percentile bounds they are compared against, so the set of surviving cells can change before any model runs.</p>
+
+<h3>Step 2 &mdash; blocked cross-validation <span class="tag t-done">Done</span></h3>
+<p>Two questions, one harness (<code>scripts/ts-fill-methods.R</code>, <code>scripts/ts-fill-cv.R</code>). How optimistic is the random split, and which method should a site use? Each (method, blocking) pair produces one out-of-fold prediction per row, assembled into a complete series and scored by the <em>same</em> <code>ts_reconstruction_metrics()</code> used on <code>TS_linear</code> in step&nbsp;1 &mdash; so the incumbent is one row of the same table, labelled <code>in_sample</code>, which is the honest description of a method the pipeline has no out-of-sample estimate of at all.</p>
+<p>The methods add the one thing every existing one lacks. <code>TS ~ TA</code> and <code>randomForest(TS ~ TA + NETRAD)</code> are <em>instantaneous</em> maps, and shallow soil temperature is a damped, phase-lagged integral of the surface forcing &mdash; F2 measures exactly that damping and that lag. The <code>*_memory</code> methods add running means of air temperature over 3, 7 and 30 days plus day-of-year and hour harmonics, all from columns already present. Running means are taken on a daily series completed over the full date range rather than on half-hourly row offsets, because every record here has missing rows and a "30-day" mean over 1440 of them would span however many calendar days those rows happened to cover.</p>
+<p>Blockings: <code>random</code> (the incumbent, kept so the comparison is a measurement), <code>year</code>, <code>season</code> and <code>multiyear</code> (two contiguous years). <code>ranger</code> stands in for <code>randomForest</code> &mdash; same algorithm, already a dependency, an order of magnitude faster, used on both sides of every comparison &mdash; so these numbers are not bit-identical to what the pipeline would produce.</p>
+
+<h3>Step 3 &mdash; a quality screen computed from the data alone <span class="tag t-done">Done</span></h3>
+<p><code>scripts/ts-qc-screen.R</code> reads the <em>raw</em> spliced record, before <code>prep_nee_ac()</code> runs. That is the whole point: step&nbsp;01 already applies the manual fixes &mdash; CZ-Stn's depth swap, FI-Sod's recalibration, GF-Guy's air-temperature substitution, <code>fix_soil_temp()</code>'s regressions &mdash; so screening its output would be marking its own homework. A new site has none of those fixes and the raw record is all it has.</p>
+<p>The central diagnostic needs no metadata, which is what makes it work at a site the project has never seen. For a sinusoidal surface forcing, amplitude decays as exp(&minus;z/d) and phase lags by z/d radians, where d is the damping depth. That is <em>two independent estimates of the same dimensionless depth</em>:</p>
+<pre><code>z/d from amplitude = -log(A_TS / A_TA)
+z/d from lag       = lag_hours * 2*pi/24</code></pre>
+<p>A real buried sensor satisfies both and they agree. A sensor on the surface, pulled out, or reporting air temperature under another name has amplitude ratio near 1 and lag near 0. A dead or mislabelled-depth sensor has amplitude ratio near 0 with no matching lag. The ratio of the two estimates catches cases no single threshold does. Alongside it: stuck-value runs, spike rate against soil thermal inertia, coverage, the fraction genuinely measured rather than provider-gapfilled, mean TS&minus;TA offset, and cross-depth coherence (amplitude must fall and lag must rise with depth, so columns ordered by name should be ordered the same way by amplitude &mdash; where they are not, the depths are mislabelled, which is the CZ-Stn / DE-Hte / FI-Sod class of problem).</p>
+<p>One exemption is not optional: the stuck-value test ignores runs near 0&nbsp;&deg;C. A shallow sensor pinned at zero for weeks under snow is the <em>zero curtain</em> &mdash; latent heat of fusion buffering the soil at the freezing point &mdash; and is the most physically real signal in the record. Flagging it would condemn every seasonally snow-covered site in the network.</p>
+<p><code>scripts/ts-qc-validate.R</code> applies the verdict rules and compares them against the label formed from all five hand-flagging mechanisms the project uses. Measurement and rule-fitting are separate files so thresholds can be tuned without re-reading 23&nbsp;GB. The label is noisy &mdash; <code>ts_col = "TS_linear"</code> was not applied on one consistent criterion &mdash; so the output lists disagreements in both directions for inspection rather than reporting an accuracy and stopping.</p>
+
+<h2 id="findings">4. Findings</h2>
+
+<p class="sub" style="margin-bottom:1.2rem">Measured over the 43 sites whose soil temperature is genuinely measured &mdash; neither reconstructed in step&nbsp;01 nor substituted in step&nbsp;02 &mdash; using <code>scripts/ts-linear-vs-measured.R</code>, <code>scripts/ts-structural-diff.R</code> and <code>scripts/ts-bounds-definition.R</code>.</p>
+
+<div class="finding key">
+<h3><span class="tag t-key">F1</span> The substitution inflates the variation that identifies <code>alpha</code>, by a median factor of 1.73</h3>
+<p>The model fits <code>NEE ~ exp(alpha&middot;TS + beta&middot;TS&sup2;)&middot;C0</code> inside each (14-day window &times; growing year) cell. Within a cell, the spread of TS is what identifies <code>alpha</code>. Regressing soil temperature on air temperature replaces a damped signal with an undamped one, so that spread grows:</p>
+<table>
+<thead><tr><th>Statistic (43 sites)</th><th class="num">p25</th><th class="num">median</th><th class="num">p75</th></tr></thead>
+<tbody>
+<tr><td><strong>Within-cell sd ratio</strong> (linear / measured) &mdash; the <code>alpha</code> axis</td><td class="num">1.331</td><td class="num"><strong>1.725</strong></td><td class="num">2.015</td></tr>
+<tr><td><strong>Across-year spread of cell means</strong> &mdash; the TAS axis</td><td class="num">0.879</td><td class="num">1.085</td><td class="num">1.201</td></tr>
+<tr><td>RMSE against measured soil temperature (&deg;C)</td><td class="num">2.448</td><td class="num">3.029</td><td class="num">3.368</td></tr>
+<tr><td><code>TS ~ TA</code> slope</td><td class="num">0.653</td><td class="num">0.712</td><td class="num">0.905</td></tr>
+<tr><td><code>TS ~ TA</code> R&sup2;</td><td class="num">0.694</td><td class="num">0.748</td><td class="num">0.818</td></tr>
+</tbody>
+</table>
+<p>34 of 43 sites have their within-cell spread inflated by more than 25%. Inflating the predictor's spread while leaving the response alone deflates the fitted sensitivity: the same range of respiration is being explained by a wider range of temperature.</p>
+<p><strong>A correction to the first reading.</strong> On the single site inspected first (US-Kon) the across-year spread was compressed to 0.65, and the two axes looked like they were being pushed in opposite directions. Across 43 sites that does not hold: the across-year spread is close to unbiased on average (median 1.085). It is not harmless &mdash; 16 of 43 sites are off by more than 20% in one direction or the other &mdash; but it is <em>site-specific noise</em> in TAS rather than a systematic bias, whereas the <code>alpha</code> axis is systematically distorted in one direction at almost every site.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F2</span> The physical signature: the regression roughly doubles the diurnal amplitude and removes the phase lag</h3>
+<p>Shallow soil temperature is a damped, phase-lagged version of the surface forcing. That is what the heat equation says, and the measured columns show it:</p>
+<table>
+<thead><tr><th>Diurnal statistic, growing season</th><th class="num">p25</th><th class="num">median</th><th class="num">p75</th></tr></thead>
+<tbody>
+<tr><td>Amplitude ratio A(TS)/A(TA), <strong>measured</strong></td><td class="num">0.231</td><td class="num">0.344</td><td class="num">0.584</td></tr>
+<tr><td>Amplitude ratio A(TS)/A(TA), <strong>regressed</strong></td><td class="num">0.653</td><td class="num">0.713</td><td class="num">0.905</td></tr>
+<tr><td>Amplitude inflation (regressed / measured)</td><td class="num">1.321</td><td class="num"><strong>2.064</strong></td><td class="num">2.916</td></tr>
+<tr><td>Phase lag behind air temperature, measured (h)</td><td class="num">0.498</td><td class="num">1.732</td><td class="num">2.293</td></tr>
+<tr><td>Phase lag, regressed (h)</td><td colspan="3" style="text-align:center">0 by construction</td></tr>
+</tbody>
+</table>
+<p>The regressed amplitude ratio is the regression slope, necessarily &mdash; an affine function of air temperature cannot damp anything. So a reconstruction from air temperature does not approximate soil temperature badly; it produces a quantity with the wrong physical character, and F1 is the arithmetic consequence.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F3</span> Substituting the column loosens three separate quality gates</h3>
+<p>From <code>total_tas_site(fit = FALSE)</code>, which walks the real window and year loop with no sampling, over 43 sites:</p>
+<table>
+<thead><tr><th>Gate</th><th class="num">TS_measured</th><th class="num">TS_linear</th><th>Why it moves</th></tr></thead>
+<tbody>
+<tr><td>Windows dropped, <code>window_ts_out_of_range</code></td><td class="num">30</td><td class="num">5</td><td>The admissible band is wider &mdash; mostly for the reason in F4, not because the column changed.</td></tr>
+<tr><td>Years rejected, <code>year_tsref_outside_quantiles</code></td><td class="num">147</td><td class="num">92</td><td>The test asks whether the window reference temperature lies inside that year's 2.5/97.5 quantiles of TS. Inflating the spread (F1) widens those quantiles, so the test is easier to pass. <strong>Adding noise to the predictor makes the quality test more permissive.</strong></td></tr>
+<tr><td>Years rejected, <code>year_median_nee_too_low</code></td><td class="num">92</td><td class="num">173</td><td>Different cells admitted, so different medians tested.</td></tr>
+<tr><td>Fitted (window &times; year) cells</td><td class="num">6462</td><td class="num">6812</td><td>Net +5.4%; median per site 117 &rarr; 133.</td></tr>
+</tbody>
+</table>
+<p>The fitted cell set changes at <strong>36 of 43 sites</strong> (median Jaccard 0.978, so it is a 2&ndash;5% shift rather than a wholesale one), and the <strong>control year changes at 37 of 43</strong>. The control year sets <code>ERref_control</code>, the denominator of <code>lnRatio</code> &mdash; the dependent variable of the TAS regression &mdash; so changing it shifts every point that regression is fitted to.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F4</span> <code>tStart</code>/<code>tEnd</code> are computed from two different populations, and most of the reported movement is that, not the column</h3>
+<p>The bounds that gate the window-skip test come from <code>detect_growing_season()</code> for <code>TS_measured</code> &mdash; quantiles of the <em>day-of-year climatology</em>, which averages out the diurnal and interannual variance first &mdash; and from <code>ts_bounds()</code> for <code>TS_linear</code>, which is quantiles of the raw <em>half-hourly</em> values. Selecting a column silently changes the definition of the gate as well as the data going through it.</p>
+<p>Applying the half-hourly definition to the measured column isolates the two causes:</p>
+<table>
+<thead><tr><th>Shift (&deg;C), 44 sites</th><th class="num">total</th><th class="num">definition only</th><th class="num">column only</th></tr></thead>
+<tbody>
+<tr><td><code>tEnd</code></td><td class="num">+3.44</td><td class="num"><strong>+3.01</strong></td><td class="num">+0.10</td></tr>
+<tr><td><code>tStart</code></td><td class="num">&minus;3.35</td><td class="num">&minus;1.43</td><td class="num">&minus;1.61</td></tr>
+</tbody>
+</table>
+<p>The admissible band is 10.04&nbsp;&deg;C wide on measured data under the climatology definition, <strong>16.67&nbsp;&deg;C on the same data</strong> under the half-hourly one, and 17.67&nbsp;&deg;C on the substituted column. So it widens by two thirds before the column changes at all, which is what produces the 6&times; drop in window skips in F3.</p>
+<p><code>docs/derived-columns.md</code> records US-Kon's bounds moving from 18.47/26.73 to 12.93/31.33 on substitution and attributes the move to the substitution. Most of it is the definition.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">F5</span> The quality screen proposed for step&nbsp;3 already flags nine "measured" sites &mdash; and independently rediscovers a substitution made by hand</h3>
+<p>Buried soil at &lt;10&nbsp;cm cannot swing more in a daily cycle than the air above it. Nine of the 43 sites have a measured diurnal amplitude ratio at or above 0.9, seven above 1.0, most of them with a near-zero phase lag &mdash; the signature of a sensor that is effectively measuring air or a sun-exposed surface:</p>
+<table>
+<thead><tr><th>Site</th><th>IGBP</th><th>Climate</th><th class="num">A(TS)/A(TA)</th><th class="num">lag (h)</th></tr></thead>
+<tbody>
+<tr><td>US-Whs</td><td>OSH</td><td>Bsk</td><td class="num">1.564</td><td class="num">0.35</td></tr>
+<tr><td>US-Me2</td><td>ENF</td><td>Csb</td><td class="num">1.382</td><td class="num">&minus;0.52</td></tr>
+<tr><td>US-Wkg</td><td>GRA</td><td>Bsk</td><td class="num">1.327</td><td class="num">1.31</td></tr>
+<tr><td>US-Rls</td><td>CSH</td><td>Bsh</td><td class="num">1.221</td><td class="num">0.49</td></tr>
+<tr><td>US-Rws</td><td>OSH</td><td>Bsk</td><td class="num">1.201</td><td class="num">0.29</td></tr>
+<tr><td>US-SRM</td><td>WSA</td><td>Bsk</td><td class="num">1.088</td><td class="num">1.60</td></tr>
+<tr><td>IL-Yat</td><td>ENF</td><td>Csa</td><td class="num">1.017</td><td class="num">1.44</td></tr>
+<tr><td>GF-Guy</td><td>EBF</td><td>Am</td><td class="num">1.000</td><td class="num">0.00</td></tr>
+<tr><td>US-MtB</td><td>ENF</td><td>Csb</td><td class="num">0.935</td><td class="num">0.80</td></tr>
+</tbody>
+</table>
+<p>Five of the seven worst are semi-arid shrubland and grassland (Bsk/Bsh), where sparse canopy and bare soil make strong surface heating physically plausible &mdash; so the reading is not necessarily "broken sensor" but "this is much closer to a surface temperature than to a 5&ndash;10&nbsp;cm soil temperature", which is a distinction the model's <code>TS</code> is not supposed to be indifferent to.</p>
+<p><strong>The validation that matters</strong> is GF-Guy: exactly 1.000 and exactly 0.00. That is not a sensor problem &mdash; the pipeline substitutes air temperature for soil temperature there deliberately, so that all tropical sites use bottom air temperature. The amplitude-and-lag screen, computed from nothing but the data, independently recovers a substitution a human made by hand. That is the first evidence that step&nbsp;3's approach can reproduce the manual calls.</p>
+<p>The same test caught a substitution nobody had declared: <strong>US-Cwt</strong> returns exactly 1.000 on <em>every</em> ratio, because its whole soil-temperature column is <code>TA * 0.64718 + 5.13873</code> &mdash; coefficients borrowed from a nearby site &mdash; set by a bare <code>name_site ==</code> branch in <code>R/ameriflux.R</code>. It carries <code>estimate_Ts = "NO"</code> and <code>ts_col = "TS_measured"</code> and appears in none of the site lists, so by every declaration in the project it is a measured site. It is now excluded from the evaluation set as <code>SITES_TS_SYNTHETIC_AMERIFLUX</code>.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F8</span> TAS itself moves &mdash; by 39% at the one site where it is significant, and by a sign flip at another</h3>
+<p>Everything above is structural. This is the published quantity. Five sites spanning the within-cell inflation range, each fitted under both columns, plus a third run repeating the <em>measured</em> column unchanged so the column effect can be read against the sampler noise floor rather than against zero.</p>
+<table>
+<thead><tr><th>Site</th><th class="num">TAS measured</th><th class="num">TAS linear</th><th class="num">change</th><th class="num">p measured</th><th class="num">p linear</th><th class="num">effect / noise</th></tr></thead>
+<tbody>
+<tr><td><strong>US-Whs</strong></td><td class="num">&minus;0.1531</td><td class="num">&minus;0.0938</td><td class="num"><strong>&minus;39%</strong></td><td class="num"><strong>0.0036</strong></td><td class="num"><strong>0.029</strong></td><td class="num">3541&times;</td></tr>
+<tr><td><strong>US-ICh</strong></td><td class="num">&minus;0.0122</td><td class="num"><strong>+0.0681</strong></td><td class="num"><strong>sign flip</strong></td><td class="num">0.736</td><td class="num">0.180</td><td class="num">265&times;</td></tr>
+<tr><td>SE-Nor</td><td class="num">&minus;0.0333</td><td class="num">&minus;0.0204</td><td class="num">&minus;39%</td><td class="num">0.087</td><td class="num">0.210</td><td class="num">31&times;</td></tr>
+<tr><td>DE-Tha</td><td class="num">&minus;0.0021</td><td class="num">&minus;0.0077</td><td class="num">&times;3.7</td><td class="num">0.901</td><td class="num">0.493</td><td class="num">9&times;</td></tr>
+<tr><td>US-Ro4</td><td class="num">+0.00037</td><td class="num">+0.00040</td><td class="num">+8%</td><td class="num">0.979</td><td class="num">0.982</td><td class="num">1.5&times;</td></tr>
+</tbody>
+</table>
+<p>The replicate reproduces the measured run to between 1.7&times;10<sup>&minus;5</sup> and 6.1&times;10<sup>&minus;4</sup>, so at four of the five sites the column effect is one to three orders of magnitude above sampler noise. These differences are real.</p>
+<p><strong>Read them with the p-values, though.</strong> Only US-Whs has a TAS distinguishable from zero under either column, and there the substitution cuts the magnitude by 39% and degrades the p-value eightfold &mdash; at the one site in this sample where thermal acclimation is actually detected, reconstructing soil temperature from air temperature attenuates it substantially. The other four are not significant under either column, so a large <em>relative</em> change in an estimate that already straddles zero is less alarming than the percentages make it look. It still propagates: these point estimates are what the cross-site driver analysis consumes.</p>
+<h4>The mechanism predicted in F1 is confirmed, the magnitude is not predictable</h4>
+<p>Mean fitted <code>alpha</code> falls under the substituted column at <strong>5 of 5 sites</strong> &mdash; 0.147&rarr;0.136, 0.108&rarr;0.086, 0.127&rarr;0.107, 0.121&rarr;0.101, 0.073&rarr;0.072 &mdash; which is exactly the direction F1 predicts from a within-cell spread inflated above 1. US-Whs, the one site whose within-cell ratio is <em>below</em> 1 (0.85), has by far the smallest change in <code>alpha</code> (&minus;1.3%). So the <code>alpha</code> axis behaves as the arithmetic says it must.</p>
+<p><strong>TAS does not.</strong> The change in TAS has no usable relationship to the structural diagnostics across these five sites: US-Whs has the least distorted spread and the largest consequential change, US-Ro4 has one of the most distorted and essentially no change. I expected US-Whs to be a null control on the grounds that its measured sensor is already air-like, and that was wrong. The practical consequence is that <strong>the cheap diagnostics cannot be used to certify that the substitution is harmless at a given site</strong> &mdash; which removes the most attractive shortcut and is an argument for replacing the reconstruction rather than triaging it. Five sites is a small basis for a negative claim, and it is the claim this result supports least strongly.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F12</span> Running means of air temperature cut out-of-fold error by 58% and restore the physics</h3>
+<p>43 sites, out-of-fold under leave-one-year-out blocking. Medians across sites:</p>
+<table>
+<thead><tr><th>Method</th><th class="num">RMSE (&deg;C)</th><th class="num">cell-mean RMSE</th><th class="num">within-cell ratio</th><th class="num">amp inflation</th><th class="num">recovered lag (h)</th></tr></thead>
+<tbody>
+<tr><td><strong><code>rf_memory</code></strong></td><td class="num"><strong>1.26</strong></td><td class="num"><strong>0.82</strong></td><td class="num">0.90</td><td class="num">0.83</td><td class="num">1.45</td></tr>
+<tr><td><code>rf_memory_netrad</code></td><td class="num">1.30</td><td class="num">0.82</td><td class="num">0.90</td><td class="num">0.83</td><td class="num">1.18</td></tr>
+<tr><td><code>lm_memory</code></td><td class="num">1.49</td><td class="num">0.98</td><td class="num">0.75</td><td class="num">0.81</td><td class="num">1.51</td></tr>
+<tr><td><code>lm_ta_netrad</code></td><td class="num">3.00</td><td class="num">1.91</td><td class="num">1.32</td><td class="num">1.43</td><td class="num">0.57</td></tr>
+<tr><td><strong><code>lm_ta_pos</code></strong> &mdash; the incumbent</td><td class="num">3.04</td><td class="num">1.81</td><td class="num">1.74</td><td class="num">2.00</td><td class="num">0.00</td></tr>
+<tr><td><code>lm_ta</code></td><td class="num">3.05</td><td class="num">2.05</td><td class="num">1.54</td><td class="num">1.75</td><td class="num">0.00</td></tr>
+<tr><td><code>rf_ta_netrad</code></td><td class="num">3.10</td><td class="num">1.55</td><td class="num">1.47</td><td class="num">1.98</td><td class="num">0.96</td></tr>
+<tr><td><strong><code>rf_ta</code></strong> &mdash; also in production</td><td class="num">3.21</td><td class="num">1.80</td><td class="num">1.75</td><td class="num">2.92</td><td class="num">0.01</td></tr>
+</tbody>
+</table>
+<p><strong>A memory method wins at 42 of 43 sites</strong>, by a median 58.2% reduction in RMSE (10th&ndash;90th percentile 37.7%&ndash;69.1%). The single exception is GF-Guy, where soil temperature <em>is</em> air temperature by construction and nothing can beat a perfect fit. Best method per site: <code>rf_memory_netrad</code> 22, <code>rf_memory</code> 17, <code>lm_memory</code> 3.</p>
+<p>The improvement is not only in RMSE, which is the point of scoring on the model's own axes. The incumbent over-disperses within a cell by 74% and inflates diurnal amplitude 2.0&times; with no lag at all; <code>rf_memory</code> lands at 0.90 and 0.83 and recovers a 1.45&nbsp;h lag against a measured median of 1.73&nbsp;h. Cell-mean RMSE &mdash; the error in the quantity the TAS regression actually reads &mdash; falls from 1.81 to 0.82&nbsp;&deg;C.</p>
+<p><strong>The random forest on instantaneous air temperature is the worst method tested</strong>, worse than the plain linear model it exists to improve on, and inflates diurnal amplitude 2.9&times;. It is one of the two branches <code>fix_soil_temp()</code> uses in production.</p>
+<p><strong>Net radiation adds almost nothing once memory is present.</strong> <code>rf_memory_netrad</code> is marginally worse than <code>rf_memory</code> in the median (on a 30-site subset, so not strictly comparable), though it is the per-site winner more often. Memory dominates radiation.</p>
+<p><strong>What is still wrong with the best method.</strong> Within-cell ratio 0.90 and across-year ratio 0.87 are both slightly <em>below</em> 1: the reconstruction is a little too smooth. That is regression to the conditional mean, and it biases <code>alpha</code> in the opposite direction to the incumbent. Much smaller, but it is the argument for drawing from the predictive distribution rather than plugging in its mean &mdash; step&nbsp;5.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">F13</span> The random-split defect is real but latent: it does not corrupt today's number, it would corrupt the fix</h3>
+<p>Median over sites of RMSE(random split) &divide; RMSE(leave-one-year-out):</p>
+<table>
+<thead><tr><th>Method</th><th class="num">ratio</th><th>Reading</th></tr></thead>
+<tbody>
+<tr><td><code>rf_memory</code></td><td class="num">0.677</td><td>random split flatters it by 32%</td></tr>
+<tr><td><code>rf_memory_netrad</code></td><td class="num">0.691</td><td>by 31%</td></tr>
+<tr><td><code>lm_memory</code></td><td class="num">0.977</td><td>2%</td></tr>
+<tr><td><code>rf_ta</code>, <code>lm_ta</code>, <code>lm_ta_pos</code>, &hellip;</td><td class="num">0.99&ndash;1.00</td><td>essentially none</td></tr>
+</tbody>
+</table>
+<p>I overstated this defect when I first described it. With only instantaneous air temperature as a feature there is nothing to memorise: two rows with the same TA are indistinguishable to the model, so a random split of autocorrelated half-hourly rows costs almost nothing. <code>predict_soil_temp()</code>'s reported skill is therefore not badly optimistic <em>for the features it uses</em>.</p>
+<p>The optimism appears the moment memory features enter &mdash; which is exactly the improvement worth making. Keep the random split and adopt <code>rf_memory</code>, and you would measure RMSE 0.78 and believe it, when the honest figure is 1.26. So fixing the cross-validation is a <strong>prerequisite for adopting a better method</strong> rather than a correction to the existing one. <code>year</code> and <code>multiyear</code> blocking agree closely (1.26 vs 1.28 for <code>rf_memory</code>), so skill degrades little when the gap being filled grows from one year to two.</p>
+<p>One implementation note: the incumbent's in-sample RMSE (3.03) and its blocked out-of-fold RMSE (3.04) agree to two decimal places, which is both the expected behaviour of a two-parameter model and a check that this harness reproduces what the pipeline does.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F9</span> The screen reproduces the manual calls at 91% specificity &mdash; and recovers two of them exactly</h3>
+<p>Verdicts from raw data alone, against the label formed from all five hand-flagging mechanisms the project uses. 94 sites had a screenable primary column:</p>
+<table>
+<thead><tr><th>Screen verdict</th><th class="num">project treats as measured</th><th class="num">project reconstructs</th></tr></thead>
+<tbody>
+<tr><td><strong>BAD</strong></td><td class="num">4</td><td class="num">19</td></tr>
+<tr><td>SUSPECT</td><td class="num">4</td><td class="num">4</td></tr>
+<tr><td>GOOD</td><td class="num">36</td><td class="num">27</td></tr>
+</tbody>
+</table>
+<p>Four of the seven rules fire with <strong>zero false positives</strong>: stuck-value runs (6 fires, 6 hand-flagged), soil leading air (3/3), coverage (7/7), and cross-depth incoherence (2/2). The weakest is the relative consistency test (2 of 8). The three "false positives" of the air-like rule are US-Whs, US-Rws and US-Me2 &mdash; the same semi-arid sites F5 flagged, which I would argue are detections the project missed rather than errors.</p>
+<h4>Two manual fixes recovered from the data</h4>
+<p><strong>GF-Guy</strong> returns an amplitude ratio of exactly 1.000 and a lag of exactly 0.00, because the pipeline substitutes air temperature for soil temperature there by design. <strong>CZ-Stn</strong> is better still. Its six soil-temperature columns give a textbook damping profile:</p>
+<table>
+<thead><tr><th>column</th><th class="num">coverage</th><th class="num">A(TS)/A(TA)</th><th class="num">lag (h)</th></tr></thead>
+<tbody>
+<tr><td><code>TS_F_MDS_1</code></td><td class="num"><strong>0.585</strong></td><td class="num">0.243</td><td class="num">1.27</td></tr>
+<tr><td><code>TS_F_MDS_2</code></td><td class="num">1.000</td><td class="num">0.108</td><td class="num">3.40</td></tr>
+<tr><td><code>TS_F_MDS_3</code></td><td class="num">1.000</td><td class="num">0.073</td><td class="num">6.05</td></tr>
+<tr><td><code>TS_F_MDS_4</code></td><td class="num">1.000</td><td class="num">0.047</td><td class="num">8.26</td></tr>
+<tr><td><code>TS_F_MDS_5</code></td><td class="num">1.000</td><td class="num">0.035</td><td class="num">9.42</td></tr>
+<tr><td><code>TS_F_MDS_6</code></td><td class="num">1.000</td><td class="num">0.019</td><td class="num">(wrapped)</td></tr>
+</tbody>
+</table>
+<p>Amplitude falls and lag rises monotonically with depth, exactly as the heat equation requires &mdash; and the <em>only</em> anomaly in the whole profile is that column 1 has 58.5% coverage where every other column has 100%. The pipeline's hand-written fix reads <code>use TS of second layer because the first layer is incomplete</code>. The screen finds the same defect, for the same reason, from nothing but the data.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">F10</span> More than half the sites whose soil temperature the project discards show no defect in it</h3>
+<p>27 of the 50 hand-flagged sites pass every physical test. They are not marginal: median coverage 0.863 and median record length 16 years. Nine meet a strict joint criterion &mdash; coverage above 0.9, at least ten years, amplitude ratio in a physically sensible band, and a positive lag:</p>
+<table>
+<thead><tr><th>Site</th><th class="num">coverage</th><th class="num">years</th><th class="num">A(TS)/A(TA)</th><th class="num">lag (h)</th><th class="num">n</th></tr></thead>
+<tbody>
+<tr><td>NL-Loo</td><td class="num">1.000</td><td class="num">29</td><td class="num">0.069</td><td class="num">6.18</td><td class="num">508,416</td></tr>
+<tr><td>CA-TP4</td><td class="num">1.000</td><td class="num">22</td><td class="num">0.277</td><td class="num">1.47</td><td class="num">385,660</td></tr>
+<tr><td>CA-TP3</td><td class="num">1.000</td><td class="num">22</td><td class="num">0.280</td><td class="num">2.05</td><td class="num">385,660</td></tr>
+<tr><td>US-Bar</td><td class="num">0.989</td><td class="num">21</td><td class="num">0.101</td><td class="num">3.54</td><td class="num">346,806</td></tr>
+<tr><td>RU-Fyo</td><td class="num">0.986</td><td class="num">27</td><td class="num">0.032</td><td class="num">3.99</td><td class="num">466,848</td></tr>
+<tr><td>FI-Sod</td><td class="num">0.979</td><td class="num">25</td><td class="num">0.091</td><td class="num">1.39</td><td class="num">291,840</td></tr>
+<tr><td>CA-KLP</td><td class="num">0.973</td><td class="num">10</td><td class="num">0.120</td><td class="num">2.77</td><td class="num">170,645</td></tr>
+<tr><td>DE-RuC</td><td class="num">0.942</td><td class="num">12</td><td class="num">0.509</td><td class="num">1.22</td><td class="num">198,260</td></tr>
+<tr><td>CA-Obs</td><td class="num">0.915</td><td class="num">14</td><td class="num">0.062</td><td class="num">3.23</td><td class="num">224,562</td></tr>
+</tbody>
+</table>
+<p>NL-Loo has half a million soil-temperature observations over 29 years with no gaps and a clean 6.2&nbsp;h lag, and the pipeline replaces it with a regression on air temperature. Taken with F8 &mdash; that the substitution moves TAS by far more than sampler noise &mdash; this says a substantial number of published TAS values are being perturbed for reasons that are neither recorded nor visible in the data.</p>
+<p><strong>What this does not establish.</strong> The claim is narrow: <em>the soil temperature signal itself shows no defect</em>. Coverage here is over the whole raw record, while the analysis needs high-quality <em>nighttime growing-season</em> observations, and a site can be complete overall and thin where it matters. The original <code>site_TS_issue</code> vector carried no per-site reasons, so the authors may have been judging the NEE&ndash;TS relationship rather than the sensor. The right conclusion is not "the humans were wrong" but that <strong><code>ts_col = "TS_linear"</code> is not a soil-temperature quality label</strong>, and treating it as one &mdash; which is what the column name invites &mdash; is unsafe. These nine sites are the list to put to the authors.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">F11</span> The data falsified two of my three structural rules</h3>
+<p>Kept here because the corrections are the useful part, and both are in the source.</p>
+<p><strong>Phase is only known modulo 24 hours.</strong> A strongly damped sensor lags by more than half a day and the harmonic phase wraps. DE-Hte's measured &minus;7.8&nbsp;h is +16.2&nbsp;h; reading it as "soil leads air" is simply wrong. The amplitude supplies the prior that picks the branch, so the two diagnostics have to be resolved jointly rather than compared independently.</p>
+<p><strong>The two estimates of z/d do not agree, and should not.</strong> I claimed a real buried sensor satisfies both and they agree. Over the network the ratio has median <strong>2.45</strong>, interquartile range 1.70&ndash;3.43 &mdash; nowhere near 1. The reason is that the clean theory forces the <em>soil surface</em>, and air temperature has a canopy and a surface boundary layer in front of it, which attenuate diurnal amplitude a great deal while adding little phase lag. So the amplitude ratio carries canopy attenuation <em>plus</em> soil damping while the lag carries soil damping alone. The check survives as a <em>relative</em> test against the network's own central range &mdash; which is the better form for it anyway, since that is what a new site can be judged against, and it suggests conditioning on IGBP class, because canopy density is what drives the discrepancy.</p>
+<p><strong>Column name order is not depth order in AmeriFlux.</strong> <code>TS_F_MDS_1/2/3</code> increase in depth, but <code>TS_&lt;h&gt;_&lt;v&gt;_&lt;r&gt;</code> puts the vertical index second, so <code>TS_1_1_1</code> and <code>TS_2_1_1</code> are two horizontal positions at one depth. Sorting by name fired the rule at 55 of 94 sites; parsing the vertical index brings it to 2, both hand-flagged.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">F6</span> Pre-existing: US-ICs cannot be processed at all</h3>
+<p><code>prep_ameriflux()</code> fills soil-temperature gaps at US-NR1, US-ICh and US-ICs from a column named <code>TS_PI_1</code> (<code>R/ameriflux.R:244</code>). That column is not in US-ICs's current AmeriFlux BASE download, so <code>a$TS_PI_1</code> is <code>NULL</code> and the assignment dies with <code>replacement has length zero</code>. Untouched by anything on this branch &mdash; it is a hard-coded column name that stopped matching when the provider's file changed, which is the failure mode the whole rework is aimed at.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">F7</span> Coverage limits on all of the above</h3>
+<p>Of 58 sites with genuinely measured soil temperature, 43 produced results. Twelve fail because their declared FLUXNET/ICOS products are not in <code>data-raw/</code> (they were not in <code>refactor/</code> either, so this is not a copying artefact), one is US-ICs per F6, one is BR-Ma2, and one &mdash; BR-Sa1 &mdash; stops at <code>southern hemisphere sites not implemented yet</code>. No downloads have been triggered; say the word and the twelve can be fetched, which would take the sample to 55.</p>
+</div>
+
+<div class="finding done">
+<h3><span class="tag t-done">Fixed</span> F0. The conda-forge <code>r-base64url</code> osx-arm64 build is broken, and <code>targets</code> cannot load without it</h3>
+<p>A clean <code>pixi install</code> on this machine produces an unusable environment: <code>library(targets)</code> fails with <code>shared object 'base64url.so' not found</code>. The cause is upstream, not local. The artifact <code>r-base64url-1.4-r45hbe92478_1008.conda</code> contains 25 paths that are the package <em>source</em> tree &mdash; <code>src/</code>, <code>vignettes/</code>, <code>conda_build.sh</code>, <code>build_env_setup.sh</code> &mdash; with no <code>Meta/package.rds</code> and no compiled <code>.so</code>. Clearing the rattler cache and re-downloading reproduces it byte for byte, and it is the only osx-arm64 build conda-forge offers for 1.4, so no version constraint avoids it.</p>
+<p>The package does not even appear in <code>installed.packages()</code>, which is why the failure surfaces as a missing shared object rather than a missing package.</p>
+<p><strong>Fix:</strong> added <code>base64url</code> to the CRAN list in <code>dependencies.R</code>, which is the project's existing mechanism for real packages pixi cannot supply (it already carries <code>REddyProc</code>, <code>gslnls</code>, <code>lutz</code>, <code>amerifluxr</code>). <code>pixi run deps</code> now compiles the real package over the top and <code>targets</code> loads.</p>
+<p><strong>Worth knowing:</strong> the <code>refactor/</code> environment has a <em>correct</em> <code>base64url</code> despite recording the same broken build hash in <code>conda-meta</code>. That environment was repaired by hand at some point and the repair was never written down, so <code>refactor/</code> was not reproducible from a clean checkout. It is now.</p>
+</div>
+
+<h2 id="setup">5. Worktree and environment setup</h2>
+
+<pre><code>git worktree add -b ts-rework ../ts-rework fix-refactor-blockers
+cp -Rc refactor/data-raw  ts-rework/data-raw     # APFS clone: 23 GB, 0.1 s, 0 bytes
+cp -Rc refactor/data-proc ts-rework/data-proc
+cp -Rc refactor/_targets  ts-rework/_targets
+cp    refactor/_creds.toml ts-rework/_creds.toml
+cd ts-rework &amp;&amp; pixi install &amp;&amp; pixi run deps</code></pre>
+
+<p><code>cp -Rc</code> is an APFS copy-on-write clone: the copy is instantaneous and consumes no additional disk, but the two trees are fully independent &mdash; writing to either leaves the other untouched. That gives the isolation from <code>refactor/</code> that was asked for without 23&nbsp;GB of duplication or a re-download.</p>
+
+<footer>
+Worktree <code>/Users/alexey.shiklomanov/projects/yale/thermal-acclimation/ts-rework</code> &middot; branch <code>ts-rework</code> &middot; last updated 2026-09-19.
+</footer>
+
+</div>
+</body>
+</html>

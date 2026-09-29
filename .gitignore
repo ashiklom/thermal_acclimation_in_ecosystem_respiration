@@ -64,3 +64,6 @@ reports/*_files/
 
 # SLURM controller logs (submit.sh)
 /_logs/
+
+# Analysis notes cited from code comments and docs
+!docs/*.html

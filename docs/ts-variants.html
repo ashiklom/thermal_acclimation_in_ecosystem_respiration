@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Methodology variants in the targets pipeline &mdash; plan, progress, findings</title>
+<style>
+  :root{
+    --ink:#16181d; --ink-2:#4a5058; --line:#e2e5ea; --bg:#ffffff; --bg-2:#f7f8fa;
+    --blocker:#b3261e; --high:#b5610a; --med:#7a6a00; --low:#4a5058; --ok:#1f6f43;
+    --accent:#2b4c7e; --todo:#8a8f98;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 1.25rem 5rem;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .wrap{max-width:62rem;margin:0 auto}
+  header{padding:3rem 0 1.5rem;border-bottom:2px solid var(--ink)}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 .5rem;letter-spacing:-.01em}
+  .sub{color:var(--ink-2);font-size:.95rem;margin:0}
+  h2{font-size:1.35rem;margin:3rem 0 .25rem;padding-bottom:.35rem;border-bottom:1px solid var(--line);letter-spacing:-.01em}
+  h3{font-size:1.05rem;margin:2rem 0 .4rem}
+  h4{font-size:.95rem;margin:1.4rem 0 .3rem;color:var(--accent)}
+  p{margin:.6rem 0}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.875em}
+  code{background:var(--bg-2);padding:.1em .35em;border-radius:3px;border:1px solid var(--line)}
+  pre{background:var(--bg-2);border:1px solid var(--line);border-left:3px solid var(--accent);
+      border-radius:4px;padding:.8rem 1rem;overflow-x:auto;font-size:.82rem;line-height:1.5;margin:.7rem 0}
+  pre code{background:none;border:none;padding:0}
+  table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.9rem}
+  th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--bg-2);font-weight:600;font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-2)}
+  .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em}
+  .tag{display:inline-block;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+       padding:.15em .5em;border-radius:3px;color:#fff;white-space:nowrap}
+  .t-done{background:var(--ok)} .t-prog{background:var(--high)} .t-todo{background:var(--todo)}
+  .t-key{background:var(--blocker)} .t-info{background:var(--accent)}
+  .finding{border:1px solid var(--line);border-radius:6px;padding:1rem 1.15rem;margin:1.1rem 0;background:var(--bg)}
+  .finding.key{border-left:4px solid var(--blocker)}
+  .finding.done{border-left:4px solid var(--ok);background:#fbfdfc}
+  .finding.prog{border-left:4px solid var(--high)}
+  .finding h3{margin:0 0 .5rem;font-size:1.02rem;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+  .note{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:.9rem 1.1rem;margin:1.2rem 0}
+  .note strong:first-child{color:var(--accent)}
+  .status{border:2px solid var(--accent);border-radius:6px;padding:1rem 1.3rem;margin:1.5rem 0;background:#f7f9fc}
+  .status h3{margin:0 0 .5rem;font-size:1rem;color:var(--accent)}
+  ul,ol{margin:.5rem 0;padding-left:1.4rem}
+  li{margin:.3rem 0}
+  .lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2)}
+  footer{margin-top:4rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.82rem;color:var(--ink-2)}
+  .toc{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:1rem 1.3rem;margin:1.5rem 0}
+  details.expand{border:1px solid var(--line);border-radius:6px;background:var(--bg-2);padding:.6rem .95rem;margin:1rem 0}
+  details.expand>summary{cursor:pointer;font-weight:600;font-size:.88rem;color:var(--accent);
+    list-style:none;display:flex;gap:.45rem;align-items:baseline}
+  details.expand>summary::-webkit-details-marker{display:none}
+  details.expand>summary::before{content:"\25B8";font-size:.8em;color:var(--ink-2)}
+  details.expand[open]>summary::before{content:"\25BE"}
+  details.expand[open]>summary{padding-bottom:.45rem;margin-bottom:.35rem;border-bottom:1px solid var(--line)}
+  details.expand>summary .hint{font-weight:400;color:var(--ink-2);font-size:.82rem}
+  details.expand .body{font-size:.9rem}
+  details.expand h4{margin:1rem 0 .15rem}
+  details.expand .body>h4:first-child{margin-top:.3rem}
+  details.expand ul{margin:.2rem 0;padding-left:1.15rem}
+  details.expand li{margin:.35rem 0}
+  details.expand p{margin:.4rem 0}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Methodology variants in the targets pipeline<br>Plan, progress and findings</h1>
+  <p class="sub">Branch <code>ts-variants</code>, worktree <code>./ts-rework</code>, branched from the merge of <code>ts-rework</code> and <code>fix-refactor-blockers</code>. Started 2026-09-19. Continues <a href="ts-rework.html">ts-rework.html</a>, whose findings F1&ndash;F13 this work turns into pipeline options.</p>
+</header>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#goal">Goal and design</a></li>
+    <li><a href="#plan">The plan, and the order it is being done in</a></li>
+    <li><a href="#progress">Progress log</a></li>
+    <li><a href="#findings">Findings</a></li>
+    <li><a href="#running">Running it: local test and YCRC submission</a></li>
+    <li><a href="#future">Documented future work</a></li>
+  </ol>
+</div>
+
+<div class="status">
+<h3>Status</h3>
+<p style="margin:.3rem 0"><strong>The pipeline runs end to end, twice over.</strong> A 6-site &times; 5-recipe &times; both-models run under the <code>fast</code> profile &mdash; 60 fits, 119 targets &mdash; completed in 1&nbsp;h&nbsp;20&nbsp;min on 8 local workers with <strong>zero errors</strong>; both reports rendered with every section populated. The frozen oracle, run on the final commit <code>9b32ad5</code>, is <strong>byte-identical</strong> to its committed baseline (12/12 TS, 24/24 SWC), as it was at every intermediate check. Unit suite 489 passing. Fourteen commits on <code>ts-variants</code> after the merge; working tree clean.</p>
+<p style="margin:.3rem 0"><strong>Two things to know before submitting the full grid.</strong> (1) It is near or over one 12&nbsp;h SLURM window at 20 workers; the arithmetic and the two remedies are in &sect;5. (2) None of the six development sites earns a BAD soil-temperature verdict, so in a dev run the <code>memory_fill</code> recipes never actually attach a reconstruction; that path is exercised by a test with the verdict forced, and whether any of the 44 handled sites triggers it is a result of the full run, not something a laptop run can show.</p>
+</div>
+
+<h2 id="goal">1. Goal and design</h2>
+
+<p>One <code>targets</code> pipeline that produces the thermal-response estimates under several methodological variants side by side &mdash; the original logic from <code>site_info.csv</code>, the choices recommended by the soil-temperature analysis, and variations of those &mdash; and compares them in a Quarto report, with every number traceable to the choice that produced it. It has to be modular enough that a new option (ERA5-Land soil temperature, a different growing-season rule) is one row in a registry rather than a fork of the code.</p>
+
+<h3>The recipe</h3>
+<p>A <strong>recipe</strong> is a named set of choices, one <em>strategy</em> per <em>axis</em>. Sites &times; recipes is the pipeline's grid.</p>
+
+<table>
+<thead><tr><th>Axis</th><th>Strategies</th><th>Today's behaviour</th><th>Stage</th></tr></thead>
+<tbody>
+<tr><td><code>ts</code></td><td><code>site_info</code> &middot; <code>screen_best</code> &middot; <code>memory_fill</code> &middot; <em>(<code>era5</code>)</em></td><td><code>site_info</code></td><td>fit</td></tr>
+<tr><td><code>season</code></td><td><code>detect</code> &middot; <code>whole_year</code> &middot; <em>(<code>satellite</code>)</em></td><td><code>detect</code></td><td>fit</td></tr>
+<tr><td><code>bounds</code></td><td><code>native</code> &middot; <code>climatology</code> &middot; <code>halfhourly</code></td><td><code>native</code>: <code>climatology</code> for measured, <code>halfhourly</code> for regressed</td><td>fit</td></tr>
+<tr><td><code>swc</code></td><td><code>site_info</code> &middot; <code>era5</code></td><td><code>site_info</code></td><td>fit</td></tr>
+<tr><td><code>year_qc</code></td><td><code>site_info</code> &middot; <em>(<code>computed</code>)</em></td><td><code>site_info</code></td><td>prep</td></tr>
+</tbody>
+</table>
+
+<details class="expand">
+<summary>What each strategy does <span class="hint">&mdash; one bullet per cell of the Strategies column; parenthesised names are not built yet</span></summary>
+<div class="body">
+
+<p>Every strategy is a branch of the matching <code>choose_*()</code> in <code>R/strategies.R</code>, and every branch only <em>selects</em>: step&nbsp;01 has already produced each candidate column and each bounds definition, so a strategy names one and records the reason next to the result. The full write-up is <code>docs/recipes.md</code>.</p>
+
+<h4><code>ts</code> &mdash; which soil-temperature column the model is fitted on</h4>
+<p>The verdict these strategies branch on is <strong>one <code>GOOD</code>/<code>BAD</code> per site</strong>, not per timestamp, so the substitution is of the whole column at a site &mdash; never of the bad stretches within an otherwise good record. (<code>TS_linear</code> and <code>TS_memfill</code> are themselves hybrids at the row level: each writes its prediction over measured soil temperature only where a prediction exists, so measured values survive wherever a predictor is missing. That is <code>overlay_ts()</code>, and it is the manuscript's semantics.)</p>
+<ul>
+<li><code>site_info</code> &mdash; the <code>ts_col</code> declaration in <code>site_info.csv</code>. The manuscript's choice, site by site, as a person made it.</li>
+<li><code>screen_best</code> &mdash; <code>TS_measured</code> unless the in-pipeline quality verdict is <code>BAD</code>, in which case <code>TS_linear</code>, the <code>TS&nbsp;~&nbsp;TA</code> regression the manuscript would have used anyway. This isolates one change and nothing else: stop discarding sensors the data says are fine (F10 &mdash; 27 of 50 hand-flagged sites pass every physical test).</li>
+<li><code>memory_fill</code> &mdash; as <code>screen_best</code>, but a <code>BAD</code> sensor is replaced by <code>TS_memfill</code>, the reconstruction the per-site blocked-CV scorer picked (F12 &mdash; memory features cut out-of-fold error 58%). If the fill is unavailable the strategy falls back to <code>TS_linear</code> and writes why into <code>settings$ts_reason</code>, rather than failing the site.</li>
+<li><em>(<code>era5</code>)</em> &mdash; planned: ERA5-Land <code>stl1</code>/<code>stl2</code> bias-corrected to the tower over the periods the screen passes. It needs a CDS download target and has to beat the 1.26&nbsp;&deg;C the memory features already reach.</li>
+</ul>
+<p>The verdict is computed on the column step&nbsp;01 leaves as <code>TS_measured</code>, i.e. <em>after</em> that step's site-specific reconstructions &mdash; which is why V4 can see a fill rediscover a regression.</p>
+
+<h4><code>season</code> &mdash; the day-of-year span the 14-day windows tile</h4>
+<ul>
+<li><code>detect</code> &mdash; the detected growing season. Today's behaviour, and the name understates it: <code>detect_growing_season()</code> derives <code>gStart</code>/<code>gEnd</code> from the day-of-year NEE climatology, raises <code>gStart</code> to the first day whose mean soil temperature is non-negative, and then <strong>overwrites either bound with the literal value in <code>site_info.csv</code> where one is declared</strong>. Twenty-four of the 117 rows declare at least one &mdash; including two of the six development sites, FI-Sod (<code>gEnd = 270</code>) and NL-Loo (<code>gStart = 120</code>) &mdash; so at those sites the "detected" season is partly a hand-set one. A <code>force_detect</code> strategy that ignores the overrides would separate the two and is listed in &sect;6.</li>
+<li><code>whole_year</code> &mdash; a full year of DOY, starting where the site's growing year starts: 1&ndash;366 at an ordinary site and 183&ndash;548 at one whose growing year is wrapped, so the span is in the same coordinates as the data. <strong>Only the window layout changes</strong>; the detected season still drives the year gap scan and the control-year choice, because each needs a span to be defined over. Tests whether season detection is redundant with the fit-stage guards &mdash; V3 says it is not.</li>
+<li><em>(<code>satellite</code>)</em> &mdash; placeholder for a remotely-sensed phenology span in place of the flux-derived one.</li>
+</ul>
+
+<h4><code>bounds</code> &mdash; which population the window-skip percentiles (<code>tStart</code>/<code>tEnd</code>) are taken from</h4>
+<ul>
+<li><code>native</code> &mdash; each column's own definition, as the manuscript had it: the day-of-year climatology for the measured column, the raw half-hourly values for the regressed one. F4 measured the inconsistency this creates &mdash; the admissible band is 10.0&nbsp;&deg;C wide under one definition and 16.7&nbsp;&deg;C under the other, before the column changes at all.</li>
+<li><code>climatology</code> &mdash; the day-of-year-climatology definition, applied to whichever column the <code>ts</code> axis selected.</li>
+<li><code>halfhourly</code> &mdash; the half-hourly definition, likewise. Step&nbsp;01 emits both rows for every column, so this is a lookup and not a recomputation.</li>
+</ul>
+<p>The <code>climatology</code> row for <code>TS_measured</code> is <em>not</em> the <code>native</code> row: the native one is computed before disqualified years are dropped and is then floored, the consistent one on the step-01 output. Both sit in <code>ts_bounds</code> flagged by <code>native</code>, so a recipe cannot pick one thinking it is the other.</p>
+
+<h4><code>swc</code> &mdash; which soil-water column the direct model uses</h4>
+<ul>
+<li><code>site_info</code> &mdash; measured where <code>SWC_use&nbsp;=&nbsp;YES</code>, ERA5-Land otherwise. Today's behaviour.</li>
+<li><code>era5</code> &mdash; ERA5-Land everywhere, so the soil-water driver is one product across sites. The total model has no soil water in its formula, so the choice is <code>NA</code> there whatever the recipe says.</li>
+</ul>
+
+<h4><code>year_qc</code> &mdash; how years are qualified <span class="tag t-info">prep stage</span></h4>
+<ul>
+<li><code>site_info</code> &mdash; the gap scan plus the hand-maintained <code>year_removed</code> list. The only strategy built.</li>
+<li><em>(<code>computed</code>)</em> &mdash; planned: a scored rule (gap statistics, u* coverage, residual anomalies) replacing the manual list, validated against the 20 sites that carry one. Being a <em>prep</em>-stage axis, it is the first strategy that changes the prep key and so the first that needs <code>site_data</code> mapped over <code>crossing(site, prep_key)</code>; <code>_targets.R</code> asserts this and its message names the spot.</li>
+</ul>
+
+</div>
+</details>
+
+<p>The <strong>stage</strong> column is the efficiency design. Step&nbsp;01 (<code>prep_nee_ac()</code>) costs 30&ndash;140&nbsp;s a site and step&nbsp;02 costs hundreds of Stan fits; every axis whose choice can be deferred to step&nbsp;02 is, so that recipes differing only in a <em>fit</em> choice share one step-01 result. Step&nbsp;01 therefore produces <em>every</em> candidate soil-temperature column and <em>both</em> bounds definitions for each, and a recipe selects. This is the pattern <code>docs/derived-columns.md</code> already established for <code>TS_measured</code>/<code>TS_linear</code>, generalised.</p>
+
+<h3>The five registered recipes</h3>
+<p>A <em>strategy</em> is a choice on one axis; a <em>recipe</em> is a full set of them and is what a run is made under. The registry is <code>data-core/recipes.csv</code>, one row each, and these are the names used throughout &sect;4 and &sect;5. <code>original</code> is the oracle; every other row differs from it in as few axes as possible, so that a difference in the results has one cause.</p>
+
+<table>
+<thead><tr><th>Recipe</th><th><code>ts</code></th><th><code>season</code></th><th><code>bounds</code></th><th>Differs from <code>original</code> in</th></tr></thead>
+<tbody>
+<tr><td><code>original</code></td><td><code>site_info</code></td><td><code>detect</code></td><td><code>native</code></td><td>&mdash; the manuscript logic exactly; must reproduce the frozen oracle</td></tr>
+<tr><td><code>screened</code></td><td><code>screen_best</code></td><td><code>detect</code></td><td><code>native</code></td><td><code>ts</code>: stop discarding sensors the screen passes (F10)</td></tr>
+<tr><td><code>memfill</code></td><td><code>memory_fill</code></td><td><code>detect</code></td><td><code>native</code></td><td><code>ts</code>: and reconstruct a failed sensor with the CV-selected memory model (F12)</td></tr>
+<tr><td><code>memfill_hh</code></td><td><code>memory_fill</code></td><td><code>detect</code></td><td><code>halfhourly</code></td><td><code>ts</code> and <code>bounds</code>: one bounds definition for every column (F4)</td></tr>
+<tr><td><code>noseason</code></td><td><code>site_info</code></td><td><code>whole_year</code></td><td><code>native</code></td><td><code>season</code>: the 14-day windows tile the whole year</td></tr>
+</tbody>
+</table>
+
+<p>All five take <code>swc = site_info</code> and <code>year_qc = site_info</code>. Note the two vocabularies, which are easy to confuse: <strong><code>noseason</code> is the recipe, <code>whole_year</code> is the strategy it selects on the <code>season</code> axis</strong>, and it is not season-free &mdash; detection still sets the year gap scan and the control year (&sect;6). <code>DEV_RECIPES</code>, what a default local run uses, is <code>original</code>, <code>memfill_hh</code> and <code>noseason</code>: the three that between them exercise every code path.</p>
+
+<h2 id="plan">2. The plan, and the order it is being done in</h2>
+
+<table>
+<thead><tr><th style="width:3rem">#</th><th>Step</th><th style="width:7rem">Status</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td>Merge <code>fix-refactor-blockers</code> into <code>ts-rework</code>; verify; branch <code>ts-variants</code> in the same worktree.</td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">1</td><td><strong>Recipe machinery.</strong> Registry, recipe object, strategy functions extracted from <code>prep_nee_ac()</code>/<code>total_tas_site()</code> with zero behaviour change under the <code>original</code> recipe, proved by the frozen oracle.</td><td><span class="tag t-done">Done; oracle identical</span></td></tr>
+<tr><td class="num">2</td><td><strong>Per-site inputs the recipes consume</strong>, computed once: the soil-temperature quality verdict and the blocked-CV reconstruction, promoted from <code>scripts/</code> into <code>R/</code> as targets.</td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">3</td><td><strong>The grid in <code>_targets.R</code></strong>: sites &times; recipes &times; models, with a fit-fidelity knob for local tests and env-var scoping of every dimension.</td><td><span class="tag t-done">Done</span></td></tr>
+<tr><td class="num">4</td><td><strong>Comparison report</strong> (<code>reports/variant-comparison.qmd</code>) as a <code>tar_quarto</code> target: recipes vs <code>original</code> vs the manuscript oracle, with per-site provenance.</td><td><span class="tag t-done">Rendered</span></td></tr>
+<tr><td class="num">5</td><td>End-to-end local run on a small grid; tests; documentation of the YCRC submission and of the future work.</td><td><span class="tag t-done">Done</span></td></tr>
+</tbody>
+</table>
+
+<h2 id="progress">3. Progress log</h2>
+
+<h3>Phase 0 &mdash; merge and branch <span class="tag t-done">Done</span></h3>
+<ul>
+<li><code>fix-refactor-blockers</code> merged into <code>ts-rework</code> at <code>10a4a80</code>. The two branches touched no file in common, and the merge was clean. It brings in <code>R/write-outputs.R</code>, the <code>tar_combine</code> collectors and CSV writers, a <code>tar_quarto</code> run report (<code>reports/pipeline-report.qmd</code>), download targets for WorldClim/GSOC/BADM, and pinned <code>quarto</code>/<code>r-insight</code>.</li>
+<li>Branch <code>ts-variants</code> created from the merge, same worktree.</li>
+</ul>
+
+<h3>Phase 1 &mdash; recipe machinery <span class="tag t-done">Done; oracle identical</span></h3>
+<p><strong>What a recipe is in code.</strong> A validated S3 list (<code>R/recipes.R</code>), not an S7 class: recipes travel through targets' qs2 store and through <code>tar_map()</code> values, and an S7 object does not come back <code>identical()</code> from qs2 while a classed list does. Validation runs at construction against <code>RECIPE_AXES</code>, so an unknown strategy fails by name at pipeline definition, not inside the one target that reaches it. <code>read_recipes()</code> also refuses a registry whose <code>original</code> row disagrees with <code>original_recipe()</code> in code &mdash; the oracle comparison has to be against the right thing.</p>
+<p><strong>Where the choices are made.</strong> <code>R/strategies.R</code> has one <code>choose_*()</code> per axis, each a <code>switch()</code> whose branches name a column, a span or a bounds row. None computes anything; step&nbsp;01 produces every candidate and these select. Every function returns the <em>reason</em> for its choice alongside it, and <code>total_tas_site()</code> writes those reasons into <code>settings</code>, so provenance is a column of the results rather than a reconstruction after the fact.</p>
+<p><strong>Step 01 now produces both bounds definitions for every column.</strong> The <code>ts_bounds</code> table gained <code>definition</code> and <code>native</code> columns. The native rows are the manuscript's numbers exactly &mdash; the measured column's carries the 0&nbsp;&deg;C floor and, at three sites, the 2&nbsp;&deg;C truncation, so it is written directly rather than by the generic <code>ts_bounds_rows()</code> &mdash; and <code>ts_bounds_for(ts_bounds, ts_col)</code> with no definition still returns the native row, which is what every pre-existing caller means. It also produces <code>ts_qc</code>, the quality verdict on <code>TS_measured</code> that the <code>screen_best</code> and <code>memory_fill</code> strategies branch on.</p>
+<p><strong>Backward compatibility, checked.</strong> <code>total_tas_site()</code> with no recipe uses <code>original_recipe()</code>; on DE-RuC the structure-only output with <code>recipe = NULL</code> and with <code>recipe = original_recipe()</code> is <code>identical()</code>. The unit suite still passes (389) and <code>tests/ts-swc-baseline.R</code> is unchanged &mdash; its call signature was preserved on purpose.</p>
+<p><strong>Fit fidelity.</strong> <code>fit_settings("full")</code> is the manuscript's sampler configuration; <code>"fast"</code> is two chains, a few hundred iterations, no retry. Threaded as an argument and baked into each fit target's command via the grid, so changing <code>THERMAL_FIT</code> invalidates exactly the fits and a store cannot mix profiles silently; <code>settings$fit_profile</code> records it and the report banners it.</p>
+
+<h3>Phase 2 &mdash; per-site inputs <span class="tag t-done">Done</span></h3>
+<p><code>R/ts-qc.R</code> (diagnostics + verdict) and <code>R/ts-fill.R</code> (methods, blockings, scorer, <code>fill_soil_temp()</code>) are the promoted <code>scripts/</code> code; the scripts now source them from <code>R/</code> so there is one definition of each. <code>fill_soil_temp()</code> is a per-site, recipe-independent target: it scores every method out of fold under leave-one-year-out, picks the lowest RMSE, refits on all measured rows, predicts everywhere, overlays measured where a predictor is missing (the <code>TS_linear</code> semantics), and returns the column aligned to both step-01 tables plus its bounds rows and the CV table. It never errors &mdash; a site nothing can be fitted at returns a status, and the strategy falls back and says so &mdash; because under <code>error = "continue"</code> an error there would take every recipe at the site down with it.</p>
+<p>On DE-RuC: verdict GOOD (amplitude ratio 0.50, lag 1.4&nbsp;h); <code>rf_memory</code> wins the CV at 1.20&nbsp;&deg;C against <code>lm_ta_pos</code>'s 2.61; 1.35&nbsp;min.</p>
+
+<h3>Phase 3 &mdash; the grid <span class="tag t-done">Done</span></h3>
+<p>Two <code>tar_map()</code>s. The per-site one produces <code>site_info</code>, <code>site_dl</code>, <code>site_data</code>, <code>site_fill</code> once each. The fit one maps over <code>crossing(site, recipe, model)</code> and references its site's inputs as symbols built from the site name &mdash; the device <code>write_respiration_all()</code> already used &mdash; so a fit depends on exactly its own site. Recipes are targets read from the registry file, so editing a row invalidates exactly the fits made under it. Everything is combined once over the whole grid with <code>recipe_id</code> and <code>model</code> as columns; the manuscript-layout CSVs the <code>workflows/</code> scripts read are the <code>original</code> slice of those tables under their old names, so nothing downstream changes.</p>
+<p><code>_targets.R</code> asserts that every recipe in a run shares one prep key. All five do today; the first recipe that does not (a <code>computed</code> year qualification) needs <code>site_data</code> mapped over <code>crossing(site, prep_key)</code>, and the assertion's message says so. Under the dev grid: 119 targets, 60 fits.</p>
+
+<h3>Phase 5 &mdash; end-to-end runs <span class="tag t-done">Done</span></h3>
+<p><strong>Narrow run</strong> (<code>THERMAL_SITES=DE-RuC,DE-Hte THERMAL_RECIPES=all THERMAL_MODELS=total THERMAL_FIT=fast</code>): 53 targets, 10 fits, 16&nbsp;min wall on 8 workers. Three targets errored, none of them in the fit path: the two external raster downloads (R's 60&nbsp;s <code>timeout</code>; fixed, an hour now) and the pre-existing run report, which died binding a header-only CSV &mdash; a run scoped to one model writes an empty table for the other, and <code>read.csv()</code> types its columns logical (fixed). The variant report rendered with every section populated.</p>
+<table>
+<thead><tr><th>Fit target (fast profile)</th><th class="num">seconds</th><th>why</th></tr></thead>
+<tbody>
+<tr><td><code>site_tas_DE.RuC_noseason_total</code></td><td class="num">777</td><td>26 windows, 272 cells</td></tr>
+<tr><td><code>site_tas_DE.Hte_noseason_total</code></td><td class="num">390</td><td>26 windows, 97 cells (15 skipped)</td></tr>
+<tr><td><code>site_tas_DE.RuC_memfill_total</code></td><td class="num">292</td><td>8 windows, 88 cells</td></tr>
+<tr><td>the other seven</td><td class="num">251&ndash;291</td><td>7&ndash;8 windows, 62&ndash;88 cells</td></tr>
+</tbody>
+</table>
+<table>
+<thead><tr><th>Fast-profile fit minutes, six sites</th><th class="num">median</th><th class="num">max</th><th class="num">sum</th></tr></thead>
+<tbody>
+<tr><td>total &middot; original / screened / memfill / memfill_hh</td><td class="num">4.8&ndash;5.1</td><td class="num">18&ndash;21</td><td class="num">43&ndash;45 each</td></tr>
+<tr><td>total &middot; noseason</td><td class="num">9.3</td><td class="num">28</td><td class="num">75</td></tr>
+<tr><td>direct &middot; original / screened / memfill / memfill_hh</td><td class="num">6.1&ndash;6.4</td><td class="num">25&ndash;28</td><td class="num">57&ndash;58 each</td></tr>
+<tr><td>direct &middot; noseason</td><td class="num">11.8</td><td class="num">39</td><td class="num">96</td></tr>
+</tbody>
+</table>
+<p>Per site: NL-Loo 4.25 worker-hours for its ten fits, the other five 0.9&ndash;1.3 each. The direct model costs 1.32&times; the total; <code>noseason</code> is 30% of all fit time.</p>
+<p>So the six-site run gives the real number: <strong>9.6 worker-hours for 60 fast fits</strong>, median 6.1&nbsp;min, maximum 39&nbsp;min (NL-Loo has 238 cells under <code>original</code> and 367 under <code>noseason</code>). <code>full</code> is 3&ndash;5&times; the wall time of <code>fast</code> (three times the iterations, chains in parallel, plus divergence retries). Scaling to 44 sites: <strong>roughly 250&ndash;350 worker-hours</strong>, which is 12&ndash;18&nbsp;h at 20 workers &mdash; over one 12&nbsp;h window. Two remedies, either sufficient: <code>THERMAL_SLURM_WORKERS=40</code> in <code>submit.sh</code> halves it; or submit twice, since targets resumes exactly where it stopped. The natural split is <code>THERMAL_RECIPES=original,screened,memfill,memfill_hh</code> first and <code>noseason</code> second &mdash; it is a third of the work on its own, because it fits three times as many windows.</p>
+<p><strong>Wide run</strong> (<code>THERMAL_SITES=dev</code> &mdash; six sites &mdash; <code>THERMAL_RECIPES=all THERMAL_MODELS=total,direct THERMAL_FIT=fast</code>), after pruning the 110 stale entries the cloned <code>_targets/</code> store carried from the previous pipeline layout: 119 targets, 60 fits, <strong>0 errors</strong>, 1&nbsp;h&nbsp;20&nbsp;min wall. Fits: median 6.1&nbsp;min, maximum 39&nbsp;min (<code>NL-Loo</code>, <code>noseason</code>, direct), 9.6 worker-hours in all. The external rasters downloaded this time (WorldClim 15&nbsp;min, GSOC 2&nbsp;min) under the longer timeout. Ten fits warned <code>singular gradient matrix at parameter estimates</code> &mdash; the <code>gsl_nls</code> warm start for the priors failing and being caught, after which the defaults are kept; pre-existing behaviour, mostly on the direct model.</p>
+
+<h3>Phase 4 &mdash; the report <span class="tag t-done">Rendered</span></h3>
+<p><code>reports/variant-comparison.qmd</code>, a second <code>tar_quarto</code> target beside the existing run report. Every input is a literal <code>tar_read()</code> so the report re-renders when the results change. Sections: run metadata with a banner when the profile is <code>fast</code>; the registry; <code>original</code> against <code>data-proc-original/</code>; TAS by site &times; recipe with the change against <code>original</code> in units of the sampler noise floor, sign flips and <em>p</em> crossings called out; the provenance table (which column, why, the verdict, the fill method and its CV error, the bounds, the window span, the control year); structure (cells fitted, skips by reason, control-year changes); the <code>noseason</code> test as the share of fitted cells lying entirely outside the detected season; the fill CV table and a plot; the quality screen. Recipes take their colour from their position in the registry, never from rank in a table, so a recipe is the same colour in every figure and every figure has a table beside it.</p>
+
+<h2 id="findings">4. Findings</h2>
+
+<div class="finding key">
+<h3><span class="tag t-key">V1</span> At DE-RuC the guards do not remove the out-of-season windows: <code>noseason</code> fits 272 cells against 88</h3>
+<p>Structural run (<code>fit = FALSE</code>, exact). Under <code>original</code> the detected season DOY&nbsp;83&ndash;194 gives 8 windows and 88 (window &times; year) cells. Under <code>noseason</code> the whole year gives 26 windows and <strong>272 cells, with one window skipped</strong>. The hypothesis that the fit-stage guards would discard what season detection discards predicts roughly 88 either way. DE-RuC is a temperate oceanic (Cfb) site whose soil rarely drops below the 2&nbsp;&deg;C floor, so this is the case the hypothesis was <em>weakest</em> for; the report's per-site table of fitted cells outside the detected season is the general answer, and boreal sites will look different.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">V7</span> Season detection is redundant where winter is cold enough, and nowhere else</h3>
+<p>The share of cells the <code>noseason</code> recipe fitted that lie entirely outside the detected growing season, total model, per site:</p>
+<table>
+<thead><tr><th>Site</th><th>Climate</th><th class="num">detected season (DOY)</th><th class="num">cells, original</th><th class="num">cells, noseason</th><th class="num">outside the season</th><th class="num">windows skipped</th></tr></thead>
+<tbody>
+<tr><td>FI-Sod</td><td>Dfc</td><td class="num">124&ndash;270</td><td class="num">80</td><td class="num">102</td><td class="num"><strong>0%</strong></td><td class="num">17 (14 cold, 3 sparse)</td></tr>
+<tr><td>SE-Deg</td><td>Dfc</td><td class="num">142&ndash;245</td><td class="num">80</td><td class="num">92</td><td class="num"><strong>0%</strong></td><td class="num">18</td></tr>
+<tr><td>DE-Hte</td><td>Dfb</td><td class="num">136&ndash;239</td><td class="num">62</td><td class="num">97</td><td class="num">19%</td><td class="num">15</td></tr>
+<tr><td>NL-Loo</td><td>Cfb</td><td class="num">120&ndash;272</td><td class="num">238</td><td class="num">367</td><td class="num">29%</td><td class="num">9</td></tr>
+<tr><td>DE-Akm</td><td>Dfb</td><td class="num">134&ndash;217</td><td class="num">78</td><td class="num">150</td><td class="num">39%</td><td class="num">14</td></tr>
+<tr><td>DE-RuC</td><td>Cfb</td><td class="num">83&ndash;194</td><td class="num">88</td><td class="num">272</td><td class="num">64%</td><td class="num">1</td></tr>
+</tbody>
+</table>
+<p>At the two boreal sites the hypothesis holds <em>exactly</em>: the 2&nbsp;&deg;C floor and the observation-count guard remove every out-of-season window, and nothing that season detection would have excluded survives. At the four temperate sites it fails, by an amount that tracks how mild the winter is &mdash; DE-RuC's soil almost never reaches the floor, and 64% of what it fits is out of season. Across the six: 33%.</p>
+<p>Two further things the table shows. Even at the boreal sites <code>noseason</code> fits <em>more</em> cells (+25%), because a whole-year tiling has a different phase and its windows straddle the season's edges differently, so "the same windows" is not quite what survives even where the share outside is zero. And the recipe changes TAS even under the smoke-test profile &mdash; FI-Sod total &minus;0.035&nbsp;&rarr;&nbsp;&minus;0.0005, NL-Loo 0.004&nbsp;&rarr;&nbsp;0.018 &mdash; which is direction, not size, until <code>full</code> has run. The redundancy claim is therefore true as a statement about cold sites and false as a statement about the method; a season-free pipeline would need the year-qualification rule in &sect;6 and would still fit different windows.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">V8</span> The three sites whose sensor the manuscript discards move the way F8 and F10 said they would</h3>
+<p>DE-RuC, FI-Sod and NL-Loo declare <code>TS_linear</code>; FI-Sod and NL-Loo are on F10's list of nine healthy sensors discarded for no data-visible reason, and the in-pipeline screen passes all three (NL-Loo: coverage 1.00, amplitude ratio 0.07, lag 6.2&nbsp;h). Under every recipe that selects the measured column, TAS moves &mdash; fast profile, direction only:</p>
+<table>
+<thead><tr><th>Site</th><th>Model</th><th class="num"><code>original</code> (TS_linear)</th><th class="num">measured column</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>DE-RuC</td><td>total</td><td class="num">0.023</td><td class="num">0.007</td><td>control year 2024&nbsp;&rarr;&nbsp;2020</td></tr>
+<tr><td>FI-Sod</td><td>total</td><td class="num">+0.008</td><td class="num">&minus;0.035</td><td><strong>sign flip</strong>; <em>p</em> crosses 0.05</td></tr>
+<tr><td>FI-Sod</td><td>direct</td><td class="num">&minus;0.005</td><td class="num">&minus;0.039</td><td><em>p</em> crosses 0.05</td></tr>
+<tr><td>NL-Loo</td><td>total</td><td class="num">0.014</td><td class="num">0.003</td><td></td></tr>
+<tr><td>NL-Loo</td><td>direct</td><td class="num">0.079</td><td class="num">0.018</td><td></td></tr>
+</tbody>
+</table>
+<p>The control: at DE-Akm, DE-Hte and SE-Deg, where <code>original</code> already uses the measured column, <code>screened</code> and <code>memfill</code> reproduce it to about 10<sup>&minus;3</sup> &mdash; the sampler noise under this profile &mdash; as they must. The three measured-column recipes agree with each other everywhere to the same tolerance, because the only thing that separates them at these sites is the bounds definition and it changed no window's fate.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">V4</span> The recipes cannot see past step 01's hard-coded reconstructions &mdash; DE-Hte shows the limit exactly</h3>
+<p><strong>Yes: the column named <code>TS_measured</code> at DE-Hte contains no measured soil temperature at all.</strong> The site is declared <code>estimate_Ts = YES</code> with <code>estimate_ts_method = "linear regression"</code>, so step 01 calls <code>fix_soil_temp()</code>, which fits <code>lm(TS ~ TA + NETRAD)</code> on the hours where a sensor reading exists and then <em>replaces the whole column</em> with that model's prediction &mdash; every row, including the hours that were measured. (It trains on <code>TS_F_MDS_2</code>, the second depth, because DE-Hte's first layer is too sparse; and it predicts from gap-filled air temperature and net radiation.) What every later stage sees under the name <code>TS_measured</code> is therefore a pure two-predictor regression.</p>
+<p>Three things follow, in order:</p>
+<ol>
+<li><strong>The quality screen passes it</strong> &mdash; amplitude ratio 0.48, lag 0.86&nbsp;h. The screen's job is to catch a soil column that is really air temperature, and a regression carrying net radiation is not air-like: the extra predictor supplies enough damping and phase lag to look like soil. So <code>screened</code> and <code>memfill</code> both select this column, and every recipe but <code>noseason</code> produces the same fit as <code>original</code>.</li>
+<li><strong>The reconstruction then scores perfectly against it.</strong> <code>fill_soil_temp()</code> cross-validates its candidates against <code>TS_measured</code> as truth. One candidate, <code>lm_ta_netrad</code>, has exactly the functional form that <em>made</em> the column, so any subset of rows recovers the same coefficients: out-of-fold RMSE <strong>1.5&times;10<sup>&minus;14</sup></strong>, machine precision. The fill has rediscovered its own truth. Arithmetically correct, and empty as a statement about soil.</li>
+<li><strong>The variants cannot reach past it.</strong> Every strategy operates on the column step 01 hands over, <em>downstream</em> of that replacement, so at the 16 <code>estimate_Ts</code> sites (and CZ-Stn, FI-Sod, GF-Guy, whose columns are swapped or rebuilt by other hard-coded branches) changing the <code>ts</code> axis changes nothing that matters.</li>
+</ol>
+<p><strong>What is recorded about it.</strong> The fill now carries <code>degenerate = TRUE</code> when its winner's RMSE is indistinguishable from zero, and <code>truth_synthetic = TRUE</code> when the site is one at which step 01's column is a reconstruction by any declared mechanism &mdash; the second is needed because DE-Akm's random-forest column is reproduced by <code>rf_ta_netrad</code> to 0.30&nbsp;&deg;C rather than to zero. Every fit's settings row carries <code>ts_measured_synthetic</code> whatever the recipe, and the provenance table in the report shows all three. Undoing the reconstructions themselves is the data-driven column-choice item in &sect;6, and it is a <em>prep</em>-stage axis.</p>
+</div>
+
+<div class="finding key">
+<h3><span class="tag t-key">V5</span> At two temperate sites, half the cells <code>noseason</code> fits lie entirely outside the detected season</h3>
+<p>From the rendered report: across DE-RuC and DE-Hte, <strong>52%</strong> of the (window &times; year) cells the <code>noseason</code> recipe fitted lie wholly outside the detected growing season &mdash; 173 of 272 at DE-RuC (64%), fewer at DE-Hte, where the 2&nbsp;&deg;C floor skipped 15 of 26 windows. The hypothesis that the fit-stage guards would discard what season detection discards predicts a number near zero. What survives is what the guards were never designed to catch: shoulder-season windows with soil above 2&nbsp;&deg;C and positive nighttime respiration. Both sites are temperate (Cfb, Dfb); the six-site run adds FI-Sod and SE-Deg, where winter soil sits below the floor for months and the share should fall. Whatever it is per climate, the report now computes it per site.</p>
+<p>The TAS consequences are visible even under <code>fast</code>: DE-Hte 0.113 &rarr; 0.081 with the p-value rising from 0.003 to 0.012; DE-RuC 0.023 &rarr; 0.013. These are smoke-test numbers &mdash; two chains, 400 iterations &mdash; and are reported as direction only.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">V6</span> DE-RuC under measured soil temperature (fast profile, direction only)</h3>
+<p>DE-RuC declares <code>TS_linear</code>. Under <code>original</code> its TAS is 0.023 (p&nbsp;=&nbsp;0.057); under every recipe that selects the measured column &mdash; <code>screened</code>, <code>memfill</code>, <code>memfill_hh</code> &mdash; it is 0.007 (p&nbsp;&asymp;&nbsp;0.68), with the control year moving 2024&nbsp;&rarr;&nbsp;2020 (V2). The three measured-column recipes agree with each other to 6&times;10<sup>&minus;4</sup>, which is about the sampler noise under this profile, as they should: they differ only in the bounds definition, and at DE-RuC the wider half-hourly band skips no additional window. The direction &mdash; a 70% drop when the regression is replaced by the sensor &mdash; is the same as F8 found at the site where TAS was significant; the size is not to be read until the <code>full</code> profile has run.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">V2</span> Selecting measured soil temperature changes the control year</h3>
+<p>DE-RuC declares <code>TS_linear</code>. Under <code>original</code> its control year is 2024; under every recipe that selects <code>TS_measured</code> it is 2020. The control year sets <code>ERref_control</code>, the denominator of every <code>lnRatio</code> the TAS regression is fitted to &mdash; F3 in <code>ts-rework.html</code> found this at 37 of 43 sites and here it is again in the pipeline itself, now recorded in <code>settings$control_year</code> per recipe.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">V3</span> The consistent <code>climatology</code> bounds are not the native ones</h3>
+<p>DE-RuC, measured column: native [5.16, 17.29], consistent climatology [5.38, 17.17], half-hourly [3.50, 20.90]. The native row is computed by <code>detect_growing_season()</code> on the record <em>before</em> disqualified years are dropped and then floored; the consistent row is computed on the step-01 output. Close, not equal, and both are in <code>ts_bounds</code> flagged by <code>native</code>, so a recipe cannot pick one thinking it is the other.</p>
+</div>
+
+
+
+<h2 id="running">5. Running it: local test and YCRC submission</h2>
+
+<p>Every dimension of a run is an environment variable, read once when <code>_targets.R</code> is evaluated and baked into the target commands, so changing one invalidates exactly the targets it affects and a store cannot mix configurations silently.</p>
+
+<pre><code>THERMAL_SITES          dev (default) | all | DE-Tha,SE-Nor,...      which sites
+THERMAL_RECIPES        dev (default) | all | original,memfill,...   which recipes
+THERMAL_MODELS         total,direct (default) | total | direct      which models
+THERMAL_FIT            full (default) | fast                        sampler fidelity
+THERMAL_SLURM_WORKERS  20 (default)                                 cluster workers</code></pre>
+
+<table>
+<thead><tr><th>Purpose</th><th>Invocation</th><th>Grid</th><th>Wall time</th></tr></thead>
+<tbody>
+<tr><td>Does everything run?</td><td><code>THERMAL_SITES=DE-RuC,DE-Hte THERMAL_RECIPES=all THERMAL_MODELS=total THERMAL_FIT=fast pixi run targets</code></td><td>2 &times; 5 &times; 1 = 10 fits</td><td>minutes</td></tr>
+<tr><td>Every code path, both models</td><td><code>THERMAL_RECIPES=all THERMAL_FIT=fast pixi run targets</code></td><td>6 &times; 5 &times; 2 = 60 fits</td><td>about an hour, 8 workers</td></tr>
+<tr><td>The full grid, for results</td><td><code>sbatch submit.sh</code> on YCRC</td><td>44 &times; 5 &times; 2 = 440 fits</td><td>see below</td></tr>
+</tbody>
+</table>
+
+<p><strong>What <code>fast</code> is and is not.</strong> <code>fit_settings("fast")</code> is two chains and a few hundred iterations with no divergence retry &mdash; roughly a fifth of the sampler work of <code>full</code>, which is the manuscript's configuration. It exists to prove that every recipe, collector and report runs end to end. Its TAS values are smoke-test artefacts: <code>settings$fit_profile</code> records the profile on every row and both reports put a banner at the top when they see it.</p>
+
+<p><strong>On YCRC.</strong> <code>submit.sh</code> exports the full-grid configuration and runs <code>pixi run targets</code>; it is only the controller job. <code>_targets.R</code> selects <code>crew_controller_slurm()</code> when the hostname matches <code>ycrc.yale.edu</code>, and that launches 20 worker jobs of 12&nbsp;h each with four tasks apiece. Two things to check before submitting:</p>
+<ul>
+<li><code>data-raw/</code> has the flux products for the 44 handled sites (the FLUXNET-family, northern-hemisphere set; AmeriFlux BASE sites are outside <code>pipeline_sites()</code>). <code>download_site()</code> fetches missing ones, but the ICOS and FLUXNET downloads need the credentials in <code>_creds.toml</code>.</li>
+<li>The 12.5&nbsp;h controller limit in <code>submit.sh</code> is for the controller; worker time is in <code>_targets.R</code>. If the run is cut off, re-submitting resumes: targets skips everything already built.</li>
+</ul>
+
+<p><strong>What "ran to completion" looks like.</strong> <code>reports/variant-comparison.html</code> exists and its metadata block lists 44 sites, 5 recipes, both models and profile <code>full</code>; the oracle section reports how many of the <code>original</code> site-model pairs agree with <code>data-proc-original/</code> to within the noise floor; <code>data-proc/analysis/variant_outcome.csv</code> has one row per (site, recipe, model) that fitted. Under <code>error = "continue"</code> a site that fails does so alone &mdash; <code>targets::tar_meta(fields = error)</code> lists them &mdash; and every other target still builds.</p>
+
+<p><strong>What to expect from the numbers.</strong> Some recipes will fail at some sites by construction rather than by bug: a <code>memory_fill</code> site whose fill could not be scored falls back to <code>TS_linear</code> and says so in <code>ts_reason</code>; a site whose measured column the screen fails under <code>screened</code> gets the regression the manuscript used anyway. The comparison report's provenance table is where to read those.</p>
+
+<h2 id="future">6. Documented future work</h2>
+
+<p>Written up in full in <code>docs/recipes.md</code>; the summary here is so the shape of each item is visible without opening the repo.</p>
+
+<div class="finding">
+<h3><span class="tag t-info">Asked for</span> A fully season-free variant: what the year-qualification rule needs</h3>
+<p><code>noseason</code> deliberately changes only the window layout. Making the pipeline independent of season detection altogether means replacing two more uses of <code>gStart</code>/<code>gEnd</code>:</p>
+<ol>
+<li><strong>Year qualification</strong> (<code>get_good_years()</code>). Gaps are counted within the season and the thresholds scale with its length &mdash; <code>max(31, 0.225 &times; length)</code> days for the largest gap, <code>max(1/3, &hellip;)</code> for the total. Applied to a whole year this would reject almost every boreal year, where a winter without nighttime NEE is normal. A season-free rule has to say what part of the year a site is <em>expected</em> to have data in without detecting a season. Two candidates: qualify a year on the fraction of the <em>site's typical</em> covered days-of-year it covers (a per-site data-density profile); or qualify per window rather than per year and let the fit-stage <code>nobs</code> guard do the rest.</li>
+<li><strong>Control year</strong> (<code>total_tas_site()</code>): the year whose growing-season mean soil temperature is closest to the long-term mean. The natural season-free replacement is the year whose mean over the <em>fitted windows</em> is closest to the mean.</li>
+</ol>
+<p>Item 1 is a step-01 change and so a new <code>year_qc</code> strategy &mdash; the first recipe with a different prep key, and therefore the first that needs <code>site_data</code> mapped over <code>crossing(site, prep_key)</code>. The assertion in <code>_targets.R</code> names the spot. Item 2 is a step-02 change and slots into <code>choose_window_season()</code>'s neighbour.</p>
+</div>
+
+<div class="finding">
+<h3><span class="tag t-info">Next</span> The rest, in the order I would do them</h3>
+<ul>
+<li><strong><code>ts = era5</code></strong> &mdash; ERA5-Land <code>stl1</code>/<code>stl2</code> bias-corrected to the tower on the periods the screen passes; a CDS download target beside the soil-water one, a <code>TS_era5</code> column attached like <code>TS_memfill</code>, a row in the CV table. Memory features already reach 1.26&nbsp;&deg;C out of fold (F12), which is the number to beat.</li>
+<li><strong><code>year_qc = computed</code></strong> &mdash; a scored rule (gap statistics, u* coverage, residual anomalies) replacing the manual <code>year_removed</code> list, validated against the 20 sites that carry one. Same prep-key consequence as above.</li>
+<li><strong><code>season = force_detect</code></strong> &mdash; a strategy that runs the detector and ignores the <code>gStart</code>/<code>gEnd</code> overrides in <code>site_info.csv</code>, so that today's <code>detect</code> (detect-then-override at 24 sites) and pure detection are separable. Cheap &mdash; one branch in <code>choose_window_season()</code> plus the unoverridden bounds carried out of step 01 &mdash; and it answers how much of the season definition is hand-set. The honest renaming of today's strategy is <code>detect_or_override</code>.</li>
+<li><strong>Data-driven column choice in step 01</strong> &mdash; CZ-Stn's depth swap, DE-Hte's second layer, FI-Sod's recalibration and GF-Guy's air-temperature substitution are still hand-coded. The raw-record screen recovers CZ-Stn's and GF-Guy's from the data (F9); a <code>ts_column</code> prep axis would retire those branches.</li>
+<li><strong>Stochastic imputation</strong> &mdash; <code>TS_memfill</code> is a conditional mean and is slightly too smooth (within-cell spread 0.90, across-year 0.87; F12). Drawing from the predictive distribution, or a measurement-error term in the brms formula, is the principled fix.</li>
+<li><strong>New sites</strong> (phase 4 of the plan, a separate branch) &mdash; discovery targets from the AmeriFlux, fluxnet-shuttle, ICOS and TERN APIs; an eligibility screen as targets; <code>site_info.csv</code> generated with overrides. The southern-hemisphere path is a <code>stop()</code> today and has to come first.</li>
+</ul>
+</div>
+
+<footer>
+Worktree <code>/Users/alexey.shiklomanov/projects/yale/thermal-acclimation/ts-rework</code> &middot; branch <code>ts-variants</code> &middot; last updated 2026-09-19.
+</footer>
+
+</div>
+</body>
+</html>

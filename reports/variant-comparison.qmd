@@ -54,7 +54,7 @@ orig_total  <- read_if(file.path(ORIG, "outcome_temp.csv"))
 orig_direct <- read_if(file.path(ORIG, "outcome_temp_water_gpp.csv"))
 
 # Sampler noise floor: measured over identical repeated runs (reports/
-# pipeline-report.qmd, and the replicate runs in ts-rework.html, F8). A TAS
+# pipeline-report.qmd, and the replicate runs in docs/ts-rework.html, F8). A TAS
 # difference smaller than this means nothing.
 TAS_NOISE <- 3e-4
 
@@ -413,7 +413,7 @@ if (is.null(ts_qc)) skip_note("TS quality", "ts_qc_csv not built.") else {
 - `original` is the manuscript. Everything else is a *variant* and is judged
   against it, and `original` is judged against `data-proc-original/`.
 - A TAS difference below the noise floor (`r format(TAS_NOISE)`) is not a
-  difference. The replicate runs in `ts-rework.html` (F8) measured this floor
+  difference. The replicate runs in `docs/ts-rework.html` (F8) measured this floor
   at between $10^{-5}$ and $6 \times 10^{-4}$.
 - A recipe's number is only as trustworthy as the choice behind it, which is
   why the provenance table sits next to the results rather than in an appendix.

@@ -19,7 +19,7 @@ tar_source()
 # run happens anyway.
 local <- crew_controller_local(workers = 8)
 # Worker count and worker wall time are knobs because the full grid's cost sits
-# near one scheduler window -- see ts-variants.html "Running it" for the
+# near one scheduler window -- see docs/ts-variants.html "Running it" for the
 # arithmetic, and `submit.sh` for the numbers a full run uses. Both are read
 # here, at pipeline definition, and neither enters any target's command.
 #

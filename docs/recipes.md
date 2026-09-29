@@ -10,8 +10,8 @@ compared row for row.
 - Machinery: `R/recipes.R` (validation, scoping), `R/strategies.R` (what each
   choice resolves to).
 - Report: `reports/variant-comparison.qmd`, a `tar_quarto` target.
-- Background: `ts-rework.html` (findings F1–F13) is the analysis these options
-  come from; `ts-variants.html` is the log of building them.
+- Background: [`ts-rework.html`](ts-rework.html) (findings F1–F13) is the analysis these options
+  come from; [`ts-variants.html`](ts-variants.html) is the log of building them.
 - Soil temperature specifically — the two stages, `ts_source`, the estimator
   registry and the refuse rule — is [docs/soil-temperature.md](soil-temperature.md).
 
@@ -227,4 +227,4 @@ screen recovers CZ-Stn's and GF-Guy's from the data (F9); turning it into a
 `TS_memfill` is a conditional mean and is slightly too smooth (within-cell
 spread ratio 0.90, across-year 0.87; F12). Drawing from the predictive
 distribution and fitting several imputations, or a measurement-error term in
-the brms formula, is the principled fix and is step 5 of `ts-rework.html`.
+the brms formula, is the principled fix and is step 5 of [`ts-rework.html`](ts-rework.html).

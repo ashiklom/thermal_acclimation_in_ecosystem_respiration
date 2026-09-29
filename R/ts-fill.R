@@ -2,7 +2,7 @@
 # cross-validation that scores them, and `fill_soil_temp()`, the per-site
 # target that picks a method and produces the `TS_memfill` column.
 #
-# Promoted from scripts/ts-fill-methods.R once the analysis in ts-rework.html
+# Promoted from scripts/ts-fill-methods.R once the analysis in docs/ts-rework.html
 # (findings F12, F13) showed the memory methods win at 42 of 43 sites.
 
 # ------------------------------------------------------------------ features

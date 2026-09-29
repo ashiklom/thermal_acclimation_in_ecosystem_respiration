@@ -49,7 +49,7 @@ native bounds are percentiles of the *day-of-year climatology* (from
 `detect_growing_season()`); the regressed column's are percentiles of the raw
 *half-hourly* values (`ts_bounds()`). Applying the half-hourly definition to
 the measured column at 44 sites, the admissible band widens from 10.0 to
-16.7 °C before the column changes at all (`ts-rework.html`, F4). That is why
+16.7 °C before the column changes at all ([`ts-rework.html`](ts-rework.html), F4). That is why
 `ts_bounds` now carries both definitions for every column: a recipe with
 `bounds = halfhourly` or `climatology` applies one definition throughout, and
 `bounds = native` reproduces the manuscript.

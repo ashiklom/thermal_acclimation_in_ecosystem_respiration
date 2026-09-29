@@ -130,7 +130,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     ts_flags = if (!is.null(ts_qc)) ts_qc$flags[[1]] else NA_character_,
     # Whether the column step 01 called measured is a reconstruction it made,
     # whatever recipe is in force. Strategies select downstream of those
-    # reconstructions and cannot undo them (ts-variants.html, V4).
+    # reconstructions and cannot undo them (docs/ts-variants.html, V4).
     ts_measured_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
     ts_source = ts_source(site_info),
     ts_refused = refused,
