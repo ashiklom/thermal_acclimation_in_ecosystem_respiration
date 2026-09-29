@@ -30,14 +30,14 @@ acclimation <- acclimation |>
     Climate_class %in% c("Csa") ~ "Csa",
     Climate_class %in% c("Csb") ~ "Csb",
     Climate_class %in% c("Dfa", "Dfb") ~ "Df",
-    Climate_class %in% c("Dfc, Dfd", "Dwc") ~ "Subartic",
+    Climate_class %in% c("Dfc", "Dfd", "Dwc") ~ "Subarctic",
     Climate_class %in% c("ET") ~ "ET",
     Climate_class %in% c("Af") ~ "Af",
     Climate_class %in% c("Am") ~ "Am"
   )) |>
   # DBF and DNF are deciduous forests; SAV and WSA are savannas.
   dplyr::mutate(IGBP_new = dplyr::case_when(
-    IGBP %in% c("CSH") ~ "CSH", IGBP %in% c("DBF") ~ "DBF", IGBP %in% c("EBF") ~ "EBF",
+    IGBP %in% c("CSH") ~ "CSH", IGBP %in% c("DBF", "DNF") ~ "DBF", IGBP %in% c("EBF") ~ "EBF",
     IGBP %in% c("ENF") ~ "ENF", IGBP %in% c("GRA") ~ "GRA", IGBP %in% c("MF") ~ "MF",
     IGBP %in% c("OSH") ~ "OSH", IGBP %in% c("SAV", "WSA") ~ "SAV", IGBP %in% c("WET") ~ "WET"
   ))
