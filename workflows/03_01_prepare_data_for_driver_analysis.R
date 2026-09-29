@@ -156,7 +156,8 @@ if (!all(file.exists(modis_files))) {
     c("VI produced, good quality", "VI produced, but check other QA")
   file1$MOD13A2_061__1_km_16_days_EVI[poor] <- NA
   file1$MOD13A2_061__1_km_16_days_NDVI[poor] <- NA
-  file1$Date <- as.Date(file1$Date, format = "%m/%d/%y")
+  # AppEEARS writes ISO dates (2000-02-18).
+  file1$Date <- as.Date(file1$Date)
   file1_interp <- file1 |>
     dplyr::mutate(month = lubridate::month(Date)) |>
     dplyr::group_by(ID, month) |>
@@ -169,7 +170,7 @@ if (!all(file.exists(modis_files))) {
   poor <- file2$MOD15A2H_061_FparLai_QC_MODLAND_Description == "Other Quality (back-up algorithm or fill values)"
   file2$MOD15A2H_061_Fpar_500m[poor] <- NA
   file2$MOD15A2H_061_Lai_500m[poor] <- NA
-  file2$Date <- as.Date(file2$Date, format = "%m/%d/%y")
+  file2$Date <- as.Date(file2$Date)
   file2_interp <- file2 |>
     dplyr::mutate(month = lubridate::month(Date)) |>
     dplyr::group_by(ID, month) |>
@@ -181,7 +182,7 @@ if (!all(file.exists(modis_files))) {
   file3 <- read.csv(modis_files[[3]])
   poor <- file3$MYD17A2HGF_061_Psn_QC_500m_MODLAND_Description == "Other quality (back-up algorithm or fill values)"
   file3$MYD17A2HGF_061_Gpp_500m[poor] <- NA
-  file3$Date <- as.Date(file3$Date, format = "%m/%d/%y")
+  file3$Date <- as.Date(file3$Date)
   file3_interp <- file3 |>
     dplyr::mutate(month = lubridate::month(Date)) |>
     dplyr::group_by(ID, month) |>
