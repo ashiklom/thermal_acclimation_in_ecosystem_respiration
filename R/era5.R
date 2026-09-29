@@ -94,8 +94,10 @@ site_era5_swc <- function(prep, name_site, path = ERA5_SWC_CSV, table = NULL) {
 }
 
 # Join a site's ERA5 soil water onto step 01's tables as `SWC_era5`, in
-# percent, beside the measured column.
+# percent, beside the measured column. An errored step 01 (NULL under
+# `error = "null"`) stays NULL, so the collectors drop the site.
 attach_era5_swc <- function(prep, era5) {
+  if (is.null(prep)) return(NULL)
   for (tbl in c("ac", "nightNEE")) {
     dat <- prep[[tbl]]
     if (is.null(era5)) {

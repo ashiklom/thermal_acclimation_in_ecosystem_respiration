@@ -106,6 +106,10 @@ test_that("unavailable ERA5 becomes an all-NA column, not an error", {
   expect_true(all(is.na(out$nightNEE$SWC_era5)))
 })
 
+test_that("an errored step 01 stays NULL through the ERA5 join", {
+  expect_null(attach_era5_swc(NULL, NULL))
+})
+
 test_that("latest_record_end tolerates errored sites", {
   expect_equal(latest_record_end(as.Date("2020-01-01"), NULL, as.Date("2021-06-30")), as.Date("2021-06-30"))
   expect_true(is.na(latest_record_end(NULL, NULL)))
