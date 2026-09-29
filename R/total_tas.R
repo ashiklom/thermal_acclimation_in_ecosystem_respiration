@@ -94,23 +94,22 @@ read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
 
 ################################################################################
 
-opt_int <- S7::new_property(S7::class_integer, default = NA_integer_)
-opt_num <- S7::new_property(S7::class_numeric, default = NA_real_)
-opt_chr <- S7::new_property(S7::class_character, default = NA_character_)
-
+# One growing year's result in one window, filled in as the loop goes.
 # `status` records why a year produced no fit, which a row of NAs cannot.
-Year_Result <- S7::new_class("Year_Result", properties = list(
-  status = opt_chr,
-  nobsv = opt_int,
-  extend_days = opt_int,
-  alpha = opt_num,
-  beta = opt_num,
-  C0 = opt_num,
-  k2 = opt_num,
-  Hs = opt_num,
-  TS = opt_num,
-  ERref = opt_num
-))
+empty_year_result <- function() {
+  list(
+    status = NA_character_, nobsv = NA_integer_, extend_days = NA_integer_,
+    alpha = NA_real_, beta = NA_real_, C0 = NA_real_, k2 = NA_real_, Hs = NA_real_,
+    TS = NA_real_, ERref = NA_real_
+  )
+}
+
+# Whether a year's subset is too small, or too narrow in soil temperature to
+# contain TSref, to fit on as it is.
+window_needs_widening <- function(data_subset, TSref, nobs_threshold) {
+  ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
+  nrow(data_subset) < nobs_threshold || !dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])
+}
 
 # The first of the four year-level rules, in the original's order, that
 # rejects a subset; NA if none does.
@@ -131,11 +130,6 @@ year_rejection <- function(data_subset, TSref) {
   NA_character_
 }
 
-
-year_result_df <- S7::new_generic("year_result_df", "year_result")
-S7::method(year_result_df, Year_Result) <- function(year_result) {
-  tibble::tibble(!!!S7::props(year_result))
-}
 
 ################################################################################
 
@@ -159,18 +153,15 @@ adjust_prior <- function(priors, nlpar, p1, p2, family = "normal") {
 }
 
 get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
-  # Start with default prior
   priors <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
     brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) +
     brms::prior("normal(-0.001, 0.1)", nlpar = "beta", lb = -0.01, ub = 0.0)
 
+  # The NLS warm start is fitted on log parameters, which keeps them positive.
   if (direct) {
-    priors_water <- brms::prior("normal(10, 10)", nlpar = "Hs", lb = 0, ub = 1000)
-    priors_gpp <- brms::prior("normal(0.5, 2)", nlpar = "k2", lb = 0, ub = 10)
-    priors <- priors + priors_water + priors_gpp
-  }
-
-  if (direct) {
+    priors <- priors +
+      brms::prior("normal(10, 10)", nlpar = "Hs", lb = 0, ub = 1000) +
+      brms::prior("normal(0.5, 2)", nlpar = "k2", lb = 0, ub = 10)
     frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS_final - exp(beta_ln) * TS_final^2) *
       SWC / (exp(Hs_ln) + SWC) * (exp(C0_ln) + NEE_daytime * exp(k2_ln))
     start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6, Hs_ln = 2.3)
@@ -179,19 +170,19 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
     start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9)
   }
 
-
-  # Next, attempt to update the prior using NLS fit.
+  # Centre the priors on an NLS fit, capped at the prior bounds.
   tryCatch(
     {
       mod_nls <- gslnls::gsl_nls(fn = frmu_nls, data = model_data, start = start_nls)
+      est <- exp(stats::coef(mod_nls))
       priors <- priors |>
-        adjust_prior("alpha", min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2), 1.0) |>
-        adjust_prior("beta", -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01), 0.1) |>
-        adjust_prior("C0", min(exp(coefficients(mod_nls)["C0_ln"]), 10), 5)
+        adjust_prior("alpha", min(est[["alpha_ln"]], 0.2), 1.0) |>
+        adjust_prior("beta", -min(est[["beta_ln"]], 0.01), 0.1) |>
+        adjust_prior("C0", min(est[["C0_ln"]], 10), 5)
       if (direct) {
         priors <- priors |>
-          adjust_prior("k2", min(exp(coefficients(mod_nls)["k2_ln"]), 10), 2) |>
-          adjust_prior("Hs", min(exp(coefficients(mod_nls)["Hs_ln"]), 1000), 10)
+          adjust_prior("k2", min(est[["k2_ln"]], 10), 2) |>
+          adjust_prior("Hs", min(est[["Hs_ln"]], 1000), 10)
       }
     },
     error = function(e) {
@@ -199,7 +190,7 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
     }
   )
 
-  # Next, try to update the prior again using brms fit across all data.
+  # Then re-centre them on a brms fit across all the window's data.
   brm_frmu <- if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL
   mod0 <- brms::brm(
     brm_frmu,
@@ -212,15 +203,15 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
     control = list(adapt_delta = 0.95, max_treedepth = 15),
     refresh = 0
   )
+  est <- brms::fixef(mod0)[, "Estimate"]
   priors <- priors |>
-    adjust_prior("alpha", brms::fixef(mod0)["alpha_Intercept", "Estimate"], 1.0) |>
-    adjust_prior("beta", brms::fixef(mod0)["beta_Intercept", "Estimate"], 0.1) |>
-    adjust_prior("C0", brms::fixef(mod0)["C0_Intercept", "Estimate"], 5)
-
+    adjust_prior("alpha", est[["alpha_Intercept"]], 1.0) |>
+    adjust_prior("beta", est[["beta_Intercept"]], 0.1) |>
+    adjust_prior("C0", est[["C0_Intercept"]], 5)
   if (direct) {
-    priors <- priors |> 
-      adjust_prior("k2", brms::fixef(mod0)["k2_Intercept", "Estimate"], 2) |>
-      adjust_prior("Hs", brms::fixef(mod0)["Hs_Intercept", "Estimate"], 10)
+    priors <- priors |>
+      adjust_prior("k2", est[["k2_Intercept"]], 2) |>
+      adjust_prior("Hs", est[["Hs_Intercept"]], 10)
   }
 
   priors
@@ -592,6 +583,7 @@ total_tas_window <- function(
   ERref_control <- NA
 
   years <- sort(unique(a_measure_night_complete[["growing_year"]]))
+  TSref <- data_ref[["TS_final"]]
 
   year_results <- list()
 
@@ -599,19 +591,10 @@ total_tas_window <- function(
     data_subset <- model_data |>
       dplyr::filter(.data$growing_year == iyear)
 
-    # two rules are needed:
-    # rule 1: total number of points > 100.
-    # rule 2: TSref is within the 0.025 and 0.975 quantiles.
-    # if the two rules are violated, extend window size.
-    TSref <- data_ref[["TS_final"]]
+    # Widen the window 3 days at a time, up to 24, until the year has enough
+    # observations and TSref inside their 2.5-97.5 % range.
     extend_days <- 0
-
-    check_subset <- function(data_subset, TSref, nobs_threshold) {
-      ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
-      (nrow(data_subset) < nobs_threshold || !dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]]))
-    }
-
-    while (check_subset(data_subset, TSref, nobs_threshold)) {
+    while (window_needs_widening(data_subset, TSref, nobs_threshold)) {
       extend_days <- extend_days + 3
       data_subset <- a_measure_night_complete |>
         dplyr::filter(.data$growing_year == iyear) |>
@@ -629,15 +612,15 @@ total_tas_window <- function(
       }
     }
 
-    year_result <- Year_Result()
+    year_result <- empty_year_result()
 
-    year_result@nobsv <- nrow(data_subset)
-    year_result@extend_days <- as.integer(extend_days)
+    year_result$nobsv <- nrow(data_subset)
+    year_result$extend_days <- as.integer(extend_days)
 
     rejection <- year_rejection(data_subset, TSref)
 
     if (!is.na(rejection)) {
-      year_result@status <- rejection
+      year_result$status <- rejection
       year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = NULL)
       next
     }
@@ -645,8 +628,8 @@ total_tas_window <- function(
     if (!fit) {
       # Everything above this line is layout: window extension, the year
       # rejection rules, the observation count. Everything below is the model.
-      year_result@status <- "not_fitted"
-      year_result@TS <- ac_yearly_window |>
+      year_result$status <- "not_fitted"
+      year_result$TS <- ac_yearly_window |>
         dplyr::filter(.data$growing_year == iyear) |>
         dplyr::pull("TS")
       year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = NULL)
@@ -661,35 +644,34 @@ total_tas_window <- function(
       dplyr::filter(dplyr::between(.data$DOY, window_start, window_end))
 
     model_params <- brms::fixef(mod)[, "Estimate"]
-    year_result@alpha <- model_params[["alpha_Intercept"]]
-    year_result@beta <- model_params[["beta_Intercept"]]
-    year_result@C0 <- model_params[["C0_Intercept"]]
+    year_result$alpha <- model_params[["alpha_Intercept"]]
+    year_result$beta <- model_params[["beta_Intercept"]]
+    year_result$C0 <- model_params[["C0_Intercept"]]
 
     if (direct) {
-      year_result@k2 <- model_params[["k2_Intercept"]]
-      year_result@Hs <- model_params[["Hs_Intercept"]]
+      year_result$k2 <- model_params[["k2_Intercept"]]
+      year_result$Hs <- model_params[["Hs_Intercept"]]
     }
 
-    year_result@TS <- ac_yearly_window |>
+    year_result$TS <- ac_yearly_window |>
       dplyr::filter(.data$growing_year == iyear) |>
       dplyr::pull("TS")
 
     df_ERref <- fitted(mod, newdata = data_ref)
     if (df_ERref[, "Estimate"] >= df_ERref[, "Est.Error"]) {
-      year_result@ERref <- df_ERref[, "Estimate"]
+      year_result$ERref <- df_ERref[, "Estimate"]
     }
 
     if (iyear == control_year) {
-      ERref_control <- year_result@ERref
+      ERref_control <- year_result$ERref
     }
 
-    year_result@status <- "fitted"
+    year_result$status <- "fitted"
     year_results[[as.character(iyear)]] <- list(year_result = year_result, ER_obs_pred = ER_obs_pred)
   } # end year loop
 
   df_site_year_window <- year_results |>
-    lapply(`[[`, "year_result") |>
-    lapply(year_result_df) |>
+    lapply(function(r) tibble::tibble(!!!r$year_result)) |>
     dplyr::bind_rows(.id = "growing_year") |>
     dplyr::mutate(
       growing_year = as.integer(.data$growing_year),
@@ -743,6 +725,8 @@ fit_with_retry <- function(data_subset, priors, direct = FALSE, fs = fit_setting
     control = list(adapt_delta = 0.90, max_treedepth = 15),
     refresh = 0
   )
+  # Through a wrapper, not `do.call(brms::brm, ...)`, which would inline the
+  # data into the call that `try()` prints on error.
   mod <- do.call(function(...) try(brms::brm(...)), brm_args)
 
   if (!inherits(mod, "try-error")) {
