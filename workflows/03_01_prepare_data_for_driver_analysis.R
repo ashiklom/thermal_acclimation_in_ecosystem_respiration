@@ -52,6 +52,9 @@ stat.soil <- stat.soil |>
 # nighttime; g C / m2), and air temperature's mean annual value (MATA),
 # seasonal variation (SSTA), inter-annual variation (IATA), daily range
 # (DRTA), and warming rate (the linear trend in annual means).
+# Each site's time step, as step 01 measured it.
+feature_gs <- read.csv(file.path("data-proc", "features", "growing_season_features.csv"))
+
 site_climate <- function(ac_file) {
   name_site <- sub("_ac\\.csv$", "", basename(ac_file))
   message(name_site)
@@ -69,7 +72,8 @@ site_climate <- function(ac_file) {
   ac$TA <- dplyr::coalesce(ac$TA, ac$TA_gf)
 
   # Time step in minutes, and the conversion from summed umol/m2/s to g C / m2.
-  dt <- abs(ac$MINUTE[2] + ac$HOUR[2] * 60 - ac$MINUTE[1] - ac$HOUR[1] * 60)
+  dt <- feature_gs$dt_minutes[feature_gs$site_ID == name_site]
+  stopifnot(length(dt) == 1)
   to_gC <- function(x) x * dt * 60 / 1000000 * 12
 
   ac <- ac |> dplyr::filter(YEAR %in% good_years)
