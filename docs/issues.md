@@ -27,6 +27,10 @@ results and needs its own decision. Each entry says where it lives.
 
 ## `workflows/`
 
+- **03_01 stops on the current MODIS tables.** Where a site has no
+  good-quality value of an index at all (DE-Akm's Fpar), its monthly
+  series is all NA and `zoo::na.approx(..., rule = 2)` fails the whole
+  script. It needs a rule for such sites (NA, or drop the index there).
 - **03_01: the CH-Aws cut-off is hard-coded** (`YEAR >= 2015`).
 - **03_01 → 03_02: a site without a TAS is not filtered out.** 03_01
   left-joins the two TAS tables, so a site missing one reaches
