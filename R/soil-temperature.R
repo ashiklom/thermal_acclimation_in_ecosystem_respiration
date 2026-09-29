@@ -16,13 +16,6 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   night <- site_data[["nightNEE"]]
 
   ts_bounds_all <- site_data[["ts_bounds"]]
-  if (is.null(ts_bounds_all)) {
-    stop(
-      name_site, ": this site_data was built before soil-temperature columns ",
-      "were carried explicitly, so it has no `ts_bounds`. Rebuild it with ",
-      "`prep_nee_ac()`, or delete the stale `_targets/` store."
-    )
-  }
 
   # `ts_col` overrides the strategy, for sensitivity runs.
   override <- ts_col
@@ -40,7 +33,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   # strategy (a declaration) and an explicit `ts_col` (a sensitivity run).
   refused <- FALSE
   if (is.null(override) && !identical(recipe$ts, "site_info") &&
-      identical(stage_a_truth(site_data, site_info), "none") &&
+      identical(stage_a_truth(site_data), "none") &&
       !identical(ts_col, "TS_measured")) {
     refused <- TRUE
     choice <- list(
@@ -48,7 +41,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
       reason = sprintf(
         paste0("kept step 01's column: ts_source = %s leaves no measured soil ",
                "temperature to fit a second method against (%s strategy wanted %s)"),
-        stage_a_arm(site_data, site_info), recipe$ts, ts_col
+        stage_a_arm(site_data), recipe$ts, ts_col
       )
     )
     ts_col <- "TS_measured"
@@ -93,18 +86,17 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     ts_col = ts_col,
     ts_strategy = recipe$ts,
     ts_reason = choice[["reason"]],
-    ts_verdict = if (!is.null(ts_qc)) ts_qc$verdict[[1]] else NA_character_,
-    ts_flags = if (!is.null(ts_qc)) ts_qc$flags[[1]] else NA_character_,
+    ts_verdict = ts_qc$verdict[[1]],
+    ts_flags = ts_qc$flags[[1]],
     # Whether step 01's "measured" column is a reconstruction; strategies
     # cannot undo that (docs/ts-variants.html, V4).
-    ts_measured_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
+    ts_measured_synthetic = identical(stage_a_truth(site_data), "none"),
     ts_source = ts_source(site_info),
     ts_refused = refused,
-    # What stage A did to make `TS_measured`, from the provenance row step 01
-    # carries; NA on a site_data built before it did.
-    stage_a_estimator = prov[["stage_a_estimator"]] %||% NA_character_,
-    stage_a_family = prov[["stage_a_family"]] %||% NA_character_,
-    stage_a_mode = prov[["stage_a_mode"]] %||% NA_character_,
+    # What stage A did to make `TS_measured`.
+    stage_a_estimator = prov[["stage_a_estimator"]],
+    stage_a_family = prov[["stage_a_family"]],
+    stage_a_mode = prov[["stage_a_mode"]],
     fill_method = fill_method,
     fill_cv_rmse = fill_cv_rmse,
     fill_degenerate = fill_degenerate,
@@ -118,17 +110,10 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   list(ac = ac, nightNEE = night, meta = meta)
 }
 
-# What stage A actually did at this site, from the provenance row step 01
-# carries -- under `ts_qc = sensor` that is not what `ts_source` declares.
-# Falls back to the declaration for a site_data built before the row existed.
-stage_a_truth <- function(site_data, site_info) {
-  prov <- site_data[["ts_provenance"]]
-  if (!is.null(prov) && "ts_truth" %in% names(prov)) prov[["ts_truth"]][[1]] else ts_measured_truth(site_info)
-}
-stage_a_arm <- function(site_data, site_info) {
-  prov <- site_data[["ts_provenance"]]
-  if (!is.null(prov) && "stage_a_arm" %in% names(prov)) prov[["stage_a_arm"]][[1]] else ts_source(site_info)
-}
+# What stage A actually did at this site, from its provenance row -- under
+# `ts_qc = sensor` that is not what `ts_source` declares.
+stage_a_truth <- function(site_data) site_data[["ts_provenance"]][["ts_truth"]][[1]]
+stage_a_arm <- function(site_data) site_data[["ts_provenance"]][["stage_a_arm"]][[1]]
 
 # `TS_final`, and no other soil-temperature column, so that "no branching
 # downstream" is a checked property (test-soil-temperature.R) rather than a

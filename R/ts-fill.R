@@ -255,8 +255,8 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
 
   # No truth, no fill: against a reconstruction, the winner is whichever
   # candidate shares its form (DE-Hte: `lm_ta_netrad` at 1.5e-14).
-  if (identical(stage_a_truth(site_data, site_info), "none")) {
-    return(fail(paste0("no measured truth: stage A ran ", stage_a_arm(site_data, site_info))))
+  if (identical(stage_a_truth(site_data), "none")) {
+    return(fail(paste0("no measured truth: stage A ran ", stage_a_arm(site_data))))
   }
 
   ac <- site_data[["ac"]]
@@ -324,7 +324,7 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
     degenerate = is.finite(best_rmse) && best_rmse < 1e-6,
     # The declared counterpart: DE-Akm's forest-made truth is reproduced to
     # 0.30 C, not zero, so `degenerate` alone would miss it.
-    truth_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
+    truth_synthetic = identical(stage_a_truth(site_data), "none"),
     n_train = sum(!is.na(feats$TS))
   )
 }

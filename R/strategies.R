@@ -50,12 +50,9 @@ choose_ts_col <- function(recipe, site_data, site_info, fill = NULL) {
 }
 
 ts_verdict <- function(site_data) {
-  q <- site_data[["ts_qc"]]
-  if (is.null(q) || !"verdict" %in% names(q)) {
-    stop("site_data carries no `ts_qc` verdict. It is produced by `prep_nee_ac()`; ",
-         "rebuild the site_data target or delete the stale `_targets/` store.")
-  }
-  q[["verdict"]][[1]]
+  verdict <- site_data[["ts_qc"]][["verdict"]]
+  stopifnot("site_data has a ts_qc verdict" = length(verdict) == 1)
+  verdict
 }
 
 ts_flags <- function(site_data) {
@@ -97,18 +94,8 @@ choose_window_season <- function(recipe, feature_gs) {
     recipe$season,
     detect_or_override = list(gStart = feature_gs[["gStart"]], gEnd = feature_gs[["gEnd"]],
                               reason = "detected growing season, site_info overrides applied"),
-    force_detect = {
-      detected <- c(feature_gs[["gStart_detected"]], feature_gs[["gEnd_detected"]])
-      if (length(detected) != 2 || anyNA(detected)) {
-        stop(
-          feature_gs[["site_ID"]], ": force_detect needs `gStart_detected`/",
-          "`gEnd_detected` in feature_gs, which this site_data does not carry. ",
-          "Rebuild it with `prep_nee_ac()`, or delete the stale `_targets/` store."
-        )
-      }
-      list(gStart = detected[[1]], gEnd = detected[[2]],
-           reason = "detected growing season, site_info overrides ignored")
-    },
+    force_detect = list(gStart = feature_gs[["gStart_detected"]], gEnd = feature_gs[["gEnd_detected"]],
+                        reason = "detected growing season, site_info overrides ignored"),
     whole_year = list(gStart = origin, gEnd = origin + 365,
                       reason = sprintf("whole year, DOY %d-%d", origin, origin + 365)),
     stop("Unknown season strategy ", shQuote(recipe$season))

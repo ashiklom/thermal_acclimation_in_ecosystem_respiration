@@ -22,7 +22,9 @@ write_result_csv <- function(dat, path) {
 }
 
 # Under `error = "null"` an errored target reaches the collectors as NULL;
-# dropping it leaves a gap in the tables instead of failing them.
+# dropping it leaves a gap in the tables instead of failing them. If every
+# target errored, the bound table has no columns at all, which is why the
+# collectors below select with `any_of()`.
 built <- function(...) Filter(Negate(is.null), list(...))
 
 # Site-level TAS, one row per site x recipe x model (outcome_temp*.csv).
@@ -46,7 +48,7 @@ collect_settings <- function(...) {
 
 # The manuscript-layout subset `workflows/` reads: the `original` recipe, one
 # model, and none of the variant grid's columns. Empty if `original` was not
-# run.
+# run; returned as is if it has no columns (every fit errored).
 original_only <- function(tbl, model = NULL, drop = c("recipe_id", "fit_profile")) {
   if (!"recipe_id" %in% names(tbl)) return(tbl)
   out <- dplyr::filter(tbl, .data$recipe_id == "original")

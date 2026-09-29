@@ -121,19 +121,8 @@ ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
 # The bounds for a TS column: its native (manuscript) row, or the row under
 # `definition`.
 ts_bounds_for <- function(ts_bounds, ts_col, definition = NULL) {
-  has_def <- "definition" %in% names(ts_bounds)
-  row <- if (is.null(definition)) {
-    if (has_def) {
-      ts_bounds[ts_bounds[["ts_col"]] == ts_col & ts_bounds[["native"]], ]
-    } else {
-      ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]
-    }
-  } else {
-    if (!has_def) {
-      stop("This ts_bounds table predates bounds definitions; rebuild the site_data target.")
-    }
-    ts_bounds[ts_bounds[["ts_col"]] == ts_col & ts_bounds[["definition"]] == definition, ]
-  }
+  keep <- if (is.null(definition)) ts_bounds[["native"]] else ts_bounds[["definition"]] == definition
+  row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col & keep, ]
   if (nrow(row) != 1) {
     stop(
       "Expected exactly one bounds row for ", shQuote(ts_col),

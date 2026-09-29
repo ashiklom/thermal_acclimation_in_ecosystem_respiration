@@ -132,11 +132,6 @@ test_that("choose_window_season changes only the span", {
   expect_match(f$reason, "overrides ignored")
 })
 
-test_that("force_detect refuses a site_data built before the detected bounds were carried", {
-  stale <- tibble::tibble(site_ID = "x", gStart = 120, gEnd = 280)
-  expect_error(choose_window_season(get_recipe("forcedetect"), stale), "gStart_detected")
-})
-
 test_that("choose_swc_col: era5 is direct-only, site_info defers to the declaration", {
   si_yes <- list(SWC_use = TRUE)
   si_no <- list(SWC_use = FALSE)
@@ -166,11 +161,6 @@ test_that("ts_bounds_for resolves native rows and named definitions", {
   expect_identical(ts_bounds_for(tb, "TS_linear", "climatology"), list(tStart = 3, tEnd = 22))
   expect_error(ts_bounds_for(tb, "TS_memfill"), "TS_memfill")
   expect_error(ts_bounds_for(tb, "TS_measured", "lunar"), "lunar")
-
-  # a pre-definition table still resolves by column alone
-  legacy <- tibble::tibble(ts_col = "TS_measured", tStart = 2, tEnd = 19)
-  expect_identical(ts_bounds_for(legacy, "TS_measured"), list(tStart = 2, tEnd = 19))
-  expect_error(ts_bounds_for(legacy, "TS_measured", "halfhourly"), "predates")
 })
 
 test_that("the climatology band is narrower than the half-hourly one on the same data", {
