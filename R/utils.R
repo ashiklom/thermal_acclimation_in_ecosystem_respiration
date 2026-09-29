@@ -181,24 +181,6 @@ in_timestamp_window <- function(ts, window) {
   (is.na(lo) | ts >= lo) & (is.na(hi) | ts <= hi)
 }
 
-# Parse simple `key = "value"` TOML lines.
-parse_toml <- function(path) {
-  lines <- readLines(path, warn = FALSE)
-  lines <- grep("=", lines, value = TRUE)
-  lines <- gsub("#.*$", "", lines)
-  lines <- trimws(lines)
-  keep <- nchar(lines) > 0
-  lines <- lines[keep]
-  result <- list()
-  for (line in lines) {
-    m <- regmatches(line, regexec("^([a-zA-Z0-9_]+)\\s*=\\s*\"(.*)\"", line))[[1]]
-    if (length(m) == 3) {
-      result[[m[2]]] <- m[3]
-    }
-  }
-  result
-}
-
 # Which sites the pipeline builds targets for: `"dev"` (the default,
 # `DEV_SITES`), `"all"` (every row of site_info.csv), or a comma-separated
 # list. A site that cannot be processed -- no raw data obtainable (ZA-Kru), or

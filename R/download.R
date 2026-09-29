@@ -68,31 +68,30 @@ download_site <- function(site_info, remote = NULL, overwrite = FALSE) {
   paths
 }
 
+# The account and data-use terms every AmeriFlux request carries, from
+# `_creds.toml` (see the README).
+ameriflux_request <- function() {
+  creds <- RcppTOML::parseTOML("_creds.toml")
+  list(
+    user_id = creds$user_id,
+    user_email = creds$user_email,
+    data_policy = "CCBY4.0",
+    agree_policy = TRUE,
+    intended_use = "synthesis",
+    intended_use_text = "Thermal acclimation in ecosystem respiration synthesis project"
+  )
+}
+
 download_ameriflux <- function(name_site, overwrite = FALSE) {
-  creds <- parse_toml("_creds.toml")
-  outdir <- file.path("data-raw", "Ameriflux", name_site)
+  if (!is.na(product_file(name_site, "AmeriFlux_BASE")) && !overwrite) {
+    message("  already present, skipping download")
+    return(invisible(NULL))
+  }
+  outdir <- file.path(DIR_RAWDATA, FLUX_PRODUCTS$AmeriFlux_BASE$dir, name_site)
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
-  result_file <- list.files(outdir, sprintf(".*_%s_BASE-BADM_.*.zip", name_site), full.names = TRUE)
-  if (length(result_file) > 1) {
-    warning("Found multiple matching files in ", outdir, ". Check this for correctness.")
-  }
-  if (length(result_file) == 0 || overwrite) {
-    result_file <- amerifluxr::amf_download_base(
-      user_id = creds$user_id,
-      user_email = creds$user_email,
-      site_id = name_site,
-      data_product = "BASE-BADM",
-      data_policy = "CCBY4.0",
-      agree_policy = TRUE,
-      intended_use = "synthesis",
-      intended_use_text = "Thermal acclimation in ecosystem respiration synthesis project",
-      out_dir = outdir,
-      verbose = TRUE
-    )
-  } else {
-    message("Skipping download because file already exists.")
-  }
-  result_file
+  do.call(amerifluxr::amf_download_base, c(ameriflux_request(), list(
+    site_id = name_site, data_product = "BASE-BADM", out_dir = outdir, verbose = TRUE
+  )))
 }
 
 # Run an external downloader unless the product is already on disk. Presence is
@@ -297,17 +296,9 @@ download_ameriflux_bif <- function(overwrite = FALSE) {
   if (!overwrite && length(existing)) {
     return(existing[which.max(file.mtime(existing))])
   }
-  creds <- parse_toml("_creds.toml")
-  amerifluxr::amf_download_bif(
-    user_id = creds$user_id,
-    user_email = creds$user_email,
-    data_policy = "CCBY4.0",
-    agree_policy = TRUE,
-    intended_use = "synthesis",
-    intended_use_text = "Thermal acclimation in ecosystem respiration synthesis project",
-    out_dir = paste0(DIR_RAWDATA, "/"),
-    verbose = TRUE
-  )
+  do.call(amerifluxr::amf_download_bif, c(ameriflux_request(), list(
+    out_dir = paste0(DIR_RAWDATA, "/"), verbose = TRUE
+  )))
 }
 
 # ------------------------------------------------------------ ERA5-Land SWC
