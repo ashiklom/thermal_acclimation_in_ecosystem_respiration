@@ -18,11 +18,9 @@ BRM_FORMULA_DIRECT <- brms::bf(
 
 ################################################################################
 
-# Soil water content is expressed as a PERCENT (0-100) everywhere in this
-# analysis, matching the convention of the flux-tower SWC columns and of the
-# `Hs ~ normal(10, 10), ub = 1000` prior in `BRM_FORMULA_DIRECT`. ERA5-Land
-# reports volumetric soil water (`swvl1`) as a fraction (m3/m3), so it has to be
-# rescaled on read. `data-raw/` deliberately holds the provider's native units.
+# Soil water is a percent everywhere in the analysis, like the tower columns
+# and the `Hs` prior; ERA5-Land's `swvl1` is m3/m3, rescaled on read.
+# `data-raw/` keeps the provider's units.
 ERA5_SWC_TO_PERCENT <- 100
 
 ERA5_SWC_CSV <- file.path(DIR_RAWDATA, "ERA5_daily_swc.csv")
@@ -51,9 +49,7 @@ read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
     stop("No ERA5 soil water data for site ", name_site, " in ", path, ".")
   }
 
-  # One row per site-day, or the daily join onto the half-hourly tables would
-  # multiply rows instead of annotating them -- which would silently inflate
-  # every count downstream.
+  # One row per site-day, or the daily join would multiply rows.
   if (anyDuplicated(swc[c("time")])) {
     stop(
       "ERA5 soil water for ", name_site, " has duplicate dates in ", path,
@@ -61,16 +57,9 @@ read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
     )
   }
 
-  # Rows present but every value empty. ERA5-Land is masked to land, so a site
-  # close enough to the coast draws a sea cell and gets a full date range of
-  # NaN. Sites known to need a substituted land coordinate are listed in
-  # `COASTAL_SITES` in `scripts/download-era5-swc.py`, which extracts them off
-  # that coordinate instead of the tower's; reaching this guard means a site
-  # needs an entry there that it does not have.
-  #
-  # Checked before the unit guard below, which would otherwise catch this
-  # case via `max(NA, na.rm = TRUE)` being -Inf and report it as a units
-  # problem -- which sends the reader somewhere unhelpful.
+  # All NA: the nearest cell is sea. The site needs a `COASTAL_SITES` entry
+  # in scripts/download-era5-swc.py. Checked before the unit guard, which
+  # would misreport it.
   if (all(is.na(swc$SWC))) {
     stop(
       "ERA5 data found but all values are NA for site ", name_site, " in ", path,
@@ -82,9 +71,7 @@ read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
     )
   }
 
-  # Guard against silently ingesting data that has already been rescaled, or
-  # that is in some other unit entirely. ERA5 volumetric soil water is
-  # physically bounded well below 1.
+  # Volumetric soil water is well below 1; anything else is the wrong unit.
   swc_max <- max(swc$SWC, na.rm = TRUE)
   if (!is.finite(swc_max) || swc_max > 1.5) {
     stop(
@@ -111,10 +98,7 @@ opt_int <- S7::new_property(S7::class_integer, default = NA_integer_)
 opt_num <- S7::new_property(S7::class_numeric, default = NA_real_)
 opt_chr <- S7::new_property(S7::class_character, default = NA_character_)
 
-# `status` records why a year produced no fit. Without it a skipped year is
-# indistinguishable from a failed one -- both arrive as a row of NAs -- and the
-# most useful comparison against the manuscript is exactly which years were
-# dropped and for which of the four reasons.
+# `status` records why a year produced no fit, which a row of NAs cannot.
 Year_Result <- S7::new_class("Year_Result", properties = list(
   status = opt_chr,
   nobsv = opt_int,
@@ -128,14 +112,8 @@ Year_Result <- S7::new_class("Year_Result", properties = list(
   ERref = opt_num
 ))
 
-# Which of the four year-level rules rejects a subset, or NA if none does.
-#
-# The order is the order the original tested them in, so the name returned is
-# the *first* failure -- a year can breach more than one. Extracted from the
-# loop so that each branch can be exercised on its own: written inline as a
-# `||` chain beside a parallel `if/else` naming the reason, a mutation that
-# misattributed a rejection still produced a plausible reason and the suite
-# could not tell. The mutation check found exactly that hole.
+# The first of the four year-level rules, in the original's order, that
+# rejects a subset; NA if none does.
 year_rejection <- function(data_subset, TSref) {
   ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
   if (nrow(data_subset) <= 25) {
@@ -161,15 +139,9 @@ S7::method(year_result_df, Year_Result) <- function(year_result) {
 
 ################################################################################
 
-# How hard the sampler works. `full` is the manuscript's configuration and the
-# only one whose numbers mean anything. `fast` exists so that the whole
-# pipeline -- every recipe, every collector, the report -- can be exercised end
-# to end on a laptop in minutes rather than hours; a TAS produced under it is a
-# smoke-test artefact and the settings row says so.
-#
-# Threaded as an argument rather than read from an environment variable inside
-# the fit, so that it is part of the target command: changing it invalidates
-# exactly the fits, and a store cannot mix profiles without saying so.
+# Sampler settings. `full` is the manuscript's; `fast` is for end-to-end smoke
+# tests and its TAS values mean nothing. An argument rather than an
+# environment variable, so it is part of each fit's command.
 fit_settings <- function(profile = "full") {
   switch(
     profile,
@@ -255,29 +227,15 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
 }
 
 
-# `ts_col` and `swc_col` override the soil-temperature and soil-water columns
-# the model is fitted on, for sensitivity runs that compare estimation methods
-# or measured-versus-reanalysis soil water against each other. Left NULL they
-# resolve to the site's declaration, which is the normal path.
-# `fit = FALSE` walks the same window and year loop but performs no model
-# fitting at all -- no `gsl_nls` warm start, no `brm`, no `gls`. What comes back
-# is the structural half of the run: which windows survived, which years were
-# kept or rejected and why, how far each window had to be extended, how many
-# observations it ended up with, and the growing-season soil temperature each
-# year contributed.
+# Step 02 for one site and model: TAS from 14-day windows across years.
 #
-# The point is that it is the *same* loop rather than a transcription of it. A
-# separate reimplementation of the layout rules would only ever prove that the
-# two agreed with each other. This runs in seconds instead of minutes, and
-# because none of those quantities depends on the sampler, two runs of it are
-# bit-identical -- so a difference against the manuscript is a real difference
-# and not noise.
-# `recipe` names the methodology; every choice below is resolved through
-# R/strategies.R from it. Left NULL it is the manuscript's, so every existing
-# caller keeps its meaning. `ts_col`/`swc_col` still override the recipe for
-# ad-hoc sensitivity runs. `fill` is the site's `fill_soil_temp()` result and
-# is only read by a `memory_fill` recipe. `fit_profile` is documented at
-# `fit_settings()`.
+#   recipe       the methodology, resolved through R/strategies.R; NULL is
+#                the manuscript's
+#   fill         the site's `fill_soil_temp()` result (memory_fill recipes)
+#   ts_col, swc_col  override the recipe's columns, for sensitivity runs
+#   fit = FALSE  the same window/year loop with no model fitting: which
+#                windows and years survive, and why. Deterministic, seconds.
+#   fit_profile  see `fit_settings()`
 total_tas_site <- function(site_data, site_info, direct = FALSE,
                            ts_col = NULL, swc_col = NULL, fit = TRUE,
                            recipe = NULL, fill = NULL, fit_profile = "full") {
@@ -291,9 +249,6 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
 
   name_site <- feature_gs[["site_ID"]]
 
-  # Both arguments carry a site identity. A mismatched pair would fit one
-  # site's data against another site's declared columns -- which runs, and is
-  # wrong, and leaves no trace downstream.
   if (!identical(site_info[["site_ID"]], name_site)) {
     stop(
       "site_info is for ", site_info[["site_ID"]],
@@ -304,12 +259,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   gStart <- feature_gs[["gStart"]]
   gEnd <- feature_gs[["gEnd"]]
 
-  # Soil temperature: one call, one column out. Selection, the fill, the
-  # bounds and the provenance all live in `get_soil_temperature()`; from here
-  # on the tables carry `TS_final` and nothing else soil-temperature-shaped.
-  # Made before the soil-water block because the fill's rows align with the
-  # tables as step 01 left them, and the measured-soil-water filter below
-  # drops nighttime rows.
+  # Soil temperature (`TS_final` from here on). Before the soil-water filter,
+  # because the fill aligns with the tables as step 01 left them.
   soil <- get_soil_temperature(site_data, site_info, recipe = recipe, fill = fill, ts_col = ts_col)
   ac <- soil[["ac"]]
   a_measure_night_complete <- soil[["nightNEE"]]
@@ -318,14 +269,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   tStart <- ts_meta[["tStart"]]
   tEnd <- ts_meta[["tEnd"]]
 
-  # Soil water: choose a column, as with soil temperature. `prep_nee_ac()`
-  # carries both `SWC_measured` and `SWC_era5` on every table, so no reading or
-  # joining happens here.
-  #
-  # Unlike TS, the choice depends on the model as well as the site, which is
-  # why it cannot be a single column in site_info.csv: the direct model needs
-  # soil water, so a site with none measured falls back to ERA5-Land, while the
-  # total model does not use soil water at all and therefore needs no fallback.
+  # Soil water: choose a column, which depends on the model as well as the
+  # site.
   swc_choice <- if (is.null(swc_col)) {
     choose_swc_col(recipe, site_info, direct)
   } else {
@@ -338,19 +283,15 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   }
   SWC_use <- !is.na(swc_col)
 
-  # Measured soil water is a requirement where it exists: the original drops
-  # nighttime observations that lack it. The ERA5 fallback is deliberately not
-  # filtered on -- it is a daily reanalysis with its own gaps, and filtering on
-  # it would discard observations the original kept.
+  # As the original: rows without measured soil water are dropped where it is
+  # used; the ERA5 fallback is not filtered on.
   if (isTRUE(site_info[["SWC_use"]])) {
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(!is.na(.data$SWC))
   }
 
-  # The span the windows tile. Under `whole_year` only this changes: the
-  # detected `gStart`/`gEnd` above still choose the control year, because that
-  # choice needs a season to be defined over and a season-free rule for it is
-  # documented, not implemented.
+  # The span the windows tile. The detected season above still picks the
+  # control year under every season strategy.
   win <- choose_window_season(recipe, feature_gs)
   wStart <- win[["gStart"]]
   wEnd <- win[["gEnd"]]
@@ -395,12 +336,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   ac <- ac |>
     dplyr::mutate(growing_year = growing_year_of(.data$DOY, .data$YEAR))
 
-  # A site whose growing year is wrapped loses one year at each end of the
-  # record: the first growing year began before the data start and the last
-  # runs past their end, so both are partial. Keyed off the declaration rather
-  # than the two site names the original listed, so that a third such site
-  # does not silently keep its partial years.
-  # TODO: Move this logic out of here.
+  # A wrapped site loses its partial first and last growing years.
   if (growing_year_start(site_info) > 1) {
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(dplyr::between(.data$growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
@@ -430,10 +366,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
   nwindow <- max(round((wEnd - wStart + 1) / WINDOW_SIZE), 1)
 
-  # Every knob that decided the layout of this run, recorded alongside the
-  # numbers it produced. `outcome` reports only TAS and two fit statistics, so
-  # without this a difference between two runs cannot be attributed to the
-  # column selected, the bounds, the control year or the window count.
+  # Every choice behind this run's layout, so differences between runs can be
+  # attributed.
   settings <- tibble::tibble(
     site_ID = name_site,
     recipe_id = recipe$recipe_id,
@@ -454,9 +388,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     nwindow = nwindow,
     control_year = control_year,
     nyear_available = length(years),
-    # Provenance: which strategy made each choice, and why. The
-    # soil-temperature fields are `get_soil_temperature()`'s metadata row,
-    # carried verbatim so the record and the column cannot disagree.
+    # Which strategy made each choice, and why.
     ts_strategy = ts_meta[["ts_strategy"]],
     ts_reason = ts_meta[["ts_reason"]],
     ts_verdict = ts_meta[["ts_verdict"]],
@@ -493,10 +425,6 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     )
   }
 
-  # NB: a skipped window used to `return(NULL)`, and assigning NULL to a list
-  # element *removes* it, so `length(window_results)` counted only the windows
-  # that produced something. Skips are now records, so the emptiness test has
-  # to ask the question directly or it would never fire.
   fitted_windows <- Filter(
     function(w) !is.null(w[["outcome_siteyear"]]), window_results
   )
@@ -525,9 +453,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     dplyr::bind_rows()
 
   if (!fit) {
-    # No ERref, so no lnRatio, so nothing for `gls` to regress. `outcome` is
-    # NULL rather than a row of NAs, so that a structure-only result cannot be
-    # mistaken for a fitted one further downstream.
+    # NULL `outcome`, so a structure-only result cannot pass for a fitted one.
     return(list(
       outcome = NULL,
       outcome_siteyear = window_results_df,
@@ -568,12 +494,8 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
 # window-mean soil temperature, with `window` as a factor and an AR(1) error
 # within window across years.
 #
-# `window` as a factor needs two fitted windows, and a site can qualify fewer:
-# under a variant that qualifies on a sparse raw sensor, DE-Akm fitted one and
-# `gls()` died with "contrasts can be applied only to factors with 2 or more
-# levels" -- an error about model matrices, from a site that had simply not
-# earned an estimate. That is a result, not a failure, so it comes back as a
-# row with NA TAS and a `status` the settings table carries.
+# Too few windows, or a singular fit, is a result -- the site did not earn an
+# estimate -- so it returns NA TAS with a `status` rather than an error.
 across_year_tas <- function(window_results_df) {
   usable <- window_results_df[!is.na(window_results_df[["lnRatio"]]), , drop = FALSE]
   n_windows <- length(unique(usable[["window"]]))
@@ -583,10 +505,6 @@ across_year_tas <- function(window_results_df) {
       status = sprintf("too_few_windows: %d window(s) with a fitted ratio, need 2", n_windows)
     ))
   }
-  # Two windows is necessary, not sufficient: with very few fitted years per
-  # window the design is rank-deficient and `gls()` reports "computed 'gls'
-  # fit is singular" (US-PFa, qualified on its sparse raw sensor). Also a
-  # result -- this site did not earn an estimate under this recipe.
   mod_ar1 <- tryCatch(
     nlme::gls(
       lnRatio ~ TS + window,
@@ -604,7 +522,6 @@ across_year_tas <- function(window_results_df) {
   list(TAS = smry["TS", "Value"], TASp = smry["TS", "p-value"], status = "fitted")
 }
 
-# NOTE: Can refactor this further to remove window_start and window_end? Instead, just pass data directly?
 total_tas_window <- function(
   ac, ac_day, a_measure_night_complete,
   window_start, window_end, nwindow, nobs_threshold, control_year,
@@ -612,9 +529,7 @@ total_tas_window <- function(
   direct = FALSE, fit = TRUE, fs = fit_settings("full")
 ) {
 
-  # A skipped window used to `return(NULL)`, which vanished without trace --
-  # and, because assigning NULL to a list element *removes* it, without even
-  # leaving a gap in `window_results`. Skips are now reported.
+  # A skipped window is a record, not NULL (which would vanish from the list).
   window_skip <- function(reason, detail = NA_character_) {
     list(
       outcome_siteyear = NULL,

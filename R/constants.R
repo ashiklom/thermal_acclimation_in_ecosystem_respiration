@@ -172,41 +172,24 @@ ts_measured_truth <- function(site_info) {
   unname(TS_SOURCES[[ts_source(site_info)]])
 }
 
-# The development site sample: what `_targets.R` runs by default.
+# The development site sample: what `_targets.R` runs by default
+# (THERMAL_SITES=dev). Chosen to be cheap and to cover every branch the
+# pipeline has, so a breaking change shows up in minutes. The number is a
+# cost proxy -- manuscript years x round(season length / 14) fits per model.
 #
-# Running every northern-hemisphere FLUXNET-family site end to end is not a
-# development loop. Cost is roughly (qualifying years x 14-day windows) Stan
-# fits per site per model, and the full list of 44 comes to several thousand.
-# These six are picked to be cheap *and* to cover every branch the pipeline
-# has, so a change that breaks one of them shows up in minutes rather than
-# after an overnight run:
-#
-#   DE-RuC   40  the cheapest site available; TS_linear selection; measured
-#                soil water; one of the two SITES_GS_NEE_ZERO cut-offs
-#   DE-Hte   63  fix_soil_temp()'s linear-regression fallback, and SWC_use NO,
-#                so the direct model takes the ERA5 path
-#   DE-Akm   78  fix_soil_temp()'s random-forest (NETRAD) branch
+#   DE-RuC   40  TS_linear selection; measured soil water; SITES_GS_NEE_ZERO
+#   DE-Hte   63  fix_soil_temp()'s linear-regression arm; SWC_use NO, so the
+#                direct model takes the ERA5 path
+#   DE-Akm   78  fix_soil_temp()'s random-forest (NETRAD) arm
 #   FI-Sod  100  a three-product splice (FLUXNET2015+FLUXNET+ICOS), the
-#                pre-2006 soil-temperature recalibration, the second NEE-zero
-#                site, and the sparse gap profile
+#                pre-2006 recalibration, the other NEE-zero site, sparse gaps
 #   SE-Deg  176  Warm Winter 2020 in the splice
 #   NL-Loo  176  a two-product splice (FLUXNET+ICOS); TS_linear
 #   US-Kon   84  the AmeriFlux reader: u-star filtering and gap fill, the
-#                compound `FC + SC` column read, RH -> VPD conversion, and the
-#                uncapped growing-season cut-off. Its step-01 features
-#                reproduce the manuscript's AmeriFlux row exactly.
+#                compound `FC + SC` read, RH -> VPD, the uncapped cut-off
 #
-# The number is (original nyear x round(growing-season length / 14)) taken from
-# the manuscript's own growing_season_feature_*.csv -- a proxy for how many
-# fits a site costs, not a runtime. Step 01 for the six FLUXNET-family sites
-# together takes about 40 seconds; US-Kon adds a little over a minute on its
-# own, because REddyProc's u-star estimation and gap fill dominate an
-# AmeriFlux site and no other reader pays for them.
-#
-# Two branches are deliberately left out because both are expensive: CH-Dav's
-# pre-gap-scan TS >= 2 C truncation (364) and GF-Guy's year-round growing
-# season with air temperature standing in for soil (520). Both are pinned by
-# tests/ts-swc-baseline.R instead, which needs no model fits.
-#
-# Set THERMAL_SITES=all to run the full list. See `pipeline_sites()`.
+# Left out because expensive, and pinned by tests/ts-swc-baseline.R instead:
+# CH-Dav's pre-gap-scan TS >= 2 C truncation (364) and GF-Guy's year-round
+# season with air temperature for soil (520). tests/testthat/test-pipeline-sites.R
+# checks the coverage claims above.
 DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo", "US-Kon")

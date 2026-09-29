@@ -14,17 +14,11 @@
 # Written into a site's product directory by `download_site()`.
 REMOTE_ID_FILE <- ".remote_id"
 
-# The catalogue lives in a file, written by `scripts/check-data-updates.py
-# --catalog` -- normally from `scripts/scan-and-run.sh`, before targets is
-# involved at all. That is what makes a no-change day cheap: the script leaves
-# the file untouched when nothing changed, so `tar_outdated()` finds nothing to
-# do, where an always-run scan target inside the pipeline would make every
-# site look outdated on every run.
-#
-# One row per site and product: `site_ID`, `product`, `remote_id`. A provider
-# that cannot be asked keeps its previous remote_id (or blank, the first
-# time), which `download_site()` reads as "keep what we have": a bad day at a
-# provider never invalidates anything.
+# The catalogue (`site_ID`, `product`, `remote_id`) is a file written by
+# `scripts/check-data-updates.py --catalog`, outside the pipeline, and only
+# when something changed -- an always-run scan target would make every site
+# look outdated. A provider that cannot be asked keeps its previous id (blank
+# the first time), which `download_site()` reads as "keep what we have".
 REMOTE_CATALOG_CSV <- file.path(DIR_RAWDATA, "remote_catalog.csv")
 
 # The catalogue path, running the scan first if there is none yet -- a fresh
@@ -47,9 +41,8 @@ read_remote_catalog <- function(path = REMOTE_CATALOG_CSV) {
   readr::read_csv(path, col_types = "ccc", na = "", progress = FALSE)
 }
 
-# A site's slice of the catalogue as a named vector, product -> remote_id.
-# This is what the per-site `site_remote` target holds: targets compares it by
-# value, so a site whose providers published nothing new stays up to date.
+# A site's slice of the catalogue, product -> remote_id (the `site_remote`
+# target, compared by value).
 remote_for_site <- function(catalog, name_site) {
   rows <- catalog[catalog$site_ID == name_site, ]
   stats::setNames(rows$remote_id, rows$product)
@@ -96,11 +89,10 @@ record_remote_id <- function(name_site, product, remote_id) {
   writeLines(remote_id, file.path(dir, REMOTE_ID_FILE))
 }
 
-# Move a site's copy of a product to data-raw/_superseded/, stamped, so the
-# downloader sees it absent and `product_file()` never sees two releases at
-# once. Kept rather than deleted: with data-raw updated in place, these are
-# the only way back to the inputs an earlier run -- the manuscript's, for one
-# -- was made from. Returns what `restore_product()` needs to undo it.
+# Move a site's copy of a product to data-raw/_superseded/<stamp>/, so the
+# downloader sees it absent. Kept, not deleted: they are the only way back to
+# the inputs of earlier runs, the manuscript's included. Returns what
+# `restore_product()` needs.
 supersede_product <- function(name_site, product) {
   from <- product_local_paths(name_site, product)
   dest <- file.path(DIR_RAWDATA, "_superseded", FLUX_PRODUCTS[[product]]$dir, name_site,

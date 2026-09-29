@@ -1,25 +1,14 @@
 # The soil-temperature estimators, in one registry.
 #
-# Every model that produces a soil-temperature estimate from other columns --
-# the manuscript's random forest and its regressions, the fill's candidates,
-# the two borrowed-coefficient lines -- is an entry here with the same shape:
+# Every model that estimates soil temperature from other columns (stage A's,
+# the fill's) has the same shape:
 #
-#   family      what kind of function of which predictors: "lm:TA",
-#               "rf:TA+NETRAD", "fixed:TA". Two estimators with the same family
-#               produce the same kind of column, whatever fitted them; this is
-#               what provenance records and what "did stage A already apply
-#               this?" is asked of.
-#   predictors  the columns `fit` and `predict` read.
+#   family      the kind of function of which predictors ("lm:TA",
+#               "rf:TA+NETRAD", "fixed:TA"); what provenance records
+#   predictors  the columns `fit` and `predict` read
 #   fit(train)  -> a model
-#   predict(model, newdata) -> numeric, one value per row of `newdata`, NA
-#               wherever a predictor is missing -- never a shorter vector,
-#               which would misalign the estimate with the rows it belongs to.
-#
-# Stage A (`fix_soil_temp()` and the readers) and the fill draw from the same
-# registry, so the manuscript's estimators and the alternatives are compared
-# on equal terms. The manuscript's forest is `rf_ta_netrad_manuscript`
-# (randomForest, its own 60k/70:30 protocol); the fill's forests are `ranger`
-# and are not bit-identical to it -- see `rf_ranger_estimator()`.
+#   predict(model, newdata) -> one value per row of `newdata`, NA where a
+#               predictor is missing (never a shorter vector)
 
 ts_estimator <- function(family, predictors, fit, predict) {
   structure(
@@ -30,11 +19,8 @@ ts_estimator <- function(family, predictors, fit, predict) {
 
 ts_family <- function(kind, predictors) paste0(kind, ":", paste(predictors, collapse = "+"))
 
-# `lm(TS ~ <predictors>)`. `fit_subset` restricts the rows the model is fitted
-# on -- above freezing, recent years -- and is part of what the estimator *is*,
-# since the manuscript's `TS ~ TA` line differs between sites only in that.
-# `na.omit` drops incomplete rows, so callers can pass a subset that still
-# contains NA rows (as `ac[ac$TA > 0, ]` does) and get the same coefficients.
+# `lm(TS ~ <predictors>)`, fitted on the rows `fit_subset` keeps (above
+# freezing, recent years). `na.omit` makes NA rows in the input harmless.
 lm_estimator <- function(predictors, fit_subset = NULL) {
   ts_estimator(
     family = ts_family("lm", predictors),
@@ -49,10 +35,8 @@ lm_estimator <- function(predictors, fit_subset = NULL) {
   )
 }
 
-# A line with coefficients taken from elsewhere rather than fitted here: US-Cwt
-# borrows a neighbouring site's `TS ~ TA`, US-MBP fills its gaps with one.
-# `fit` ignores its argument, which is the point -- the provenance row records
-# that nothing at this site determined these numbers.
+# A line with coefficients from elsewhere (US-Cwt's neighbour, US-MBP's gap
+# fill); `fit` ignores its data.
 fixed_linear_estimator <- function(intercept, slope, predictor = "TA") {
   ts_estimator(
     family = ts_family("fixed", predictor),
@@ -62,9 +46,7 @@ fixed_linear_estimator <- function(intercept, slope, predictor = "TA") {
   )
 }
 
-# `ranger` random forest: the fill's candidates. An order of magnitude faster
-# than `randomForest` on the same algorithm and seeded, so blocked
-# cross-validation over eight methods is affordable and repeatable.
+# `ranger` forest for the fill: much faster than `randomForest`, and seeded.
 rf_ranger_estimator <- function(predictors, num_trees = 200) {
   ts_estimator(
     family = ts_family("rf", predictors),
@@ -81,9 +63,7 @@ rf_ranger_estimator <- function(predictors, num_trees = 200) {
       )
     },
     predict = function(mod, newdata) {
-      # ranger has no NA handling, so rows with an incomplete feature vector
-      # get NA rather than being silently dropped -- which would misalign the
-      # prediction with the rows it belongs to.
+      # ranger drops incomplete rows; give them NA instead.
       out <- rep(NA_real_, nrow(newdata))
       ok <- stats::complete.cases(newdata[, mod$forest$independent.variable.names, drop = FALSE])
       if (any(ok)) {
@@ -96,22 +76,14 @@ rf_ranger_estimator <- function(predictors, num_trees = 200) {
   )
 }
 
-# The manuscript's random forest, as workflow 01_01 fitted it: `randomForest`
-# on at most 60,000 rows drawn at random from the record, split 70/30 into
-# training and a held-out set whose performance is reported beside a linear
-# model's. Not seeded here -- inside the pipeline every call is in a target
-# and `targets` seeds it; tests/ts-swc-baseline.R seeds it itself.
-#
-# The train/test diagnostics are the original's and are the only report of
-# how well a reconstruction fits, so they are kept; they go through
-# `message()` so that a caller can silence them.
+# The manuscript's forest, as workflow 01_01 fitted it: `randomForest` on at
+# most 60,000 random rows split 70/30, with the original's train/test report
+# (via `message()`). Unseeded here; targets seeds each target.
 rf_manuscript_estimator <- function(predictors = c("TA", "NETRAD"), max_rows = 60000) {
   ts_estimator(
     family = ts_family("rf", predictors),
     predictors = predictors,
     fit = function(train) {
-      # use a maximum of 60000 data to train and test the model; too many data
-      # will cause RF super slow and may not improve accuracy.
       sampled <- sample(seq_len(nrow(train)), size = min(max_rows, nrow(train)), replace = FALSE)
       ind <- sample(2, length(sampled), replace = TRUE, prob = c(0.7, 0.3))
       fit_rows <- stats::na.omit(train[sampled[ind == 1], ])
@@ -137,8 +109,7 @@ rf_manuscript_estimator <- function(predictors = c("TA", "NETRAD"), max_rows = 6
   )
 }
 
-# The registry. `num_trees` reaches only the `ranger` forests; the fill's tests
-# turn it down to make the plumbing cheap to exercise.
+# The registry. `num_trees` reaches only the `ranger` forests.
 ts_estimators <- function(num_trees = 200) {
   memory <- TS_FILL_FEATURES_MEMORY
   list(
@@ -157,8 +128,6 @@ ts_estimators <- function(num_trees = 200) {
   )
 }
 
-# The manuscript's `TS ~ TA` regression, as three functions the readers and
-# the step-02 substitution have always called. Thin names over the registry
-# so that there is one implementation of the line.
+# The manuscript's `TS ~ TA` line, by name.
 ts_ta_model <- function(fit_data) ts_estimators()$lm_ta$fit(fit_data)
 predict_ts_from_ta <- function(mod, ta) ts_estimators()$lm_ta$predict(mod, data.frame(TA = ta))

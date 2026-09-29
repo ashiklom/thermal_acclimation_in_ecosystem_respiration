@@ -5,12 +5,7 @@
 # manuscript's logic and any number of alternatives to it are produced by the
 # same code in the same run and can be compared row for row.
 #
-# Adding a variant is one row in data-core/recipes.csv. Adding a *strategy*
-# is one new branch in the matching `choose_*()` function in R/strategies.R
-# and one entry in RECIPE_AXES below. Adding an *axis* is a new column in the
-# CSV, a new entry here, and a new `choose_*()` function -- the compiler-ish
-# checks in `new_recipe()` and `read_recipes()` will name every place that has
-# not caught up.
+# How to add a recipe, strategy or axis: docs/recipes.md.
 
 RECIPES_CSV <- file.path("data-core", "recipes.csv")
 
@@ -37,11 +32,8 @@ RECIPE_AXES <- list(
   ts_qc = c("manuscript", "sensor")
 )
 
-# The axes whose choice changes what step 01 (`prep_nee_ac()`) produces. Every
-# other axis is resolved in step 02, so recipes that agree on these share one
-# step-01 result. This is what keeps the grid affordable: step 01 costs
-# 30-140 s a site, and step 02 produces every candidate column so that a fit
-# can select rather than recompute.
+# The axes that change what step 01 produces. Recipes that agree on these
+# share one step-01 result; every other axis is resolved in step 02.
 RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 
 # The development sample of recipes, by analogy with `DEV_SITES`: chosen to
@@ -53,11 +45,8 @@ RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 # step 01, so it doubles a run's step-01 cost. THERMAL_RECIPES names it.
 DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 
-# A plain S3 list rather than an S7 class, deliberately. Recipes travel
-# through targets' qs2 store and through `tar_map()` values; an S7 object does
-# not come back `identical()` from qs2 (the class object is re-created), and a
-# named list with a class attribute does. The validation an S7 class would have
-# given lives in `validate_recipe()` and runs at construction.
+# A plain S3 list, not S7: an S7 object does not come back `identical()` from
+# the qs2 store. Validation runs at construction.
 new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc,
                        description = NA_character_) {
   r <- structure(
@@ -100,9 +89,7 @@ print.recipe <- function(x, ...) {
   invisible(x)
 }
 
-# The manuscript's logic, spelled out. `total_tas_site()` uses this when no
-# recipe is passed, so every existing caller -- the oracle in
-# tests/ts-swc-baseline.R above all -- keeps its meaning.
+# The manuscript's logic; the default wherever no recipe is passed.
 original_recipe <- function() {
   new_recipe(
     "original",

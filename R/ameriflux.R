@@ -1,19 +1,15 @@
-# Custom pre-processing for Ameriflux_BASE data
+# Step 01's AmeriFlux BASE reader.
 
-# Site-specific windows, as inclusive `TIMESTAMP_START` bounds (NA = open).
+# Site-specific windows as inclusive `TIMESTAMP_START` bounds (NA = open),
+# converted from the original's row ranges on the releases then on disk
+# (US-Myb BASE-BADM 17-5, US-Jo2 2-5; both gap-free), so each selects exactly
+# the rows the range did:
 #
-# Both used to be row ranges into one BASE release, which do not survive a
-# re-download. They are resolved here against the releases that were on disk
-# when they were converted (US-Myb BASE-BADM 17-5, US-Jo2 2-5), both gap-free
-# half-hourly records, so each window selects exactly the rows the range did:
-#
-#   US-Myb  a[17521:245424, ]   2011-01-01 00:00 .. 2023-12-31 23:30
+#   US-Myb  a[17521:245424, ]   2011-01-01 00:00 .. (open)
 #   US-Jo2  a[123453:124049]    2017-01-15 22:00 .. 2017-01-28 08:00
 #
-# US-Myb's upper row was the end of the record when the range was written, not
-# a choice: the intent is "drop the first year". Release 17-5 runs through
-# 2025, and the row range was silently discarding 2024-2025, so the end is left
-# open here.
+# US-Myb's upper row was just the end of the record then (the intent is "drop
+# the first year"), so the end is left open.
 US_MYB_WINDOW <- c("201101010000", NA)
 US_JO2_BAD_TA_WINDOW <- c("201701152200", "201701280800")
 
@@ -35,18 +31,9 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   file_path <- files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)]
   stopifnot(length(file_path) == 1)
   message("Reading Ameriflux data...")
-  # `amf_read_base()` returns a base data.frame, and everything below reaches
-  # into it with column names taken from `site_info` (`a[[site_info$SW_IN]]`,
-  # `FC`, `TA`, `TS`, `SWC`, `USTAR`, ...). On a data.frame a missing or NA name
-  # yields NULL silently: the column is simply never created, and the complaint
-  # surfaces much later in `prep_nee_ac()` as an absent `SWC` pointing nowhere
-  # near the cause. A tibble raises "Can't extract column with
-  # `NA_character_`" at the point of use instead, which makes every one of
-  # those lookups self-checking rather than relying on the per-field invariant
-  # in `scripts/revise-site-info.R`. Verified safe for the pipeline: REddyProc
-  # accepts a tibble and returns identical u-star thresholds and gap-fills, and
-  # `SW_IN`/`USTAR` -- the two lookups that are not guarded by `!is.na()` -- are
-  # populated for all 71 AmeriFlux sites.
+  # A tibble, not `amf_read_base()`'s data.frame: `a[[NA_character_]]` then
+  # errors at the lookup instead of silently yielding NULL. REddyProc gives
+  # identical results on either.
   a <- amerifluxr::amf_read_base(
     file_path,
     parse_timestamp = TRUE,
@@ -85,8 +72,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   dt <- difftime(a$TIMESTAMP[2], a$TIMESTAMP[1], units = "hours")
   a$daytime <- ((a$TIMESTAMP + dt / 2.0) >= a$sunrise) & (a$TIMESTAMP - dt / 2.0 <= a$sunset)
 
-  # special cases: sites in Arctic do not have sunrise and sunset sometime of a year
-  # TODO: Lat-based filter instead?
+  # Arctic sites have days with no sunrise or sunset: classify those by month.
   if (name_site %in% SITES_LOW_LIGHT_NIGHT) {
     a$daytime[is.na(a$daytime) & dplyr::between(a$MONTH, 4, 8)] <- TRUE
     a$daytime[is.na(a$daytime) & !dplyr::between(a$MONTH, 4, 8)] <- FALSE
@@ -113,13 +99,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     a_BZF <- amerifluxr::amf_read_base(bzf_file, parse_timestamp = TRUE, unzip = TRUE) |>
       tibble::as_tibble()
     a_BZF <- drop_sentinels(a_BZF)
-    # Pair the two sites on the timestamp, not on position. The regression this
-    # replaces built its data frame from two independently subset vectors, so it
-    # depended on the 2016-2019 slices of the two BASE releases coming out the
-    # same length and in the same order -- a property of the files as they
-    # happen to be published, not one either file guarantees. A single extra
-    # half-hour at either site would have silently paired every row afterwards
-    # with the wrong timestamp.
+    # Pair the two sites on the timestamp, not on position.
     bzf_ta <- a_BZF |>
       dplyr::select("TIMESTAMP", BZF = "TA_PI_F")
     calib <- a |>
@@ -127,8 +107,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
       dplyr::inner_join(bzf_ta, by = "TIMESTAMP") |>
       dplyr::filter(dplyr::between(.data$YEAR, 2016, 2019))
     mod <- lm(BZS ~ BZF, data = calib)
-    # Same pairing for the prediction. `predict.lm()` keeps NA rows rather than
-    # dropping them, so the result lines up with `gap` row for row.
+    # `predict.lm()` keeps NA rows, so the result lines up with `gap`.
     gap <- dplyr::between(a$YEAR, 2012, 2014)
     a$TA_PI_F[gap] <- predict(
       mod,
@@ -156,9 +135,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   ustar <- prep_ustar_df(a, site_info, ts_qc = ts_qc)
   ac <- ustar[["ac"]]
 
-  #l###############################################################################
-  # Begin U-star filtering
-  ################################################################################
+  # ---------------------------------------------------- u-star filtering
   gs <- detect_growing_season(
     ac, site_info,
     nee_col = "NEE", ts_col = "TS",
@@ -170,9 +147,7 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   tEnd <- gs$tEnd
 
   years <- unique(ac[["YEAR"]])
-  # REddyProc wants real days of year, so a wrapped bound has to come back
-  # under 366 before it is handed over. No AmeriFlux site declares a wrapped
-  # growing year today; this is here so that one could.
+  # REddyProc wants real days of year, so unwrap the season bounds.
   seasonStarts <- lapply(
     years,
     \(y) tibble::tibble(DOY = unwrap_growing_doy(c(gStart, gEnd)), year = y)
@@ -206,17 +181,8 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
 
     EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
-    #
-    # By name, not `c(2, 4)`: a column added upstream in REddyProc would
-    # silently change which two came through, and `seasonYear` has to be one
-    # of them for the join below to key on anything at all.
-    #
-    # `many-to-one` because `ac$uStarTh <- ac_u$uStar` after this branch reads
-    # `ac_u` positionally against `ac`. That is only sound while the join
-    # leaves the row count alone, which needs one threshold per year. If
-    # REddyProc ever returns several -- bootstrap replicates, u-star scenarios
-    # -- this says so by name instead of failing as a length mismatch three
-    # lines later.
+    # `many-to-one`: the positional `ac$uStarTh <- ac_u$uStar` below needs
+    # the join to leave the row count alone (one threshold per year).
     ac_u <- ac_u |>
       dplyr::mutate(seasonYear = lubridate::year(.data$DateTime)) |>
       dplyr::left_join(
@@ -230,29 +196,20 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     )
     uStarTh <- EProc$sEstUstarThold(seasonFactor = ac_u$season)
 
-    # gap fill NEE, air temperature and soil temperature
-    # By default the gap-filling uses annually aggregated estimates of uStar-Threshold.
-    # we can also use a different threshold for each of the defined seasons, by calling the two functions
-    # EProc$useSeaonsalUStarThresholds()
-    # EProc$sGetUstarScenarios()
-    # I only want annually aggregated estimated, because some sites have no seasonal estimates
+    # Gap-fill NEE with the annually aggregated u-star threshold (the
+    # default): some sites have no seasonal estimates.
     EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
-    #
     ac_u <- ac_u |>
       dplyr::left_join(uStarTh[, c("season", "uStar")], by = "season",
                        relationship = "many-to-one")
   }
-  # Positional, and safe only because `ac_u` descends from `ac` row-for-row
-  # (`mutate(.keep = "none")` above) and both joins are guarded many-to-one,
-  # so neither can have changed the row count or the order.
+  # Positional: `ac_u` descends from `ac` row for row and both joins are
+  # guarded many-to-one.
   ac$uStarTh <- ac_u$uStar
 
-  # `dt` and `gs` are results of this function, not properties of the table, so
-  # they are returned as such. `gs` in particular has to be handed back rather
-  # than recomputed downstream: it is the growing season the u-star season
-  # factor was built from, and a second call that disagreed with it would put
-  # the seasonal thresholds and the growing-season bounds out of step.
+  # `gs` is returned, not recomputed downstream, because the u-star season
+  # factor was built from it.
   list(ac = ac, dt = dt, gs = gs, ts_provenance = ustar[["ts_provenance"]])
 }
 
@@ -274,17 +231,10 @@ declared_ameriflux_columns <- function(site_info) {
   unique(trimws(unlist(strsplit(declared, "+", fixed = TRUE))))
 }
 
-# AmeriFlux BASE column names carry the sensor's position and processing
-# level, and they change between releases: US-Ho1 and US-Ho2 declared
-# `RH_PI_F_2_1_1`, which release 15-5 and 10-5 no longer publish. Read through
-# `[[` on a tibble, an absent name yields NULL and the column is simply never
-# created, so the complaint used to surface inside REddyProc as "Missing
-# specified columns in dataset: RelHumidity_Percent" -- nowhere near the site
-# declaration that caused it, and with nothing to act on.
-#
-# Checked in one place, up front, naming the site, the field, the column and
-# what the record does offer instead. The declarations themselves live in
-# site_info.csv and `scripts/revise-site-info.R`.
+# AmeriFlux BASE column names encode sensor position and processing level,
+# and change between releases (US-Ho1/US-Ho2 lost `RH_PI_F_2_1_1`). Check the
+# declared columns up front, naming the site, field and column and what the
+# record offers instead -- otherwise the failure surfaces deep in REddyProc.
 check_declared_columns <- function(a, site_info) {
   name_site <- site_info[["site_ID"]]
   wanted <- declared_ameriflux_columns(site_info)
@@ -341,14 +291,8 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
     ac$TA <- a[[site_info$TA]]
   }
 
-  # Net radiation, where the BASE file has it. Stage A reads it from the raw
-  # record for the `rf:TA+NETRAD` reconstruction; carrying it forward on `ac`
-  # is what lets the radiation-driven reconstructions be cross-validated
-  # against the air-temperature-only ones on equal terms downstream.
-  #
-  # The declared column wins; a bare `NETRAD` is the fallback, because most
-  # BASE files that have net radiation call it that and only the five sites
-  # that needed a disambiguated replicate say so in site_info.csv.
+  # Net radiation where the file has it, for the radiation-driven fill
+  # candidates: the declared column, else a bare `NETRAD`.
   netrad_column <- site_info[["netrad_column"]]
   if (is.na(netrad_column) && "NETRAD" %in% names(a)) {
     netrad_column <- "NETRAD"
@@ -357,22 +301,14 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
     ac$NETRAD <- a[[netrad_column]]
   }
 
-  # Soil temperature, stage A: the sensor after its per-site repairs, or a
-  # reconstruction where the site has none. Which is `ts_source` in
-  # site_info.csv; see R/soil-temperature.R. The reader's only job here is to
-  # hand over the record's columns under the shared names. The result is
-  # `TS`, i.e. `TS_measured` downstream, which is what the original treated it
-  # as at every one of these sites.
+  # Soil temperature, stage A (R/soil-temperature.R): this reader only hands
+  # over the record's columns under the shared names.
   soil <- qualification_soil_temperature(ameriflux_ts_input(a, site_info), site_info, ts_qc = ts_qc)
   stopifnot(length(soil[["TS"]]) == nrow(ac))
   ac$TS <- soil[["TS"]]
 
-  # Soil water
-  # `SWC_use` is recoded to a logical by `get_site_info()`, and is never NA, so
-  # this has to test the value rather than its presence. Sites flagged "NO"
-  # deliberately discard soil water even where a column is available (22 of the
-  # 33 AmeriFlux "NO" sites do name one), which is why this keys on the flag and
-  # not on whether `site_info$SWC` is populated.
+  # Soil water, keyed on the flag rather than on `site_info$SWC`: 22 of the 33
+  # AmeriFlux `SWC_use = NO` sites name a column that is deliberately unused.
   if (isTRUE(site_info$SWC_use)) {
     ac$SWC <- a[[site_info$SWC]]
     # deal with special cases
@@ -400,10 +336,9 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
     ac$SW_IN  <- ac$SW_IN / 2.3
   }
 
-  # Special cases: US-Jo2: interpolating SW_IN, otherwise ReddyProc does not
-  # work for years before 2013 because of no SW_IN data.
+  # US-Jo2 has no SW_IN before 2013, which REddyProc cannot run without: fill
+  # it from the same half-hour four years (365 * 48 * 4 rows) later.
   if (name_site == "US-Jo2") {
-    # TODO: More robust implementation! This just grabs the following year's data.
     ac$SW_IN[is.na(ac$SW_IN)] <- ac$SW_IN[which(is.na(ac$SW_IN)) + 365 * 48 * 4]
   } else if (name_site == "US-KM4") {
     # use PI gap-filled data
@@ -413,11 +348,8 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
   # USTAR
   ac$USTAR <- a[[site_info$USTAR]]
 
-  # RH or VPD. Whether VPD has to be derived from relative humidity is decided
-  # by the site's column mapping here and needed by the caller, so it is part of
-  # this function's result rather than an attribute riding on the table: any
-  # dplyr verb that dropped attributes would have turned it into a missing-VPD
-  # error inside REddyProc, several steps away from the cause.
+  # RH or VPD. Whether VPD must be derived from RH is part of the result, not
+  # an attribute on the table, which a dplyr verb could drop.
   convert_rh <- !is.na(site_info$RH)
   if (convert_rh) {
     ac$RH <- a[[site_info$RH]]
@@ -431,26 +363,15 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
 }
 
 
-# Sunrise and sunset for `dates`, expressed in the frame that AmeriFlux
-# timestamps use.
+# Sunrise and sunset for `dates`, in the frame AmeriFlux timestamps use.
 #
-# AmeriFlux BASE timestamps are local standard time (no daylight saving), and
-# `amf_read_base` parses them with `tz = "GMT"`. So `a$TIMESTAMP` is a local
-# clock reading wearing a UTC label, and sunrise/sunset have to be put in that
-# same frame before they can be compared against it.
-#
-# The timezone passed to `getSunlightTimes()` is not merely a display choice: it
-# also decides which solar day's events get returned. Asking for UTC yields a
-# sunrise and a sunset belonging to *different* local days at these longitudes,
-# which makes the daytime test unsatisfiable for most of the year. So request the
-# times in the site's local standard time, then relabel (not convert) them to
-# UTC. This reproduces the original workflow, which did the relabel via an
-# `as.character()` round-trip.
-#
-# `Etc/GMT` zones are fixed-offset (no DST, which is what we want here) and use
-# the inverted POSIX sign convention, hence the negation. They only exist at
-# whole-hour offsets; every AmeriFlux site is currently UTC-4 to UTC-9, and we
-# would rather fail loudly than silently mis-classify if that ever changes.
+# BASE timestamps are local standard time, parsed by `amf_read_base()` as
+# GMT: a local clock reading with a UTC label. `getSunlightTimes()`'s `tz`
+# also decides which solar day's events come back -- in UTC, sunrise and
+# sunset fall on different local days here -- so ask in the site's standard
+# time and relabel (not convert) to UTC, as the original did. `Etc/GMT` zones
+# are fixed-offset with an inverted sign, and exist only at whole hours
+# (every AmeriFlux site is UTC-4 to UTC-9), hence the check.
 site_sunlight_times <- function(site_info, dates) {
   tz <- lutz::tz_offset(
     as.Date("2000-01-01"),

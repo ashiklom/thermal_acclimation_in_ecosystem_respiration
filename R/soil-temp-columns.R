@@ -1,20 +1,11 @@
-# The step-02 soil-temperature substitution, its fit domain, and the bounds.
-#
-# The `TS ~ TA` line itself is `lm_ta` in R/ts-estimators.R, shared with the
-# readers and the fill; the write-back is `write_back_ts()` below, shared
-# likewise. What is specific to this file is *which rows* the substitution
-# is fitted on (`ts_fit_data()`), that it is an overlay, and the two bounds
-# definitions every candidate column carries.
+# The `TS_linear` substitution (its fit domain and write-back) and the two
+# bounds definitions every candidate column carries. The `TS ~ TA` line is
+# `lm_ta` in R/ts-estimators.R.
 
-# The rows a site's regression is fitted on. A separate concept from the model
-# because it is a per-site declaration (`site_info$ts_linear_domain`): all but
-# one site fit on the growing-season part of `ac`, while US-Tw1 fits on the
-# nighttime table.
-#
-# NB `ac[ac$TA > 0, ]` is kept verbatim from the original. The predicate yields
-# NA for rows with missing TA, so those rows are selected as all-NA rows and
-# then dropped again by `na.omit` -- the coefficients are the same as filtering
-# them out first, and preserving the expression keeps that provable.
+# The rows a site's regression is fitted on (`site_info$ts_linear_domain`):
+# `ac` above freezing everywhere but US-Tw1, which fits on the nighttime table.
+# `ac[ac$TA > 0, ]` is verbatim from the original; its NA-TA rows come back
+# all-NA and `na.omit` drops them, so the coefficients are unaffected.
 ts_fit_data <- function(ac, nightNEE, domain) {
   if (length(domain) != 1 || is.na(domain)) {
     stop(
@@ -32,30 +23,19 @@ ts_fit_data <- function(ac, nightNEE, domain) {
   )
 }
 
-# Write an estimate back over a soil-temperature column. Three semantics are
-# in use and they are not interchangeable, so the mode is named at every call
-# rather than implied by the shape of the expression:
+# Write an estimate back over a soil-temperature column, in a named mode:
 #
-#   replace    the estimate wholesale, NAs included. Where there is no
-#              measured soil temperature to preserve: the whole-column
-#              reconstructions, the depth swap, the air-temperature substitute.
-#   overlay    the estimate wherever one exists, the original elsewhere, so
-#              measured soil temperature survives wherever a predictor is
-#              missing. The resulting column is a hybrid. This is the
-#              manuscript's behaviour at the `TS_linear` sites and it is
-#              load-bearing: a wholesale replacement would introduce NAs that
-#              the step-01 quality filters have already certified absent.
-#   fill_gaps  the estimate only where the original is missing: the PI
-#              gap-fill at US-NR1/US-ICh/US-ICs, US-MBP's air-temperature
-#              gap-fill, and the predictor climatologies inside
-#              `fix_soil_temp()`.
+#   replace    the estimate wholesale, NAs included (whole-column
+#              reconstructions, the depth swap, the air-temperature substitute)
+#   overlay    the estimate where it exists, the original elsewhere: a hybrid.
+#              The manuscript's `TS_linear`; wholesale would introduce NAs
+#              the step-01 filters have certified absent.
+#   fill_gaps  the estimate only where the original is missing (the PI and
+#              US-MBP gap-fills, the predictor climatologies)
 #
-# The mode a column was written with travels in its provenance row, which is
-# how a later stage can tell a hybrid from a reconstruction without inspecting
-# the values.
+# The mode travels in the provenance row.
 write_back_ts <- function(ts, estimate, mode) {
-  # No default: the mode is the point, and a call that omits it fails here
-  # rather than quietly replacing.
+  # No default: a call that omits the mode fails.
   mode <- match.arg(mode, c("replace", "overlay", "fill_gaps"))
   if (length(estimate) != length(ts)) {
     stop(
@@ -77,13 +57,9 @@ write_back_ts <- function(ts, estimate, mode) {
   )
 }
 
-# The 2.5/97.5 percentiles of growing-season soil temperature, which gate the
-# window-skip test in `total_tas_window()`.
-#
-# These have to be derived from the *same* TS column the model will see. That is
-# the whole reason they are computed here rather than carried as scalars: when
-# TS is substituted, bounds derived from the column it replaced no longer
-# describe the data, and the window-skip test silently uses the wrong range.
+# The half-hourly definition of the bounds: 2.5/97.5 percentiles of
+# growing-season soil temperature, which gate the window-skip test. They
+# describe one column only, so each candidate gets its own.
 ts_bounds <- function(ts, doy, gStart, gEnd) {
   gs <- ts[dplyr::between(doy, gStart, gEnd)]
   list(
@@ -92,21 +68,10 @@ ts_bounds <- function(ts, doy, gStart, gEnd) {
   )
 }
 
-# The fitting domain to use for a site's `TS_linear` column.
-#
-# `TS_linear` is now built at *every* site, not just the 35 that select it, so
-# that measured and regressed soil temperature can be compared anywhere. That
-# splits the domain question in two:
-#
-#   * A site that *declares* `ts_col = "TS_linear"` must also declare its
-#     domain. The declaration is returned unchanged -- NA included -- so that
-#     `ts_fit_data()` still rejects it. Silently defaulting here would let a
-#     half-filled site_info row through and change that site's coefficients
-#     without a word.
-#   * Anywhere else the column is a diagnostic: nothing selects it unless a
-#     sensitivity run names it. A missing declaration is expected rather than
-#     an error, and the default is `"ac"`, which is what 34 of the 35 declared
-#     sites use (US-Tw1 is the only `"night"`).
+# The fitting domain for a site's `TS_linear`. A site that selects it must
+# declare one (returned as is, NA included, so `ts_fit_data()` rejects a
+# missing one). Elsewhere the column is only a diagnostic and defaults to
+# `"ac"`, as 34 of the 35 declared sites have it.
 ts_linear_domain_for <- function(site_info) {
   domain <- site_info[["ts_linear_domain"]]
   if (identical(site_info[["ts_col"]], "TS_linear")) {
@@ -139,11 +104,8 @@ ts_bounds_climatology <- function(ts, doy, gStart, gEnd) {
   )
 }
 
-# Both definitions for one column, as rows of the `ts_bounds` table. Neither
-# row is `native`: the native rows are the manuscript's own numbers and are
-# written by `prep_nee_ac()` directly, because one of them (the measured
-# column's) is not a pure function of the column -- it carries the 0 C floor
-# and, at three sites, the 2 C truncation.
+# Both definitions for one column, as `ts_bounds` rows. `native` is set by
+# the caller, since the measured column's native row is not one of these.
 ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
   hh <- ts_bounds(ts, doy, gStart, gEnd)
   cl <- ts_bounds_climatology(ts, doy, gStart, gEnd)
@@ -156,13 +118,8 @@ ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
   )
 }
 
-# The bounds recorded for a TS column by `prep_nee_ac()`.
-#
-# With no `definition`, the column's *native* row: the one the manuscript used
-# for it. That is what every pre-existing caller means, and it is what keeps
-# tests/ts-swc-baseline.R's oracle comparison meaningful. With a `definition`,
-# the row computed under that definition, so a recipe can apply one definition
-# to every column.
+# The bounds for a TS column: its native (manuscript) row, or the row under
+# `definition`.
 ts_bounds_for <- function(ts_bounds, ts_col, definition = NULL) {
   has_def <- "definition" %in% names(ts_bounds)
   row <- if (is.null(definition)) {

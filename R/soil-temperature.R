@@ -1,27 +1,13 @@
-# Soil temperature: both stages, in one file.
+# Soil temperature, both stages (docs/soil-temperature.md):
 #
-# Soil temperature reaches the model through two stages, and the manuscript's
-# logic requires that they stay two:
-#
-#   Stage A, `qualification_soil_temperature()` (step 01): the
-#     *qualification-facing* column. A sensor after its per-site repairs, or a
-#     reconstruction where the site has no usable sensor. The QC filters, the
-#     growing-season detector and the year gap scan all run on it, and the
-#     manuscript fitted its 35-site `TS ~ TA` regression on the years that
-#     scan qualified. It leaves step 01 as `TS_measured`, beside every
-#     candidate step 01 can produce, with a provenance row saying what it is.
-#
-#   Stage B, `get_soil_temperature()` (step 02): the *fit-facing* column. One
-#     candidate is selected under
-#     the recipe's strategy, the per-site fill is attached if the strategy asks
-#     for it, the temperature bounds are re-derived on the selected column, and
-#     every other candidate is dropped so that nothing downstream can reach
-#     for one. What leaves is `TS_final` and a metadata row saying what it is.
-#
-# Downstream of this function -- the window layout, the control year, both
-# models -- there is exactly one soil-temperature column and no branching on
-# site, origin or strategy. Anything that needs to know where `TS_final` came
-# from reads `meta`, not the table.
+#   Stage A, `qualification_soil_temperature()` (step 01): the column the QC
+#     filters, season detector and year gap scan run on -- a sensor after its
+#     per-site repairs, or a reconstruction. Leaves step 01 as `TS_measured`,
+#     with a provenance row.
+#   Stage B, `get_soil_temperature()` (step 02): selects one candidate under
+#     the recipe, attaches the fill if asked, looks up its bounds, and drops
+#     every other candidate. What leaves is `TS_final` and a `meta` row;
+#     downstream there is one soil-temperature column and no branching.
 get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NULL,
                                  ts_col = NULL) {
   recipe <- recipe %||% original_recipe()
@@ -29,9 +15,6 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   ac <- site_data[["ac"]]
   night <- site_data[["nightNEE"]]
 
-  # Step 01 produced every candidate this site offers along with the bounds
-  # belonging to each, so the column and its bounds are selected together and
-  # cannot disagree.
   ts_bounds_all <- site_data[["ts_bounds"]]
   if (is.null(ts_bounds_all)) {
     stop(
@@ -41,8 +24,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     )
   }
 
-  # `ts_col` overrides the strategy, for sensitivity runs that compare
-  # estimation methods against each other on the same site.
+  # `ts_col` overrides the strategy, for sensitivity runs.
   override <- ts_col
   choice <- if (is.null(override)) {
     choose_ts_col(recipe, site_data, site_info, fill)
@@ -51,23 +33,11 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   }
   ts_col <- choice[["ts_col"]]
 
-  # No second method where there is no measured truth to fit it against.
-  #
-  # At 27 sites the column step 01 calls `TS_measured` has rows that are not
-  # a sensor reading -- a whole-column reconstruction at 25 of them, a
-  # partial one at FI-Sod and US-MBP (`ts_source` in site_info.csv says
-  # which). Every variant strategy's alternative to that column is a model
-  # fitted *to* it: `TS_linear` regresses it on air temperature, `TS_memfill`
-  # is cross-validated against it. Fitted to a reconstruction, either one
-  # returns a function of the same predictors wearing a skill score that
-  # measures how well a regression reproduces a regression. So a variant
-  # keeps step 01's column at these sites and says why. The manuscript's own
-  # strategy is exempt: `ts_col` there is a declaration, and its two
-  # legitimate double-applications (FI-Sod, US-MBP) are the manuscript's.
-  # An explicit `ts_col` argument is a sensitivity run and is honoured.
-  #
-  # The prep-stage `ts_qc = sensor` strategy is where a variant gets to act
-  # at these sites instead: qualify on the raw sensor, and there is a truth.
+  # No second method where there is no measured truth to fit it against: at
+  # the 27 sites whose `TS_measured` has non-sensor rows, every variant
+  # alternative would be a model fitted to a reconstruction. A variant keeps
+  # step 01's column there and says why. Exempt: the manuscript's `site_info`
+  # strategy (a declaration) and an explicit `ts_col` (a sensitivity run).
   refused <- FALSE
   if (is.null(override) && !identical(recipe$ts, "site_info") &&
       identical(stage_a_truth(site_data, site_info), "none") &&
@@ -84,12 +54,9 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     ts_col <- "TS_measured"
   }
 
-  # The reconstructed column is attached here, not in step 01, because it is
-  # produced by its own per-site target (`fill_soil_temp()`) and only a
-  # `memory_fill` recipe reads it. Its rows align with `site_data` by
-  # construction -- the fill was computed from the same tables -- and that is
-  # asserted rather than assumed. Its native bounds definition is the
-  # half-hourly one, like the other reconstructed column's.
+  # `TS_memfill` comes from its own per-site target (`fill_soil_temp()`),
+  # aligned with `site_data` row for row (asserted). Its native bounds are the
+  # half-hourly ones, like `TS_linear`'s.
   fill_method <- NA_character_
   fill_cv_rmse <- NA_real_
   fill_degenerate <- NA
@@ -128,9 +95,8 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     ts_reason = choice[["reason"]],
     ts_verdict = if (!is.null(ts_qc)) ts_qc$verdict[[1]] else NA_character_,
     ts_flags = if (!is.null(ts_qc)) ts_qc$flags[[1]] else NA_character_,
-    # Whether the column step 01 called measured is a reconstruction it made,
-    # whatever recipe is in force. Strategies select downstream of those
-    # reconstructions and cannot undo them (docs/ts-variants.html, V4).
+    # Whether step 01's "measured" column is a reconstruction; strategies
+    # cannot undo that (docs/ts-variants.html, V4).
     ts_measured_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
     ts_source = ts_source(site_info),
     ts_refused = refused,
@@ -164,14 +130,9 @@ stage_a_arm <- function(site_data, site_info) {
   if (!is.null(prov) && "stage_a_arm" %in% names(prov)) prov[["stage_a_arm"]][[1]] else ts_source(site_info)
 }
 
-# `TS_final`, and no other soil-temperature column.
-#
-# The candidates are dropped on purpose, not for tidiness: as long as
-# `TS_measured` or `TS_linear` is still on the table, a later stage can read
-# it, and "no branching downstream" is a convention rather than a property.
-# With one column left it is checkable -- tests/testthat/test-soil-temperature.R
-# asserts it -- and a stage that wants to know the column's origin has to ask
-# `meta`, which is the only place the answer is recorded correctly.
+# `TS_final`, and no other soil-temperature column, so that "no branching
+# downstream" is a checked property (test-soil-temperature.R) rather than a
+# convention.
 materialise_ts_final <- function(dat, ts_col) {
   if (!ts_col %in% names(dat)) {
     stop(
@@ -191,17 +152,10 @@ ts_candidate_columns <- function(dat) {
 
 # =========================================================== stage A
 #
-# The qualification-facing column: what step 01's QC filters, growing-season
-# detector and year gap scan run on, and what leaves step 01 as `TS_measured`.
-# A sensor after its per-site repairs, or a reconstruction where the site has
-# no usable sensor -- as the manuscript's `01_01` and `01_02` scripts made it.
-#
-# Both readers hand in the same shape, `*_ts_input()` below, and get back
-# `TS`, `TS_QC` and a provenance row. Which arm runs is `ts_source` in
-# site_info.csv (see `TS_SOURCES` in R/constants.R for what each level is);
-# nothing here tests a site name except the three training-target rules
-# inside the `reconstructed` arm, which are the manuscript's and are named as
-# such.
+# Both readers hand in the same shape (`*_ts_input()`) and get back `TS`,
+# `TS_QC` and a provenance row. The arm is `ts_source` in site_info.csv
+# (`TS_SOURCES` in R/constants.R); the only site names tested are the
+# manuscript's three training-target rules in the `reconstructed` arm.
 
 # The columns every reader provides. `TIMESTAMP_START` is the 12-digit stamp
 # both products carry; FI-Sod's recalibration windows are expressed in it.
@@ -228,9 +182,7 @@ fluxnet_ts_input <- function(a, site_info) {
     out$TS_depth2 <- a$TS_F_MDS_2
     out$TS_depth2_QC <- pick("TS_F_MDS_2_QC") %||% rep(NA_real_, nrow(a))
   }
-  # A site that is supposed to have a sensor and whose spliced record has no
-  # `TS_F_MDS_1` at all -- FR-Fon's Warm Winter 2020 archive, say -- has to
-  # say so here rather than fail later as "no observations after the filter".
+  # Say so here, rather than later as "no observations after the filter".
   if (is.null(pick("TS_F_MDS_1")) && !ts_source(site_info) %in% c("ta_substitute")) {
     stop(
       site_info[["site_ID"]], ": the spliced record has no TS_F_MDS_1 column. Declared ",
@@ -241,12 +193,9 @@ fluxnet_ts_input <- function(a, site_info) {
   out
 }
 
-# The AmeriFlux BASE record's columns, under the shared names. The sensor and
-# air-temperature columns are the ones site_info.csv declares for the site
-# (`check_declared_columns()` has already confirmed they exist); net radiation
-# is `netrad_column` where declared, a bare `NETRAD` where present; `TS_PI_1`
-# is the PI's gap-filled soil temperature where the record carries one. There
-# is no QC flag on any of them.
+# The AmeriFlux BASE record's columns, under the shared names: the declared
+# sensor and air temperature, net radiation (`netrad_column`, else a bare
+# `NETRAD`), and the PI's gap-filled `TS_PI_1` where present. No QC flags.
 ameriflux_ts_input <- function(a, site_info) {
   n <- nrow(a)
   out <- tibble::tibble(
@@ -306,12 +255,8 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
   n <- nrow(input)
   qc <- if ("TS_sensor_QC" %in% names(input)) input$TS_sensor_QC else rep(NA_real_, n)
 
-  # Which arm runs. `manuscript` is the declaration. `sensor` keeps the arms
-  # whose result is measured at every row -- the sensor itself, the second
-  # depth, the PI gap-fill -- and replaces every other arm with the raw
-  # declared sensor, so that qualification, the screen and the fill's truth
-  # are all measurements. A site whose raw sensor is too sparse to qualify a
-  # year then fails step 01, which is the honest result for that variant.
+  # Which arm runs: the declaration, or under `ts_qc = sensor` the raw sensor
+  # wherever the declared arm would leave non-sensor rows.
   ts_qc <- match.arg(ts_qc, RECIPE_AXES[["ts_qc"]])
   declared <- ts_source(site_info)
   arm <- if (identical(ts_qc, "sensor") && !identical(TS_SOURCES[[declared]], "sensor")) "sensor" else declared
@@ -356,11 +301,8 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
         provenance = ts_provenance_row(site_info, estimator = "swap_pi_gapfill", mode = "fill_gaps")
       )
     } else {
-      # The PI's gap-filled product is a column the data provider may stop
-      # publishing: US-ICs's BASE 13-5 has none, where 9-5 did. Skipping
-      # loudly beats erroring, as with FI-Sod's recalibration -- the sensor
-      # is still the sensor, only its gaps stay gaps -- and the provenance
-      # row says the manuscript's fill did not happen here.
+      # Releases can drop the PI column (US-ICs BASE 13-5). The sensor is
+      # still the sensor, so skip loudly and record it.
       message(name_site, ": no TS_PI_1 in this release; the sensor's gaps are left unfilled.")
       list(
         TS = input$TS_sensor, TS_QC = qc,
@@ -369,8 +311,7 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
       )
     },
     recalibrated = recalibrate_fi_sod_soil_temp(input, site_info),
-    # use air temperature for this tropical site so that all tropical sites,
-    # we used bottom air temperature.
+    # a tropical site: air temperature stands in for soil
     ta_substitute = list(
       TS = write_back_ts(input$TS_sensor, input$TA, "replace"),
       TS_QC = input$TA_QC %||% qc,
@@ -392,9 +333,8 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
     stop(name_site, ": no stage-A arm for ts_source = ", shQuote(arm))
   )
 
-  # The provenance row says what was declared, what was asked for, which arm
-  # actually ran, and -- the field the refuse rule and the fill read -- whether
-  # what ran leaves a measured column.
+  # What was asked for, what ran, and whether that leaves a measured column
+  # (the field the refuse rule and the fill read).
   out$provenance$ts_qc <- ts_qc
   out$provenance$stage_a_arm <- arm
   out$provenance$ts_truth <- unname(TS_SOURCES[[arm]])
@@ -403,11 +343,10 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
 
 # ---------------------------------------------------------- reconstructed
 #
-# Workflow `01_01_estimate_soil_temperature_at_some_sites.R`, transcribed: the
-# whole column is the estimator's prediction from air temperature and, where
-# the site has it, net radiation, with the predictors gap-filled from their
-# own day-of-year x time-of-day climatology first. Which estimator is
-# `estimate_ts_method` in site_info.csv -- see `ts_estimate_method()`.
+# Workflow 01_01, transcribed: the whole column is the estimator's prediction
+# from air temperature (and net radiation, where present), predictors first
+# gap-filled from their DOY x time-of-day climatology. The estimator is
+# `estimate_ts_method` in site_info.csv.
 fix_soil_temp <- function(input, site_info) {
   name_site <- site_info[["site_ID"]]
   data <- tibble::tibble(
@@ -417,9 +356,7 @@ fix_soil_temp <- function(input, site_info) {
   )
   if ("NETRAD" %in% names(input)) data$NETRAD <- input$NETRAD
 
-  # The manuscript's three training-target rules, by site. They restrict what
-  # the estimator is *fitted on*, not what it predicts, and are the one place
-  # stage A still tests a site name.
+  # The manuscript's training-target rules: what the estimator is fitted on.
   if (name_site == "DE-Hte") {
     # too few data in TS_F_MDS_1, so use TS_F_MDS_2
     need_input(input, "TS_depth2", site_info, "DE-Hte's training target")
@@ -455,8 +392,6 @@ fix_soil_temp <- function(input, site_info) {
   est <- ts_estimators()[[estimator_name]]
   if ("NETRAD" %in% est$predictors) need_input(input, "NETRAD", site_info, estimator_name)
 
-  # The predictors are gap-filled from their own day-of-year x time-of-day
-  # climatology before anything is fitted, as the original did.
   data$TA <- write_back_ts(data$TA, doy_hour_climatology(data, "TA"), "fill_gaps")
   if ("NETRAD" %in% names(data)) {
     data$NETRAD <- write_back_ts(data$NETRAD, doy_hour_climatology(data, "NETRAD"), "fill_gaps")
@@ -465,10 +400,8 @@ fix_soil_temp <- function(input, site_info) {
   mod <- est$fit(data)
   pred <- est$predict(mod, data)
 
-  # The QC flag, where the record has one: a reconstructed value is "good
-  # gap-filled" (2) wherever the sensor's flag was missing or poor, as the
-  # original set it. Where the flag was 0 or 1 it is kept, so the manuscript's
-  # QC filter admits the same rows it did.
+  # As the original: flag 2 ("good gap-filled") where the sensor's flag was
+  # missing or 3; flags 0 and 1 are kept.
   qc <- if ("TS_sensor_QC" %in% names(input)) {
     dplyr::if_else(is.na(input$TS_sensor_QC) | input$TS_sensor_QC == 3, 2, input$TS_sensor_QC)
   } else {
@@ -498,12 +431,8 @@ doy_hour_climatology <- function(dat, col) {
   out
 }
 
-# Which estimator reconstructs a site's soil temperature, from the declaration
-# rather than a site list. `estimate_ts_method` is derived in
-# `scripts/revise-site-info.R`: "NETRAD" wherever a `netrad_column` is named,
-# "linear regression" at the two sites with too little soil temperature to
-# train a forest on, and empty otherwise. Empty is spelled out here so that
-# every branch of `fix_soil_temp()` has a name to report.
+# `estimate_ts_method` (derived in scripts/revise-site-info.R), with empty
+# spelled "TA only" so every branch of `fix_soil_temp()` has a name.
 ts_estimate_method <- function(site_info) {
   declared <- site_info[["estimate_ts_method"]]
   if (is.null(declared) || length(declared) != 1 || is.na(declared)) return("TA only")
@@ -512,11 +441,8 @@ ts_estimate_method <- function(site_info) {
 
 # ------------------------------------------------------------ recalibrated
 #
-# FI-Sod's shallow sensor is unreliable before 2006, and the manuscript rebuilt
-# it by chaining two regressions between the sensor depths: early-window
-# shallow -> deep, then good-period deep -> shallow. (The `recalibrate_fi_sod_*`
-# constants and their rationale are unchanged from before this function took
-# the shared stage-A input; see the block comment above them.)
+# FI-Sod before 2006: early-window shallow -> deep, then good-period deep ->
+# shallow. The windows and why they are what they are: `FI_SOD_*`.
 recalibrate_fi_sod_soil_temp <- function(input, site_info) {
   name_site <- site_info[["site_ID"]]
   need_input(input, c("TS_depth2"), site_info, "the FI-Sod recalibration")
@@ -527,17 +453,14 @@ recalibrate_fi_sod_soil_temp <- function(input, site_info) {
   in_window <- function(w) input$TIMESTAMP_START >= w[[1]] & input$TIMESTAMP_START <= w[[2]]
   early <- in_window(FI_SOD_EARLY_WINDOW)
   late <- in_window(FI_SOD_LATE_WINDOW)
-  # The rows being rebuilt. This predicate is verbatim from the original, which
-  # fitted on windows but applied to whole years.
+  # Verbatim from the original: fitted on windows, applied to whole years.
   bad <- input$YEAR <= FI_SOD_TS_BAD_THROUGH
 
   complete_pairs <- function(i) sum(!is.na(shallow[i]) & !is.na(deep[i]))
   n_early <- complete_pairs(early)
   n_late <- complete_pairs(late)
 
-  # Both relationships have to be estimable. Skipping loudly beats erroring: a
-  # record that does not reach back past 2006 needs no recalibration and should
-  # not take the whole site down with it.
+  # A record that does not reach back past 2006 needs no recalibration.
   if (n_early == 0 || n_late == 0 || !any(bad)) {
     message(
       name_site, ": skipping the pre-", FI_SOD_TS_BAD_THROUGH + 1,

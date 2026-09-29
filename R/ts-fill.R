@@ -1,26 +1,16 @@
 # Soil-temperature reconstruction: candidate methods, the blocked
 # cross-validation that scores them, and `fill_soil_temp()`, the per-site
-# target that picks a method and produces the `TS_memfill` column.
-#
-# Promoted from scripts/ts-fill-methods.R once the analysis in docs/ts-rework.html
-# (findings F12, F13) showed the memory methods win at 42 of 43 sites.
+# target that picks one and produces `TS_memfill`. The memory methods won at
+# 42 of 43 sites (docs/ts-rework.html, F12-F13).
 
 # ------------------------------------------------------------------ features
 #
-# The single largest deficiency of the methods already in the pipeline is that
-# they are *instantaneous*: `TS ~ TA` and `randomForest(TS ~ TA + NETRAD)` map
-# the air temperature at time t onto the soil temperature at time t, with no
-# memory at all. Shallow soil temperature is a damped, phase-lagged integral of
-# the surface forcing -- that is what the heat equation says and what the
-# measured amplitude ratios confirm -- so an instantaneous map structurally
-# cannot represent it.
-#
-# Running means over 3, 7 and 30 days supply exactly the missing memory, at
-# essentially no cost, using columns that are already there. They are computed
-# on a *daily* series completed over the full date range, not on half-hourly
-# row offsets: every record here has missing rows, because step 01 drops
-# disqualified years, and a "30-day" mean over 1440 of them would span however
-# many calendar days those rows happened to cover.
+# Shallow soil temperature is a damped, lagged integral of the surface
+# forcing, which an instantaneous `TS ~ TA` map cannot represent. Running
+# means of air temperature over 3, 7 and 30 days supply the memory. They are
+# computed on a daily series completed over the whole date range, because
+# half-hourly row offsets would span however many days the (gappy) rows
+# happened to cover.
 ts_fill_add_features <- function(dat) {
   need <- c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "TA")
   absent <- setdiff(need, names(dat))
@@ -78,15 +68,8 @@ TS_FILL_FEATURES_MEMORY <- c(
 
 # ------------------------------------------------------------------- methods
 #
-# The estimators are R/ts-estimators.R's; see there for the shape and for why
-# the fill's forests are `ranger` while the manuscript's is `randomForest`.
-# `lm_ta_pos` is the pipeline's step-02 default reproduced exactly: fit
-# `TS ~ TA` above freezing, predict everywhere.
-
-# The fill's candidates: the registry entries that can be fitted on a
-# blocked fold. The manuscript's forest is not among them -- its 60k/70:30
-# protocol is a fit-once recipe, not a fold-wise one -- but its family,
-# `rf:TA+NETRAD`, is, as `rf_ta_netrad`.
+# The fill's candidates, from the registry in R/ts-estimators.R. The
+# manuscript's fit-once forest is not one, but its family is (`rf_ta_netrad`).
 ts_fill_methods <- function(have_netrad = FALSE, num_trees = 200) {
   all <- ts_estimators(num_trees = num_trees)
   wanted <- c("lm_ta_pos", "lm_ta", "rf_ta", "lm_memory", "rf_memory")
@@ -96,13 +79,10 @@ ts_fill_methods <- function(have_netrad = FALSE, num_trees = 200) {
 
 # ------------------------------------------------------------------- blocking
 #
-# The manuscript's forest (`rf_ta_netrad_manuscript`) splits half-hourly rows
-# 70/30 at *random*. Half-hourly
-# soil temperature is autocorrelated on a scale of days, so a held-out row's
-# neighbours are in the training set. Measured (F13), that flatters an
-# instantaneous model by almost nothing and a memory model by a third -- it
-# does not corrupt today's number, it would corrupt the fix. These schemes hold
-# out contiguous blocks that resemble the gap actually being filled.
+# A random 70/30 split of autocorrelated half-hours flatters a memory model
+# by a third (F13). These schemes hold out contiguous blocks, like the gaps
+# being filled. The pipeline uses `year`; the others are for
+# scripts/ts-fill-cv.R.
 
 blocks_random <- function(dat, nfold = 5, seed = 222) {
   set.seed(seed)
@@ -110,8 +90,7 @@ blocks_random <- function(dat, nfold = 5, seed = 222) {
 }
 blocks_year <- function(dat) split(seq_len(nrow(dat)), dat$YEAR)
 blocks_season <- function(dat) {
-  # Four folds a year: by far the most expensive scheme, and not in the
-  # default set for that reason.
+  # Four folds a year: the most expensive scheme.
   split(seq_len(nrow(dat)), paste(dat$YEAR, (dat$MONTH - 1) %/% 3))
 }
 blocks_multiyear <- function(dat, k = 2) {
@@ -128,9 +107,8 @@ TS_FILL_BLOCKINGS <- list(
   season = blocks_season
 )
 
-# Training rows are capped, as the manuscript's forest caps them at 60,000, so
-# that a 20-year record does not make the random forest the bottleneck. Applied
-# inside each fold after the held-out block is removed, so it cannot leak.
+# Cap training rows (the manuscript's forest caps at 60,000); applied inside
+# each fold after the held-out block is removed, so it cannot leak.
 subsample_rows <- function(dat, n, seed) {
   if (nrow(dat) <= n) return(dat)
   set.seed(seed)
@@ -155,10 +133,8 @@ ts_fill_oof <- function(dat, method, blocks, max_train = 20000) {
 
 # --------------------------------------------------------------- window grid
 #
-# The (growing_year x window) grid `total_tas_site()` fits on, rebuilt here so
-# that a soil-temperature column can be scored on the cells the model actually
-# uses. Transcribed from `total_tas_site()`: `nwindow` windows of `WINDOW_SIZE`
-# days from `gStart`, the last clipped to `gEnd`.
+# The (growing_year x window) grid `total_tas_site()` fits on, so a column is
+# scored on the cells the model uses.
 tas_windows <- function(gStart, gEnd) {
   nwindow <- max(round((gEnd - gStart + 1) / WINDOW_SIZE), 1)
   tibble::tibble(
@@ -188,18 +164,14 @@ window_cells <- function(dat, gStart, gEnd, col) {
 
 # ------------------------------------------------- scoring a reconstruction
 #
-# Chosen for what `total_tas_site()` does with the column rather than for
-# generic goodness of fit. The model fits `NEE ~ exp(alpha*TS + beta*TS^2)*C0`
-# inside each (14-day window x growing year) cell and then regresses log
-# respiration ratio on cell-mean TS across years with `window` as a factor, so
-# the column enters on two independent axes:
+# Scored for what the model does with the column, not only on RMSE:
 #
 #   within_sd_ratio          spread inside a cell; identifies alpha.
 #   across_year_spread_ratio spread of cell means across years within a
 #                            window; the variation that identifies TAS.
 #
-# A method can be excellent on RMSE and wrong on both. `gs` must already be
-# restricted to the growing season; `truth` and `pred` align to its rows.
+# `gs` is already restricted to the growing season; `truth` and `pred` align
+# to its rows.
 ts_reconstruction_metrics <- function(gs, truth, pred, gStart, gEnd, min_obs_day = 40) {
   stopifnot(length(truth) == nrow(gs), length(pred) == nrow(gs))
   both <- !is.na(truth) & !is.na(pred)
@@ -267,21 +239,11 @@ ts_reconstruction_metrics <- function(gs, truth, pred, gStart, gEnd, min_obs_day
 
 # --------------------------------------------------------- the fill target
 #
-# Per site, recipe-independent: score every candidate method out of fold under
-# `blocking`, pick the best, refit it on every measured row and predict
-# everywhere. Returns the `TS_memfill` values aligned to `site_data$ac` and
-# `site_data$nightNEE`, the CV table that justified the choice, and bounds
-# rows for the new column, so that `total_tas_site()` can attach it under a
-# `memory_fill` recipe without recomputing anything.
-#
-# Never errors: a site where nothing can be fitted returns `status != "ok"`
-# and the strategy falls back, recording why. Under `error = "continue"` an
-# error here would otherwise take every recipe at the site down with it.
-#
-# The winner is chosen on out-of-fold RMSE. The other scores are carried so
-# the report can show what that choice cost on the two model-relevant axes;
-# a composite criterion is a deliberate later increment, once there is a
-# fitted-TAS comparison to calibrate it against.
+# Per site, recipe-independent: score every candidate out of fold, pick the
+# lowest RMSE, refit it on every measured row and predict everywhere. Returns
+# `TS_memfill` aligned to `ac` and `nightNEE`, the CV table, and bounds rows.
+# Never errors: where nothing can be fitted it returns `status != "ok"` and
+# the strategy falls back, recording why.
 fill_soil_temp <- function(site_data, site_info, blocking = "year",
                            max_train = 20000, num_trees = 200) {
   name_site <- site_info[["site_ID"]]
@@ -291,12 +253,8 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
          ac_ts = NULL, night_ts = NULL, ts_bounds = NULL)
   }
 
-  # No truth, no fill. Where step 01's column is itself a reconstruction at
-  # any row (`ts_measured_truth()` is "none"), every candidate would be scored
-  # on how well it reproduces a regression, and the best of them is the one
-  # that shares its functional form -- DE-Hte's `lm_ta_netrad` at 1.5e-14.
-  # `get_soil_temperature()` would refuse the result anyway; declining here
-  # keeps the cost and the non-information out of the run.
+  # No truth, no fill: against a reconstruction, the winner is whichever
+  # candidate shares its form (DE-Hte: `lm_ta_netrad` at 1.5e-14).
   if (identical(stage_a_truth(site_data, site_info), "none")) {
     return(fail(paste0("no measured truth: stage A ran ", stage_a_arm(site_data, site_info))))
   }
@@ -343,10 +301,7 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
     error = function(e) NULL
   )
   if (is.null(mod)) return(fail(paste("final fit of", best, "failed")))
-  # Prediction over measured where a prediction exists, measured elsewhere --
-  # the same `overlay` semantics as TS_linear. A pure prediction has NAs
-  # wherever a predictor is missing, and the step-01 filters have already
-  # certified the nighttime table free of them.
+  # `overlay`, as for TS_linear: a pure prediction would add NAs.
   ac_ts <- write_back_ts(ac$TS_measured, methods[[best]]$predict(mod, feats), "overlay")
 
   # nightNEE is a row subset of ac; align by the timestamp columns both carry.
@@ -359,24 +314,16 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
 
   bounds <- ts_bounds_rows(ac_ts, ac$DOY, gStart, gEnd, "TS_memfill")
 
-  # An out-of-fold RMSE indistinguishable from zero means the "measured"
-  # column is itself a deterministic function of the predictors -- which is
-  # exactly what step 01 leaves at the `fix_soil_temp()` sites, where
-  # TS_measured is already `lm(TS ~ TA + NETRAD)`. The fill then reproduces
-  # that regression perfectly and says nothing about soil. It is still
-  # returned (a recipe may still select it, and falling back to TS_linear
-  # would be no better), but it is labelled, and the label travels into
-  # `settings` so the report can show it.
+  # A zero out-of-fold RMSE means the "measured" column is a function of the
+  # predictors; returned, but labelled `degenerate` in `settings`.
   best_rmse <- scores$rmse[scores$method == best]
   list(
     site_ID = name_site, status = "ok", method = best, blocking = blocking,
     cv = scores, ac_ts = ac_ts, night_ts = night_ts, ts_bounds = bounds,
     cv_rmse = best_rmse,
     degenerate = is.finite(best_rmse) && best_rmse < 1e-6,
-    # The declared counterpart of `degenerate`: the CV truth is itself a
-    # reconstruction. DE-Akm shows why both are needed -- its TS_measured is
-    # `fix_soil_temp()`'s random forest, which `rf_ta_netrad` reproduces to
-    # 0.30 C rather than to zero, so the RMSE test alone does not fire.
+    # The declared counterpart: DE-Akm's forest-made truth is reproduced to
+    # 0.30 C, not zero, so `degenerate` alone would miss it.
     truth_synthetic = identical(stage_a_truth(site_data, site_info), "none"),
     n_train = sum(!is.na(feats$TS))
   )

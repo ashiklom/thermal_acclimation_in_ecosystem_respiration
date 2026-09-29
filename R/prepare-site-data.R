@@ -1,20 +1,11 @@
 .data <- rlang::.data
 
-# Read every product named in a site's provenance list and splice them into one
-# record, oldest first.
-#
-# The splice rule is the original workflow's
-# (01_02a_filter_high_quality_night_respiration_EuroFlux.R:57-67): append each
-# later product only from the first timestamp after the running record's end, so
-# the earlier (longer-history) product wins wherever they overlap. All the
-# products are FLUXNET-format, so their columns already agree.
-# Concatenate per-product tables into one record.
-#
-# Each element of `parts` must be sorted by TIMESTAMP_START. Products are
-# ordered by their own first timestamp rather than by the caller's order, so a
-# mis-ordered `source` string cannot silently truncate the record; then each
-# later product contributes only the rows after the running record's end, so the
-# earlier (longer-history) product wins wherever two overlap.
+# Concatenate per-product tables (each sorted by TIMESTAMP_START) into one
+# record, by the original workflow's rule (01_02a...EuroFlux.R:57-67): each
+# later product contributes only rows after the running record's end, so the
+# earlier, longer-history product wins wherever two overlap. Products are
+# ordered by their own first timestamp, not the caller's order, so a
+# mis-ordered `source` string cannot truncate the record.
 splice_products <- function(parts) {
   if (length(parts) == 0) stop("Nothing to splice.")
   parts <- parts[order(vapply(parts, function(d) d$TIMESTAMP_START[1], ""))]
@@ -27,7 +18,7 @@ splice_products <- function(parts) {
   combined
 }
 
-
+# Read every product in a site's provenance list and splice them.
 read_spliced_products <- function(site_info) {
   name_site <- site_info[["site_ID"]]
   wanted <- site_sources(site_info)
@@ -39,10 +30,7 @@ read_spliced_products <- function(site_info) {
       message("  ", product, ": not downloaded, skipping")
       next
     }
-    # `FLUXNET_COL_TYPES` guarantees character timestamps -- which the ordering
-    # below and `splice_products()` both depend on -- and doubles everywhere
-    # else. A column that violates the contract surfaces in `problems()`
-    # instead of quietly changing type.
+    # Character timestamps, doubles elsewhere; see `FLUXNET_COL_TYPES`.
     dat <- readr::read_csv(path, col_types = FLUXNET_COL_TYPES, progress = FALSE)
     dat <- drop_sentinels(dat)
     dat <- dat[order(dat$TIMESTAMP_START), ]
@@ -73,35 +61,19 @@ read_spliced_products <- function(site_info) {
 }
 
 
-# FI-Sod's shallow soil temperature sensor is unreliable before 2006. The
-# original re-derived it by chaining two regressions between the two sensor
-# depths, and expressed the fitting periods as row ranges into one specific
-# data release:
+# FI-Sod's shallow sensor is unreliable before 2006; the original rebuilt it
+# by chaining two regressions between depths, fitted on row ranges of one
+# release:
 #
 #   mod1 <- lm(data = a[1:24383, ],      TS_F_MDS_2 ~ TS_F_MDS_1)
 #   mod2 <- lm(data = a[90000:245000, ], TS_F_MDS_1 ~ TS_F_MDS_2)
 #
-# Row ranges do not survive a re-download. On the FLUXNET-Archive product alone
-# FI-Sod spans 2023-2024, so `90000:245000` lay entirely past the end of the
-# table and `lm()` aborted with "0 (non-NA) cases" -- the site could not be
-# processed at all. On a record of a *different* length it would not error,
-# which is worse: it would quietly select different dates.
-#
-# The windows below are those same row ranges resolved to timestamps against
-# the release the manuscript was written on: FLUXNET2015 FULLSET HH for
-# FI-Sod, 2001-2014, which is exactly 245,424 contiguous half-hourly rows --
-# note that the original's upper bound of 245000 all but exhausts it. Because
-# the record is gap-free, row index and timestamp map one-to-one, so this is a
-# faithful translation rather than an interpretation, and it reproduces the
-# original's coefficients exactly on that file. There is a test for that.
-#
-# Using year boundaries instead -- fit on everything before 2006, and on
-# everything after -- looks tidier and is wrong. Measured on the same file, the
-# early relationship changes from slope 0.865 to slope 0.307, and the rebuilt
-# pre-2006 soil temperature moves by 8.13 C RMS (mean +6.97 C, max 13.5 C) on
-# values spanning -8 to 23.6 C. The early sensor's behaviour evidently does not
-# hold steady across 2001-2005, so which part of that period the relationship
-# is learned from matters a great deal.
+# Row ranges select different dates -- or nothing -- on any other release.
+# These windows are those ranges resolved to timestamps on the manuscript's
+# file (FLUXNET2015 FULLSET HH, 2001-2014, 245,424 gap-free rows), so they
+# reproduce its coefficients exactly; a test checks that. Year boundaries
+# instead would be wrong: they move the early slope from 0.865 to 0.307 and
+# the rebuilt soil temperature by 8.13 C RMS.
 FI_SOD_TS_BAD_THROUGH <- 2005
 # a[1:24383, ] and a[90000:245000, ] of FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv
 FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
@@ -152,35 +124,25 @@ prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
 }
 
 
-# `site_info` is the site's row from site_info.csv, passed in rather than read
-# here. The pipeline reads it once per site and threads it through, so every
-# stage is guaranteed to see the same declaration: `prep_nee_ac()`,
-# `get_good_years()` and `total_tas_site()` between them re-parsed the CSV
-# three times per site, and nothing prevented two of those reads from
-# straddling an edit to it.
-# `recipe` carries the methodology choices. Only the axes in
-# `RECIPE_PREP_AXES` matter here -- every other axis is resolved in
-# `total_tas_site()`, and this function produces every candidate column and
-# both bounds definitions so that it can. Two recipes with the same
-# `recipe_prep_key()` therefore share one result of this function, which is
-# what keeps a sites x recipes grid affordable.
+# Step 01 for one site.
 #
-# `era5` is the ERA5-Land soil water: a path, a site's table as returned by
-# `read_era5_swc()`, or NULL to leave it off -- which is what the pipeline does,
-# attaching it afterwards with `attach_era5_swc()` so that extending the ERA5
-# file does not re-run this function at every site. See `site_era5_swc()`.
+# `site_info` is the site's row of site_info.csv, read once per site by the
+# pipeline so every stage sees the same declaration. Only the recipe's
+# `RECIPE_PREP_AXES` matter here; this produces every candidate column and
+# both bounds definitions, so recipes with the same `recipe_prep_key()` share
+# one result. `era5` is a path, a site's table from `read_era5_swc()`, or NULL
+# to leave soil water off -- the pipeline passes NULL and attaches it with
+# `attach_era5_swc()`, so extending the ERA5 file does not re-run this.
 prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_CSV) {
   name_site <- site_info[["site_ID"]]
 
-  # The one prep axis has one strategy. This is where a `computed` year
-  # qualification would branch; see docs/recipes.md for what it needs.
+  # Where a `computed` year qualification would branch; see docs/recipes.md.
   if (!identical(recipe$year_qc, "site_info")) {
     stop("year_qc strategy ", shQuote(recipe$year_qc), " is not implemented in prep_nee_ac().")
   }
 
-  # Both readers return `list(ac =, dt =, ...)`. The AmeriFlux one also returns
-  # the growing season it detected, because the u-star filtering it ran already
-  # depended on it.
+  # Both readers return `list(ac =, dt =, ts_provenance =)`; the AmeriFlux one
+  # also returns the growing season its u-star filtering was built on.
   if (site_reader(site_info) == "ameriflux") {
     prepared <- prep_ameriflux(site_info, ts_qc = recipe$ts_qc)
     ac <- prepared[["ac"]]
@@ -193,9 +155,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
         .data$USTAR >= .data$uStarTh
       )
 
-    # Only require soil water where it is actually measured. Sites with
-    # `SWC_use == "NO"` carry an all-NA SWC column, so an unconditional filter
-    # here would discard every observation.
+    # Only where soil water is used: elsewhere the column is all NA.
     if (isTRUE(site_info$SWC_use)) {
       measured <- measured |> dplyr::filter(!is.na(.data$SWC))
     }
@@ -219,9 +179,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
       dplyr::filter(
         !is.na(.data$TA),
         .data$TS_QC %in% c(0, 1, 2),
-        # NOTE: Normally, the QC flag check should be enough to catch NA values.
-        # But in some cases, NA values still slip through, so we filter
-        # explicitly here as well.
+        # QC flag 0-2 does not guarantee a value; check for NA explicitly.
         !is.na(.data$TS),
         .data$NEE_QC == 0,
         .data$NIGHT == 1,
@@ -242,12 +200,10 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   tStart <- gs$tStart
   tEnd <- gs$tEnd
 
-  # A few sites have unreliable NEE below 2 C, so both the reported temperature
-  # floor and the observations themselves are truncated there. The two original
-  # workflows truncated at different points and that is preserved here: for
-  # CH-Dav the cold observations are dropped *before* the data-gap scan, so they
-  # can change which years qualify, while for US-Ha1 and US-GLE they are dropped
-  # after it. Unifying the two would silently change results at three sites.
+  # Sites with unreliable NEE below 2 C: truncate the temperature floor and
+  # the observations. The original workflows truncated at different points,
+  # preserved here -- before the gap scan at CH-Dav (so it can change which
+  # years qualify), after it at US-Ha1 and US-GLE.
   truncate_cold <- name_site %in% SITES_TS_MIN_2C
   is_ameriflux <- site_reader(site_info) == "ameriflux"
   if (truncate_cold) {
@@ -283,10 +239,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE",
     "NEE", "NEE_uStar_f", "TA", "TS", "SWC", "SW_IN", "daytime"
   )
-  # `NETRAD` is optional because only some products and some AmeriFlux BASE
-  # files carry it. It is carried so that reconstructions driven by radiation
-  # can be scored against air-temperature-only ones without re-reading the raw
-  # record; nothing in the current model formulae reads it.
+  # `NETRAD` where the record has it, for the radiation-driven fill candidates.
   ac_optional <- c("NEE_QC", "GPP_DT", "NETRAD")
 
   ac_final <- ac |>
@@ -295,31 +248,17 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
 
   # ---------------------------------------------------- TS column variants
   #
-  # Everything above this point uses measured soil temperature, and that
-  # ordering is load-bearing: the QC filter, the data-gap scan, the
-  # growing-season detection and the TS >= 2 C truncation all ran on the
-  # measured column. Estimated soil temperature is *added alongside* it here
-  # rather than replacing it, so the second pipeline step selects a column
-  # instead of recomputing one, and so the alternatives can be compared.
-  #
-  # This is where the estimation belongs rather than in `total_tas_site()`
-  # because the regression is fitted on `ac`/`nightNEE` -- step-01 products --
-  # and because fitting it in step 02 meant refitting it identically for the
-  # total and direct model runs.
+  # Everything above ran on stage A's column, and that ordering is
+  # load-bearing (docs/soil-temperature.md). Estimates are added alongside it,
+  # so step 02 selects a column instead of recomputing one.
   ac_final[["TS_measured"]] <- ac_final[["TS"]]
   measured_final[["TS_measured"]] <- measured_final[["TS"]]
 
-  # Bounds per TS column, not as free-standing scalars. They are the 2.5/97.5
-  # percentiles of growing-season soil temperature and they gate the
-  # window-skip test downstream, so they only mean anything paired with the
-  # column they were derived from. Keying them by column name makes selecting a
-  # column and selecting its bounds a single, atomic act.
-  # The *native* row for the measured column is the manuscript's own number:
-  # percentiles of the day-of-year climatology from `detect_growing_season()`,
-  # floored at 0 C and, at the SITES_TS_MIN_2C sites, at 2 C. It is not a pure
-  # function of the column, which is why it is written here rather than by
-  # `ts_bounds_rows()`. The two non-native rows are the consistent
-  # definitions a recipe can select instead (finding F4).
+  # Bounds are keyed by TS column, so a column and its bounds are selected
+  # together. The measured column's *native* row is the manuscript's number
+  # (the DOY-climatology percentiles from `detect_growing_season()`, floored
+  # at 0 C, or 2 C at SITES_TS_MIN_2C); it is not a pure function of the
+  # column, so it is written here rather than by `ts_bounds_rows()`.
   ts_bounds_tbl <- dplyr::bind_rows(
     tibble::tibble(
       ts_col = "TS_measured",
@@ -331,26 +270,14 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     ts_bounds_rows(ac_final[["TS_measured"]], ac_final[["DOY"]], gStart, gEnd, "TS_measured")
   )
 
-  # `TS_linear` is built at *every* site, not only the 35 that select it.
-  #
-  # The reason is that the substitution it performs is the largest unmeasured
-  # assumption in this analysis -- at 35 sites "soil temperature" is a linear
-  # function of air temperature -- and the only way to size the effect is to
-  # fit sites that have good measured soil temperature *both* ways and compare.
-  # That comparison needs the column to exist at sites that do not use it.
-  #
-  # Building it changes nothing about what a normal run fits: `ts_col` still
-  # comes from site_info.csv, `resolve_ts_column()` still selects by name, and
-  # the assertion below still requires `TS` to leave step 01 as the measured
-  # column. The extra column is inert until something asks for it by name.
+  # `TS_linear` is built at every site, not only the 35 that select it, so
+  # the substitution can be measured where there is a real sensor to compare
+  # against. It is inert unless selected.
   declared_linear <- identical(site_info[["ts_col"]], "TS_linear")
   substituted <- tryCatch(
     apply_ts_linear(ac_final, measured_final, site_info, gStart, gEnd),
     error = function(e) {
-      # A site that *selects* TS_linear cannot proceed without it. A site that
-      # only gets it as a diagnostic can: an un-fittable regression (no
-      # overlapping TA and TS, say) means the comparison is unavailable there,
-      # not that the site is broken.
+      # Fatal only where the site selects TS_linear.
       if (declared_linear) {
         stop(
           name_site, " declares ts_col = \"TS_linear\" but the TS ~ TA fit ",
@@ -364,9 +291,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   if (!is.null(substituted)) {
     ac_final[["TS_linear"]] <- substituted$ac[["TS"]]
     measured_final[["TS_linear"]] <- substituted$nightNEE[["TS"]]
-    # The regressed column's native definition is the half-hourly one -- the
-    # manuscript computed it with `ts_bounds()` -- so that row is native and
-    # the climatology row is the alternative.
+    # The regressed column's native bounds are the half-hourly ones.
     linear_rows <- ts_bounds_rows(ac_final[["TS_linear"]], ac_final[["DOY"]], gStart, gEnd, "TS_linear")
     stopifnot(isTRUE(all.equal(
       linear_rows$tStart[linear_rows$definition == "halfhourly"], substituted$tStart
@@ -375,10 +300,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     ts_bounds_tbl <- dplyr::bind_rows(ts_bounds_tbl, linear_rows)
   }
 
-  # `TS` must still be the measured column on the way out of step 01. Every
-  # filter above ran on it, and the second step selects a variant explicitly;
-  # substituting here would make those filters describe data that no longer
-  # exists.
+  # Every filter above ran on `TS`, so it must leave step 01 unchanged.
   stopifnot(
     identical(ac_final[["TS"]], ac_final[["TS_measured"]]),
     identical(measured_final[["TS"]], measured_final[["TS_measured"]])
@@ -403,26 +325,18 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     site_ID = name_site,
     gStart = gStart,
     gEnd = gEnd,
-    # The detector's own answer, before any site_info override. Equal to
-    # gStart/gEnd at the 93 sites that declare none; the `force_detect` season
-    # strategy lays its windows out on these instead.
+    # Before any site_info override; the `force_detect` strategy reads these.
     gStart_detected = gs$gStart_detected,
     gEnd_detected = gs$gEnd_detected,
-    # `unname()` because these arrive from `quantile()` still carrying its
-    # "2.5%"/"97.5%" names, which then differ from the same numbers in
-    # `ts_bounds` for no reason anyone would enjoy debugging.
+    # `unname()`: `quantile()` names them "2.5%"/"97.5%".
     tStart = unname(max(tStart, 0.0)),
     tEnd = unname(tEnd),
     nyear = length(good_years),
-    # The DOY origin these bounds are expressed in. `choose_window_season()`
-    # needs it to lay out a whole-year span in the same coordinates, and
-    # carrying it here keeps the recipe strategies from re-reading site_info.
+    # The DOY origin of these bounds, for `choose_window_season()`.
     growing_year_start = growing_year_start(site_info)
   )
 
-  # Quality of the column a run will treat as measured, as this function
-  # leaves it -- after the site-specific column choices above. The verdict is
-  # what the `screen_best` and `memory_fill` strategies branch on.
+  # The verdict the `screen_best`/`memory_fill` strategies branch on.
   ts_qc <- ts_quality(ac_final, ts_col = "TS_measured", ta_col = "TA") |>
     dplyr::mutate(site_ID = name_site, .before = 1)
 
@@ -442,18 +356,11 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
 }
 
 
-# ERA5 soil water for one site, restricted to the days its flux record covers.
-#
-# The restriction is what lets the ERA5 file grow without costing anything. The
-# file is extended whenever any site's flux record outruns it, and the new
-# days are days no *other* site has flux data for; clipped to its own record,
-# a site's slice is unchanged by that, so targets skips everything downstream
-# of it. `table` is the parsed file (`load_era5_table()`), if the caller has
-# it; otherwise `path` is read.
-#
-# Absent reanalysis is not fatal here: the total model never reads soil water,
-# so only the direct model is entitled to complain, and it does -- see
-# `resolve_swc_column()`. NULL means "unavailable" to `attach_era5_swc()`.
+# ERA5 soil water for one site, clipped to the days its flux record covers,
+# so extending the file for another site leaves this slice -- and everything
+# downstream of it -- unchanged. `table` is the parsed file, if the caller has
+# it. Missing reanalysis returns NULL rather than failing: only the direct
+# model needs it, and `resolve_swc_column()` complains there.
 site_era5_swc <- function(prep, name_site, path = ERA5_SWC_CSV, table = NULL) {
   era5 <- tryCatch(
     read_era5_swc(name_site, path = path, table = table),
@@ -467,12 +374,8 @@ site_era5_swc <- function(prep, name_site, path = ERA5_SWC_CSV, table = NULL) {
   dplyr::semi_join(era5, days, by = c("YEAR", "MONTH", "DAY"))
 }
 
-# Join a site's ERA5 soil water (`site_era5_swc()`) onto step 01's tables as
-# `SWC_era5`, in PERCENT; see `ERA5_SWC_TO_PERCENT`. Measured soil water and
-# the reanalysis are carried side by side rather than one replacing the other:
-# the second step used to drop `SWC` and join the reanalysis in its place,
-# which made the two impossible to compare and meant the same join ran again
-# for every model variant.
+# Join a site's ERA5 soil water onto step 01's tables as `SWC_era5`, in
+# percent, beside the measured column.
 attach_era5_swc <- function(prep, era5) {
   for (tbl in c("ac", "nightNEE")) {
     dat <- prep[[tbl]]

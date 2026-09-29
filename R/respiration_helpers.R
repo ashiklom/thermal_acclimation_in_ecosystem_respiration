@@ -1,4 +1,4 @@
-# Shared helper functions for workflow 01_02 (respiration filtering).
+# Growing season, growing year and year qualification (step 01).
 
 parse_removed_years <- function(value) {
   if (is.na(value) || !nzchar(trimws(value))) return(numeric())
@@ -29,32 +29,20 @@ add_timestamp_columns <- function(a, dt) {
 # began the previous calendar year, and are pushed past the end of it: with
 # `origin = 183`, DOY runs 183..548 and 1 January is 367.
 #
-# `366` is the shift whatever the year's length, as in the original workflows.
-# The consequence is that in a non-leap growing year the wrapped series steps
-# 365 -> 367 over New Year, leaving DOY 366 empty; the day is not lost, only
-# labelled one higher than the elapsed-day count. Every downstream use is a
-# `between(DOY, ...)` window or a by-DOY average, both of which tolerate the
-# skip, and the alternative -- a year-length-dependent shift -- would give the
-# same calendar date two different DOYs depending on the year.
-#
-# The invariant the rest of the pipeline rests on: `DOY > 366` if and only if
-# the row falls in the calendar year *after* the one its growing year started
-# in. See `growing_year_of()`.
+# The shift is 366 whatever the year's length, as in the original, so a
+# non-leap year skips DOY 366; see docs/growing-year.md. Invariant: `DOY > 366`
+# iff the row is in the calendar year after its growing year began.
 wrap_growing_doy <- function(doy, origin) {
   if (origin <= 1) return(doy)
   ifelse(doy < origin, doy + 366, doy)
 }
 
-# The inverse, for the places that need a real day of year back: building a
-# calendar timestamp from a growing-season bound, and handing season starts to
-# REddyProc, which wants a yday. A no-op on unwrapped values.
+# The inverse, where a real day of year is needed. A no-op on unwrapped values.
 unwrap_growing_doy <- function(doy) {
   ifelse(doy > 366, doy - 366, doy)
 }
 
-# The growing year a row belongs to, from its (possibly wrapped) DOY and its
-# calendar year. Unwrapped sites never exceed DOY 366, so this is the identity
-# for them; see `wrap_growing_doy()` for why the test is the right one.
+# The growing year a row belongs to, from its (possibly wrapped) DOY.
 growing_year_of <- function(doy, year) {
   year <- as.integer(year)
   dplyr::if_else(doy <= 366, year, year - 1L)
@@ -74,11 +62,8 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
     ) |>
     dplyr::arrange(.data$DOY)
 
-  # The original workflows used three different cut-offs for "this day-of-year
-  # counts as growing season", and they are not interchangeable. At a site whose
-  # minimum mean NEE is -10, "capped" admits every day down to -0.8 while
-  # "uncapped" stops at -2.0, which moves gStart/gEnd by weeks -- and those feed
-  # the u-star season factor, the gap thresholds, and the window layout.
+  # The original workflows' three growing-season cut-offs, which differ by
+  # weeks at a site with strong uptake.
   nee_min <- min(nee_yearly[[nee_col]], na.rm = TRUE)
   cutoff <- switch(nee_threshold,
     capped = max(nee_min * 0.2, -0.8), # 01_02a, every EuroFlux site but two
@@ -90,11 +75,7 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
     stop(name_site, " has too few seasonal points to estimate growing season.")
   }
 
-  # Original comment: 
-  # """
-  # I will use the mean of the first three values, and the mean of the last three values
-  # """
-  # TODO: What is this logic?
+  # As the original: the 7th qualifying DOY from each end, widened by 4 days.
   gStart <- tmp$DOY[[7]] - 4
   gEnd <- tmp$DOY[[nrow(tmp) - 6]] + 4
 
@@ -103,12 +84,8 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
     gStart <- max(gStart, min(nee_yearly$DOY[nonnegative_ts]))
   }
 
-  # What the detector said, before site_info.csv has its say. Twenty-four
-  # sites declare a `gStart` or `gEnd` literal that replaces the detected
-  # bound, so the season this function returns is *detected or overridden*,
-  # and the two are only separable if the detected pair travels too. The
-  # `force_detect` season strategy reads them; nothing in the manuscript path
-  # does.
+  # The detector's answer, before the site_info.csv overrides (24 sites);
+  # the `force_detect` strategy reads it.
   gStart_detected <- gStart
   gEnd_detected <- gEnd
 
@@ -128,11 +105,9 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
   )
 }
 
-# The growing-season start and end as calendar timestamps, one pair per year,
-# so that `get_good_years()` can see a gap that runs off either end of the
-# season. The TIMESTAMP is built from the *unwrapped* bound -- it has to be a
-# real date -- while the DOY column keeps the wrapped value, because that is
-# what the `DOY >= gStart & DOY <= gEnd` filter downstream compares against.
+# Season start and end as timestamps, one pair per year, so the gap scan sees
+# gaps running off either end. TIMESTAMP uses the unwrapped bound (a real
+# date); DOY keeps the wrapped one, which the season filter compares.
 build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt) {
   gStart_adj <- unwrap_growing_doy(gStart)
   gEnd_adj <- unwrap_growing_doy(gEnd)

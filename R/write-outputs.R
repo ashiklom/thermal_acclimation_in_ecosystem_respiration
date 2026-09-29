@@ -8,9 +8,8 @@ DIR_ANALYSIS <- file.path("data-proc", "analysis")
 DIR_FEATURES <- file.path("data-proc", "features")
 DIR_RESPIRATION <- file.path("data-proc", "respiration")
 
-# The manuscript's column order for outcome_siteyear_*.csv. Ours carries one
-# extra column, `status`, appended rather than interleaved so that a diff
-# against data-proc-original/ lines up column for column.
+# The manuscript's column order for outcome_siteyear_*.csv; ours appends
+# `status`, so a diff against data-proc-original/ lines up.
 OUTCOME_SITEYEAR_COLS <- c(
   "site_ID", "growing_year", "window", "nobsv", "extend_days",
   "alpha", "beta", "C0", "Hs", "k2", "TS", "ERref", "lnRatio"
@@ -22,25 +21,11 @@ write_result_csv <- function(dat, path) {
   path
 }
 
-# Site-level TAS, one row per site -- the counterpart to outcome_temp.csv.
-#
-# Sorted by site_ID, which is now tidiness rather than a load-bearing
-# invariant. It used to be the latter: `02_02_compare_different_TAS.R` grafted
-# the direct model's TAS onto the total model's table by position, with no
-# join, so equal row order was the only thing standing between it and giving
-# every site another site's number. Sorting alone could not save it once the
-# two tables differed in *length* -- IT-Noe fitted under `total` and not under
-# `direct` on the 2026-09-24 run, which silently shifted 62 of 113 sites. That
-# script now joins on site_ID, so a row-order change is no longer a
-# correctness problem for it.
-# The results now carry `recipe_id` and `model`, so every collector sorts on
-# them too. `dplyr::any_of()` keeps the collectors valid for a result built
-# before those columns existed.
-# Under `tar_option_set(error = "null")` an errored fit or step 01 reaches the
-# collectors as NULL. Dropping those here is what lets one failed site leave a
-# gap in the tables instead of taking every table and both reports down.
+# Under `error = "null"` an errored target reaches the collectors as NULL;
+# dropping it leaves a gap in the tables instead of failing them.
 built <- function(...) Filter(Negate(is.null), list(...))
 
+# Site-level TAS, one row per site x recipe x model (outcome_temp*.csv).
 collect_outcome <- function(...) {
   dplyr::bind_rows(lapply(built(...), `[[`, "outcome")) |>
     dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))
@@ -59,10 +44,9 @@ collect_settings <- function(...) {
     dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))
 }
 
-# The manuscript-layout subset: the `original` recipe, one model, and none of
-# the columns the variant grid added. This is what the `workflows/` scripts
-# read, and their column contract predates recipes. A run that omits the
-# `original` recipe yields an empty table here, which is the honest result.
+# The manuscript-layout subset `workflows/` reads: the `original` recipe, one
+# model, and none of the variant grid's columns. Empty if `original` was not
+# run.
 original_only <- function(tbl, model = NULL, drop = c("recipe_id", "fit_profile")) {
   if (!"recipe_id" %in% names(tbl)) return(tbl)
   out <- dplyr::filter(tbl, .data$recipe_id == "original")
@@ -110,11 +94,8 @@ collect_fill_summary <- function(...) {
     dplyr::arrange(.data$site_ID)
 }
 
-# The columns a skip row carries, so that a run with no skips at all still
-# writes a CSV with a header. `bind_rows()` of empty tables is 0 x 0, and
-# `write.csv()` of that is an empty file, which `read.csv()` in the reports
-# refuses ("first five rows are empty") -- batch 3 of the local exploration
-# lost both reports to it.
+# A run with no skips still writes a header: `read.csv()` refuses an empty
+# file.
 WINDOW_SKIP_COLS <- c("site_ID", "recipe_id", "model", "window", "window_start",
                       "window_end", "reason", "detail")
 
@@ -129,28 +110,16 @@ collect_window_skips <- function(...) {
   out
 }
 
-# Growing-season features, one row per site.
-#
-# This table had no producer anywhere in the repo. `prep_nee_ac()` computed
-# `feature_gs` and returned it, `04_02` required the file, and the copy on disk
-# held 8 sites from some earlier pass -- so `04_02` failed with `integer(0)`
-# bounds for every other site. `load_growing_season_features()` checks only that
-# the file exists, not that it covers anything.
+# Growing-season features, one row per site (read by `04_02`).
 collect_feature_gs <- function(...) {
   dplyr::bind_rows(lapply(built(...), `[[`, "feature_gs")) |>
     dplyr::arrange(.data$site_ID)
 }
 
 # Per-site half-hourly tables, which `03_01` and `04_02` find by globbing
-# `data-proc/respiration/**/*_ac.csv` recursively.
-#
-# That glob is why this function has to take responsibility for the whole
-# directory and not just its own sites: anything else left lying there is read
-# as though this run had produced it. Files written by an older version of the
-# pipeline carry a different set of columns, so they are identified by their
-# header and removed. Files that match the current schema but belong to sites
-# outside this run are left alone -- they may be a deliberate wider run -- but
-# they are reported, because they will be picked up too.
+# `data-proc/respiration/**/*_ac.csv` -- so this owns the whole directory:
+# files with an older schema are removed, and current-schema files from sites
+# outside this run are kept but reported, since the glob will read them.
 write_respiration_all <- function(...) {
   parts <- built(...)
   written <- character()
@@ -183,10 +152,7 @@ write_respiration_all <- function(...) {
     }
   }
 
-  # Empty site directories are invisible to the loop above -- it walks files,
-  # not directories -- and harmless to the downstream glob, which matches on
-  # `_ac.csv`. Still worth clearing, so the directory listing is an honest
-  # record of which sites the pipeline has produced.
+  # Clear empty site directories, so the listing shows what was produced.
   for (d in list.dirs(DIR_RESPIRATION, recursive = FALSE)) {
     if (length(list.files(d)) == 0) unlink(d, recursive = TRUE)
   }

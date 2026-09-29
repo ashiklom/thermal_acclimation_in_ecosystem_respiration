@@ -154,22 +154,10 @@ download_fluxnet <- function(name_site, overwrite = FALSE) {
 }
 
 
-# FLUXNET2015 is the one product here that cannot be fetched programmatically,
-# and it is worth being precise about why rather than leaving a TODO.
-#
-# It is a static legacy release, not a service: there is no API, and the
-# FLUXNET Shuttle -- which does have one -- federates AmeriFlux, ICOS and TERN
-# only, none of which hold the pre-2015 record. Downloading requires an
-# interactive login at fluxnet.org plus acceptance of the FLUXNET2015 Data
-# Policy, which is granted per site-year (Tier 1 vs Tier 2). FluxDataKit, an R
-# package built specifically around this dataset, reaches the same conclusion:
-# "The data should be downloaded manually from the website data portal, and a
-# login is required."
-#
-# So this "downloader" asks the user to do it, and tells them exactly what and
-# where. That is more useful than a scraper that would break on the next
-# redesign of the login form, and it does not pretend to hold a licence the
-# user has to accept themselves.
+# FLUXNET2015 has no programmatic interface: it is a static release behind an
+# interactive login and a per-site-year data policy, and the FLUXNET Shuttle
+# does not carry it (FluxDataKit concludes the same). So this prints what to
+# download and where to put it.
 download_fluxnet2015 <- function(name_site, overwrite = FALSE) {
   if (!is.na(product_file(name_site, "FLUXNET2015")) && !overwrite) {
     message("  already present, skipping download")
@@ -196,17 +184,11 @@ download_fluxnet2015 <- function(name_site, overwrite = FALSE) {
 
 # ---------------------------------------------------------------- WorldClim
 #
-# `04_01` needs minimum temperature on a 2.5 arc-minute grid for two periods: a
-# 2000-2020 baseline and the 2041-2060 projection under SSP2-4.5, averaged over
-# the CMIP6 GCMs. Both are public, unauthenticated downloads.
-#
-# The baseline is the CRU-TS-downscaled *monthly series*, not the 1970-2000
-# climatology that `wc2.1_2.5m_tmin.zip` holds. The distinction matters: the
-# script's own comment specifies 2000-2020, and using the climatology instead
-# would silently shift every projected change by the warming between the two
-# periods. The series ships as one GeoTIFF per year-month, which is exactly what
-# `04_01`'s `grepl("<MM>.tif$")` glob expects -- it collects all the Januaries
-# into one stack and averages them.
+# `04_01` needs 2.5-arc-minute tmin for a 2000-2020 baseline and 2041-2060
+# under SSP2-4.5 (13 CMIP6 GCMs). The baseline is the CRU-TS-downscaled
+# monthly *series*, one GeoTIFF per year-month -- not the 1970-2000
+# climatology, which would shift every projected change by the warming
+# between the two periods.
 WORLDCLIM_BASE <- "https://geodata.ucdavis.edu/climate/worldclim/2_1/hist/cts4.06/2.5m"
 WORLDCLIM_CMIP6 <- "https://geodata.ucdavis.edu/cmip6/2.5m"
 WORLDCLIM_DECADES <- c("2000-2009", "2010-2019", "2020-2021")
@@ -229,11 +211,8 @@ DIR_WORLDCLIM_FUTURE <- file.path(DIR_RAWDATA, "Climate", "wc2.1_2.5m_tmin_2041-
 fetch_file <- function(url, dest) {
   dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
   part <- paste0(dest, ".part")
-  # R's default `timeout` is 60 s, which is a per-download wall clock, not an
-  # idle limit. The WorldClim zips are hundreds of megabytes and the GSOC
-  # raster is comparable, so on an ordinary connection they die at the minute
-  # mark with "download from '...' failed" -- as they did in the first
-  # end-to-end run. An hour is generous and only bounds a hung transfer.
+  # R's default `timeout` (60 s) is a whole-download limit; these files are
+  # hundreds of megabytes.
   old <- options(timeout = max(3600, getOption("timeout", 60)))
   on.exit(options(old), add = TRUE)
   status <- utils::download.file(url, part, mode = "wb", quiet = TRUE)
@@ -246,9 +225,7 @@ fetch_file <- function(url, dest) {
 }
 
 download_worldclim <- function(overwrite = FALSE) {
-  # Baseline: one GeoTIFF per year-month, extracted flat.
-  # The zip is named for the CRU-TS version it was downscaled from, but the
-  # rasters inside are not: they are `wc2.1_2.5m_tmin_<YYYY>-<MM>.tif`.
+  # Baseline: one `wc2.1_2.5m_tmin_<YYYY>-<MM>.tif` per year-month, flat.
   wanted <- as.vector(outer(
     WORLDCLIM_BASELINE_YEARS,
     sprintf("%02d", 1:12),
@@ -294,12 +271,9 @@ download_worldclim <- function(overwrite = FALSE) {
 
 # ---------------------------------------------------------------- FAO GSOC
 #
-# Global Soil Organic Carbon map v1.5.0, used by `03_01` as the fallback soil
-# carbon estimate wherever a site reports no measured SOIL_CHEM_C_ORG.
-#
-# The local filename matters: `03_01` indexes the extraction by layer name
-# (`terra::extract(GSOCmap, xy)$GSOCmap1.5.0`), and terra derives that name from
-# the file. Saving it under FAO's own name would silently yield NULL.
+# Global Soil Organic Carbon map v1.5.0, `03_01`'s fallback soil carbon. The
+# filename matters: `03_01` indexes the extraction by the layer name terra
+# derives from it (`$GSOCmap1.5.0`).
 GSOC_URL <- paste0(
   "https://storage.googleapis.com/fao-gismgr-gsocseq-data/",
   "DATA/GSOCSEQ/MAP/GSOCSEQ.GSOCMAP1-5-0.tif"
@@ -314,10 +288,8 @@ download_gsoc <- function(overwrite = FALSE) {
 
 # ------------------------------------------------------- AmeriFlux BADM/BIF
 #
-# Site metadata, used by `03_01` for measured soil carbon. `amf_download_bif()`
-# stamps the filename with the date it was produced, so the path is discovered
-# rather than declared -- the workflow used to hard-code a datestamp that no
-# longer existed.
+# Site metadata, for `03_01`'s measured soil carbon. The filename is
+# date-stamped, so it is discovered, not declared.
 download_ameriflux_bif <- function(overwrite = FALSE) {
   existing <- list.files(
     DIR_RAWDATA, pattern = "^AMF_AA-Net_BIF_.*[.](xlsx|csv)$", full.names = TRUE
@@ -340,18 +312,14 @@ download_ameriflux_bif <- function(overwrite = FALSE) {
 
 # ------------------------------------------------------------ ERA5-Land SWC
 #
-# One file for every site, extracted by `scripts/download-era5-swc.py`. It is
-# extended only when it has to be: when a site in site_info is missing from it,
-# or when some site's flux record runs past its last day (`through`). A daily
-# rerun of the pipeline therefore does not touch the file unless a flux
-# download actually brought newer data. The script itself is incremental and
-# leaves the file alone when it has nothing to add.
+# One file for every site, extended by `scripts/download-era5-swc.py` only
+# when a site is missing from it or some site's flux record runs past its end
+# (`through`). The script is incremental and leaves an up-to-date file alone.
 ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path = ERA5_SWC_CSV) {
   sites <- get_site_info(path = site_info_path)[["site_ID"]]
   if (file.exists(path)) {
     have <- load_era5_table(path)
-    # All-NA counts as missing, as in the script: a sea cell extracted before
-    # its COASTAL_SITES entry existed.
+    # All-NA counts as missing, as in the script (a sea cell).
     missing_sites <- setdiff(sites, have$site[!is.na(have$SWC)])
     last <- max(have$time)
     if (!length(missing_sites) && (is.na(through) || last >= through)) {
@@ -379,9 +347,8 @@ latest_record_end <- function(...) {
   max(ends, na.rm = TRUE)
 }
 
-# Last day of a site's step-01 record with measured NEE, for
-# `ensure_era5_coverage()`. Not simply the last row: step 01 pads the record
-# out to whole years, so that is always a 31 December, usually in the future.
+# Last day with measured NEE -- not the last row, since step 01 pads the
+# record to whole years.
 site_record_end <- function(prep) {
   ac <- prep[["ac"]]
   ac <- ac[!is.na(ac$NEE), ]

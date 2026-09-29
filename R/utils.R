@@ -4,13 +4,10 @@
 # `prep_ameriflux()` for AmeriFlux BASE -- go through here, so a sentinel found
 # in one product's files is caught in the other's too.
 #
-# Out-of-bound values become NA rather than being pinned to the bound. A
-# reading of 33457 % carries no information about what the humidity was, and
-# writing 100 % there would launder garbage into a plausible-looking
-# measurement; NA is what it is, and REddyProc gap-fills the hole exactly as it
-# does for -9999. The `warning()` puts the column and the count into
-# `tar_meta(fields = "warnings")`, so a new sentinel in a future release shows
-# up in the run's own record instead of only in REddyProc's console output.
+# Out-of-bound values become NA, not the bound: a reading of 33457 % says
+# nothing about the humidity, and REddyProc gap-fills NA as it does -9999.
+# The `warning()` lands in `tar_meta(fields = "warnings")`, so a new sentinel
+# in a future release shows up in the run's record.
 drop_sentinels <- function(dat) {
   dat[dat == -9999] <- NA
   for (prefix in names(IMPLAUSIBLE_BOUNDS)) {
@@ -35,9 +32,8 @@ drop_sentinels <- function(dat) {
   dat
 }
 
-# `path` is a parameter so the pipeline can hand in a `format = "file"`
-# target and have an edit to the CSV invalidate the sites that read it.
-# Read straight from disk, the file is invisible to the dependency graph.
+# `path` is a parameter so the pipeline can hand in the `format = "file"`
+# target, making an edit to the CSV invalidate the sites that read it.
 get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
   site_info_cols <- readr::cols(
     site_ID = "c",
@@ -73,7 +69,6 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
 
   dat <- readr::read_csv(path, col_types = site_info_cols)
 
-  # Do some cleanup
   dat_clean <- dat |>
     dplyr::mutate(
       estimate_Ts = dplyr::recode_values(
@@ -176,7 +171,7 @@ product_file <- function(site, product) {
   hits
 }
 
-# Helper: parse simple TOML key = "value" lines
+# Parse simple `key = "value"` TOML lines.
 parse_toml <- function(path) {
   lines <- readLines(path, warn = FALSE)
   lines <- grep("=", lines, value = TRUE)
@@ -194,30 +189,20 @@ parse_toml <- function(path) {
   result
 }
 
-# Which sites the pipeline builds targets for.
+# Which sites the pipeline builds targets for: `"dev"` (the default,
+# `DEV_SITES`), `"all"` (every row of site_info.csv), or a comma-separated
+# list. A site that cannot be processed -- no raw data obtainable (ZA-Kru), or
+# a reader branch that is still a `stop()` (FR-Pue) -- fails as its own target
+# and shows as a gap in the results, rather than being silently left out here.
 #
-# `"dev"` (the default) is the small representative sample in `DEV_SITES`;
-# `"all"` is every site in site_info.csv. Both readers are in scope: AmeriFlux
-# BASE and the FLUXNET-family products alike, in either hemisphere.
-#
-# Scope is not a claim that every site will succeed. A site whose raw data is
-# not on disk (ZA-Kru today), or which needs a reader branch that is still a
-# `stop()` (FR-Pue's PI-supplied soil water), fails as its own target under
-# `error = "continue"` and is reported by the run report. That is deliberately
-# a per-site failure rather than a silent exclusion from the grid, so that the
-# gap is visible in the results rather than only in this function.
-#
-# This is called while the pipeline is being *constructed*, because `tar_map()`
-# needs the site names in order to generate target names. So it cannot itself
-# be a target, and reads site_info.csv directly.
+# Called while the pipeline is constructed (`tar_map()` needs the names), so
+# it cannot be a target and reads site_info.csv directly.
 pipeline_sites <- function(scope = Sys.getenv("THERMAL_SITES", "dev"),
                            site_info = get_site_info()) {
   known <- site_info[["site_ID"]]
 
   if (identical(scope, "all")) return(known)
   if (!identical(scope, "dev")) {
-    # An explicit comma-separated list, for running a hand-picked subset
-    # without editing DEV_SITES.
     wanted <- trimws(strsplit(scope, ",")[[1]])
     unknown <- setdiff(wanted, known)
     if (length(unknown)) {
@@ -230,9 +215,7 @@ pipeline_sites <- function(scope = Sys.getenv("THERMAL_SITES", "dev"),
     return(wanted)
   }
 
-  # A typo in DEV_SITES would otherwise produce a pipeline whose targets each
-  # fail separately at download time, and under `error = "continue"` that looks
-  # much like a data problem.
+  # A typo here would otherwise surface as per-site download failures.
   unknown <- setdiff(DEV_SITES, known)
   if (length(unknown)) {
     stop(

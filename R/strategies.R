@@ -1,14 +1,8 @@
 # The strategies behind each recipe axis.
 #
-# One `choose_*()` per axis; each is a `switch()` on the recipe's choice, and
-# every branch is a few lines that name *which* column, span or table row a
-# run uses. Nothing here computes a column -- step 01 produces every candidate
-# and these select -- so a strategy is cheap to add and impossible to get
-# silently wrong: an unknown choice fails by name in `validate_recipe()`
-# before any data is touched.
-#
-# Every function returns, alongside its choice, the *reason* for it where one
-# exists, so that provenance can be written next to every result.
+# One `choose_*()` per axis, each a `switch()` on the recipe's choice that
+# names which column, span or bounds row a run uses -- nothing here computes
+# a column -- and returns the reason with it, for provenance.
 
 # ----------------------------------------------------------------- ts axis
 #
@@ -93,16 +87,9 @@ fill_status <- function(fill) {
 #                       year starts. Tests the hypothesis that season detection
 #                       is redundant with the fit-stage guards.
 #
-# In every case only the *window layout* changes: the detect-or-override
-# season still drives the year gap scan (in step 01) and the control-year
-# choice, because both need a span to be defined over and a season-free rule
-# for them is a separate piece of work. See docs/recipes.md.
-#
-# The span has to be in the same DOY coordinates as the data. At a site whose
-# growing year is wrapped, DOY runs 183..548 and a literal 1-366 would tile
-# only the first half of the record; so the origin comes from `feature_gs`,
-# where `prep_nee_ac()` recorded it. It is 1 at every unwrapped site, which
-# leaves the manuscript's layout untouched.
+# Only the window layout changes; the gap scan and control year still use the
+# detect-or-override season (docs/recipes.md). `whole_year` starts at the
+# site's DOY origin (`feature_gs`), so it is in the data's wrapped frame.
 choose_window_season <- function(recipe, feature_gs) {
   origin <- feature_gs[["growing_year_start"]]
   if (is.null(origin) || is.na(origin)) origin <- 1L
