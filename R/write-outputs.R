@@ -96,20 +96,16 @@ collect_fill_summary <- function(...) {
     dplyr::arrange(.data$site_ID)
 }
 
-# A run with no skips still writes a header: `read.csv()` refuses an empty
-# file.
-WINDOW_SKIP_COLS <- c("site_ID", "recipe_id", "model", "window", "window_start",
-                      "window_end", "reason", "detail")
+# What a run with no skips writes, so the CSV still has a header:
+# `read.csv()` refuses an empty file.
+WINDOW_SKIPS_EMPTY <- tibble::tibble(
+  site_ID = character(), recipe_id = character(), model = character(), window = character(),
+  window_start = numeric(), window_end = numeric(), reason = character(), detail = character()
+)
 
 collect_window_skips <- function(...) {
   out <- dplyr::bind_rows(lapply(built(...), `[[`, "window_skips"))
-  if (!nrow(out)) {
-    out <- tibble::tibble(
-      site_ID = character(), recipe_id = character(), model = character(), window = character(),
-      window_start = numeric(), window_end = numeric(), reason = character(), detail = character()
-    )
-  }
-  out
+  if (nrow(out)) out else WINDOW_SKIPS_EMPTY
 }
 
 # Growing-season features, one row per site (read by `04_02`).

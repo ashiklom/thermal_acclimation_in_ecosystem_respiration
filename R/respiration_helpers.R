@@ -162,23 +162,8 @@ get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
     dplyr::distinct(growing_year) |>
     dplyr::pull()
 
-  year_str <- site_info[["year_removed"]]
-  if (!is.na(year_str)) {
-    year_parts <- strsplit(year_str, ",")[[1]]
-    years2remove <- unlist(lapply(year_parts, function(part) {
-      if (grepl(":", part)) {
-        rng <- as.numeric(strsplit(part, ":")[[1]])
-        seq(rng[1], rng[2])
-      } else {
-        as.numeric(part)
-      }
-    }))
-    if (length(years2remove) >= 1) {
-      good_years <- setdiff(good_years, years2remove)
-    }
-  }
-
-  good_years
+  # Minus the years removed by hand in site_info.csv.
+  setdiff(good_years, parse_removed_years(site_info[["year_removed"]]))
 }
 
 compute_gap_thresholds <- function(gStart, gEnd, site_name) {
