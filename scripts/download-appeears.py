@@ -1,12 +1,5 @@
-#!/usr/bin/env -S uv run --script
-#
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#   "pandas",
-#   "requests",
-# ]
-# ///
+#!/usr/bin/env python
+
 """Submit, track, and download the AppEEARS point extraction that 03_01 needs.
 
 AppEEARS tasks for this request take days to process, so this is split into

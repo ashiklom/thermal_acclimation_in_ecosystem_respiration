@@ -30,7 +30,7 @@ ensure_remote_catalog <- function(site_info_path = SITE_INFO_CSV, path = REMOTE_
   if (file.exists(path) && all(sites %in% read_remote_catalog(path)$site_ID)) {
     return(path)
   }
-  status <- system2("uv", c("run", "scripts/check-data-updates.py", "--catalog", path))
+  status <- system2("python", c("scripts/check-data-updates.py", "--catalog", path))
   if (!identical(status, 0L) || !file.exists(path)) {
     stop("Remote catalogue scan failed (exit ", status, "); see the output above.")
   }

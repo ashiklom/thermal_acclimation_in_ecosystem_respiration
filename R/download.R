@@ -117,8 +117,8 @@ run_if_missing <- function(name_site, product, command, args, overwrite) {
 
 download_icos <- function(name_site, overwrite = FALSE) {
   run_if_missing(
-    name_site, "ICOS", "uv",
-    c("run", "scripts/download-icos.py", "--product", "icos", "--sites", name_site,
+    name_site, "ICOS", "python",
+    c("scripts/download-icos.py", "--product", "icos", "--sites", name_site,
       if (overwrite) "--overwrite"),
     overwrite
   )
@@ -128,8 +128,8 @@ download_icos <- function(name_site, overwrite = FALSE) {
 # ICOS and FLUXNET-Archive products both start too late.
 download_ww2020 <- function(name_site, overwrite = FALSE) {
   run_if_missing(
-    name_site, "WW2020", "uv",
-    c("run", "scripts/download-icos.py", "--product", "ww2020", "--sites", name_site,
+    name_site, "WW2020", "python",
+    c("scripts/download-icos.py", "--product", "ww2020", "--sites", name_site,
       if (overwrite) "--overwrite"),
     overwrite
   )
@@ -137,8 +137,8 @@ download_ww2020 <- function(name_site, overwrite = FALSE) {
 
 download_tern <- function(name_site, overwrite = FALSE) {
   run_if_missing(
-    name_site, "TERN", "uv",
-    c("run", "scripts/download-tern.py", "--sites", name_site,
+    name_site, "TERN", "python",
+    c("scripts/download-tern.py", "--sites", name_site,
       if (overwrite) "--overwrite"),
     overwrite
   )
@@ -332,9 +332,9 @@ ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path =
   } else {
     message("  ERA5: ", path, " not found; extracting every site")
   }
-  args <- c("run", "scripts/download-era5-swc.py")
+  args <- "scripts/download-era5-swc.py"
   if (!is.na(through)) args <- c(args, "--through", format(as.Date(through)))
-  status <- system2("uv", args, stdout = "", stderr = "")
+  status <- system2("python", args, stdout = "", stderr = "")
   if (!identical(status, 0L)) stop("ERA5 extraction failed (exit ", status, ").")
   path
 }

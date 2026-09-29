@@ -1,21 +1,9 @@
-#!/usr/bin/env -S uv run --script
-#
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#   "aiohttp",
-#   "fsspec",
-#   "numpy",
-#   "pandas",
-#   "xarray",
-#   "zarr"
-# ]
-# ///
-#
+#!/usr/bin/env python
+
 # For a site whose nearest ERA5-Land cell is sea, find the nearest cell that is
 # land, and print the coordinates to use instead.
 #
-#   ./scripts/find-coastal-land-pixel.py IT-Noe
+#   pixi run python scripts/find-coastal-land-pixel.py IT-Noe
 #
 # Results go to stdout only. Paste the reported latitude/longitude into
 # COASTAL_SITES in scripts/download-era5-swc.py.

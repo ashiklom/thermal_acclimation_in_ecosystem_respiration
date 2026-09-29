@@ -1,8 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["terndata.flux>=1.0.7", "pandas"]
-# ///
+#!/usr/bin/env python
 
 """Generate the FLUXNET-code to TERN-native-site mapping."""
 

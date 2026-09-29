@@ -93,7 +93,7 @@ test_that("an empty ERA5 fallback tells the user what to run", {
   dat <- fake_tables()
   dat$SWC_era5 <- NA_real_
   err <- expect_error(resolve_swc_column(dat, "SWC_era5", "X-Tst"), "ERA5")
-  expect_match(conditionMessage(err), "download_era5")
+  expect_match(conditionMessage(err), "download-era5")
   expect_match(conditionMessage(err), "X-Tst")
 })
 

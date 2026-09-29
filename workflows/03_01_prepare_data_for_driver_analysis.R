@@ -25,7 +25,7 @@ site_info <- read.csv(file.path('data-core', 'site_info.csv'))
 # whichever format it arrived in. Fetched by the `ameriflux_bif` target.
 bif_files <- list.files(dir_rawdata, pattern = "^AMF_AA-Net_BIF_.*[.](xlsx|csv)$", full.names = TRUE)
 if (length(bif_files) == 0) {
-  stop("No AmeriFlux BIF table in ", dir_rawdata, ". Run `pixi run download_aanet`.")
+  stop("No AmeriFlux BIF table in ", dir_rawdata, ". Run `pixi run download-bif`.")
 }
 bif_path <- bif_files[which.max(file.mtime(bif_files))]
 BIF <- if (grepl("[.]xlsx$", bif_path)) {

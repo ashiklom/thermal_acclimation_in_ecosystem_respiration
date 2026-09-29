@@ -71,7 +71,7 @@ fi
 
 if $SCAN; then
     log "scanning providers"
-    pixi run uv run scripts/check-data-updates.py --catalog data-raw/remote_catalog.csv
+    pixi run python scripts/check-data-updates.py --catalog data-raw/remote_catalog.csv
 fi
 
 log "checking for outdated targets (sites=$THERMAL_SITES recipes=${THERMAL_RECIPES:-dev} fit=${THERMAL_FIT:-full})"

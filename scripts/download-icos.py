@@ -1,8 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["icoscp_core", "requests"]
-# ///
+#!/usr/bin/env python
 
 """Download ICOS ecosystem flux archives for one or more stations.
 

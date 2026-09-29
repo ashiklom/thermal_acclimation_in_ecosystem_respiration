@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Purpose: Download FLUXNET data using fluxnet-shuttle CLI
-# Usage:
-#   ./workflows/92-download-fluxnet.sh
-#   ./workflows/92-download-fluxnet.sh --sites FR-Pue CZ-RAJ
-#   ./workflows/92-download-fluxnet.sh --overwrite
+# Download FLUXNET-Archive data with the fluxnet-shuttle CLI, and extract each
+# site's tables into data-raw/FLUXNET/<site>/. Run inside the pixi environment:
+#
+#   pixi run bash scripts/download-fluxnet.sh
+#   pixi run bash scripts/download-fluxnet.sh --sites FR-Pue CZ-RAJ
+#   pixi run bash scripts/download-fluxnet.sh --overwrite
 
 set -euo pipefail
 
@@ -67,7 +68,7 @@ else
   if [[ -z "$SNAPSHOT_FILE" ]]; then
     echo "Warning: No fluxnet-shuttle snapshot found in data-raw." >&2
     echo "Downloading one with 'fluxnet-shuttle listall'..." >&2
-    pixi run fluxnet-shuttle listall -o data-raw
+    fluxnet-shuttle listall -o data-raw
     SNAPSHOT_FILE=$(find data-raw -maxdepth 1 -name 'fluxnet_shuttle_snapshot_*.csv' | sort | tail -n1)
     if [[ -z "$SNAPSHOT_FILE" ]]; then
       echo "Error: Failed to create snapshot file with 'fluxnet-shuttle listall'." >&2
@@ -80,7 +81,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Build command
-CMD=(pixi run fluxnet-shuttle download --snapshot-file "$SNAPSHOT_FILE" --output-dir "$OUTPUT_DIR" --quiet)
+CMD=(fluxnet-shuttle download --snapshot-file "$SNAPSHOT_FILE" --output-dir "$OUTPUT_DIR" --quiet)
 
 # If sites are not specified, download all missing FLUXNET sites from site_info.csv
 if [[ ! ${#SITES[@]} -gt 0 ]]; then
@@ -93,7 +94,7 @@ if [[ ! ${#SITES[@]} -gt 0 ]]; then
     else
       SITES+=($site)
     fi
-  done < <(pixi run Rscript - <<'EOF'
+  done < <(Rscript - <<'EOF'
 sites <- readr::read_csv("data-core/site_info.csv", col_select = c("site_ID", "source"), show_col_types = FALSE)
 fluxnet_sites <- sites |>
   dplyr::filter(.data$source == "FLUXNET") |>

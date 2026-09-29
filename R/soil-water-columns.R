@@ -26,7 +26,7 @@ resolve_swc_column <- function(dat, swc_col, name_site) {
       "ERA5-Land fallback, but its ERA5 soil water is entirely NA. ",
       "`prep_nee_ac()` says which case this is when it builds the site: either ",
       "no rows for the site in ", file.path("data-raw", "ERA5_daily_swc.csv"),
-      ", which `pixi run download_era5` fixes, or rows whose values are all NA, ",
+      ", which `pixi run download-era5` fixes, or rows whose values are all NA, ",
       "which it does not -- see `read_era5_swc()`."
     )
   }

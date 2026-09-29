@@ -1,9 +1,5 @@
-#!/usr/bin/env -S uv run --script
-#
-# /// script
-# requires-python = ">=3.13"
-# dependencies = ["icoscp"]
-# ///
+#!/usr/bin/env python
 
+# One-time: store ICOS Carbon Portal credentials for icoscp_core.
 from icoscp_core.icos import auth
 auth.init_config_file()

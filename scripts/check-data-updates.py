@@ -1,8 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["icoscp_core", "requests", "pandas", "terndata.flux>=1.0.7"]
-# ///
+#!/usr/bin/env python
 
 """Is there newer flux data than what we have on disk?
 
@@ -89,7 +85,8 @@ WW2020_COLLECTION = "https://meta.icos-cp.eu/collections/gdINRHdRH6xknqoLsIU1FOZ
 AMF_AVAILABILITY = "https://amfcdn.lbl.gov/api/v1/data_availability/AmeriFlux/BASE-BADM/CCBY4.0"
 
 RAW = Path("data-raw")
-# product -> (site sub-directory under data-raw, glob for the local archive)
+# product -> (site sub-directory under data-raw, glob for the local archive).
+# The directories must agree with `FLUX_PRODUCTS` in R/constants.R.
 LOCAL = {
     "ICOS": ("ICOS", "*.zip"),
     "WW2020": ("WW2020", "*.zip"),

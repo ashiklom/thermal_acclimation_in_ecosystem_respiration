@@ -1,31 +1,14 @@
-#!/usr/bin/env -S uv run --script
-#
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#   "aiohttp",
-#   "dask[array,distributed]",
-#   "fsspec",
-#   "pandas",
-#   "requests",
-#   "xarray",
-#   "zarr"
-# ]
-# ///
+#!/usr/bin/env python
 
-# uv run --with-requirements scripts/download-era5-swc.py --with ipython -- ipython
-
-# Usage:
-#   uv run scripts/download-era5-swc.py                     extend to the store's end
-#   uv run scripts/download-era5-swc.py --through 2026-08-31
-#   uv run scripts/download-era5-swc.py --full              re-extract everything
+# Daily ERA5-Land layer-1 soil water at every site, from the ARCO zarr store.
 #
-# Incremental by default. Sites already in data-raw/ERA5_daily_swc.csv are
-# extended from the day after their last row; sites in site_info.csv but not in
-# the file are extracted over the whole range. When there is nothing new to
-# add, the file is left untouched -- not rewritten with the same contents --
-# because the pipeline tracks it by hash and a rewrite would be free, but
-# anything keyed on mtime would not be.
+#   pixi run download-era5                          extend to the store's end
+#   pixi run download-era5 --through 2026-08-31
+#   pixi run download-era5 --full                   re-extract everything
+#
+# Incremental: sites already in data-raw/ERA5_daily_swc.csv are extended from
+# the day after their last row, missing sites are extracted over the whole
+# range, and with nothing to add the file is left untouched.
 
 import argparse
 import os
@@ -36,12 +19,6 @@ import tomllib
 import xarray as xr
 from dask.distributed import Client, LocalCluster
 
-# Threads, not processes. The work is thousands of small HTTPS range requests
-# against the zarr store, so it is network-bound rather than CPU-bound, and
-# threads share one authenticated session instead of shipping every chunk
-# across a process boundary. Process-based workers also cannot start here at
-# all: dask launches its nannies with `spawn`, which re-imports this module,
-# and this script runs at module level rather than under a `__main__` guard.
 START = pd.Timestamp("1990-01-01")
 OUT = Path("data-raw/ERA5_daily_swc.csv")
 
@@ -50,6 +27,9 @@ parser.add_argument("--through", help="Last date to extract (YYYY-MM-DD). Defaul
 parser.add_argument("--full", action="store_true", help="Ignore the existing file and re-extract everything.")
 args = parser.parse_args()
 
+# Threads, not processes: the work is network-bound range requests sharing one
+# authenticated session, and process workers would re-import this module-level
+# script under dask's `spawn`.
 n_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 4))
 cluster = LocalCluster(n_workers=n_workers, processes=False)
 dclient = Client(cluster)
