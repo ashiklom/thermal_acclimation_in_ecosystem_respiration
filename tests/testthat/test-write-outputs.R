@@ -46,9 +46,7 @@ test_that("each outcome table is sorted and carries each site once", {
 })
 
 test_that("growing_season_features covers every site in the run", {
-  # This table had no producer anywhere in the repo, and the copy on disk held 8
-  # sites, so `04_02` failed with `integer(0)` bounds for everything else.
-  # `load_growing_season_features()` checks only that the file exists.
+  # `04_02` looks every site up in it; a missing one gives `integer(0)` bounds.
   #
   # "The run" is the run that wrote the files, not this process's default
   # scope: THERMAL_SITES may well have been set differently when the pipeline

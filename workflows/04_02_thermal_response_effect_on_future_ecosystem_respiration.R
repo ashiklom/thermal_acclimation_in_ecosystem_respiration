@@ -1,191 +1,136 @@
-# This script estimates the effects of total thermal responses on future ecosystem respiration
+# Effect of total thermal responses on future (2041-2060, SSP2-4.5) nighttime
+# ecosystem respiration, per site: the present growing-season night pattern
+# of soil temperature, shifted by the projected change in monthly minimum
+# temperature (04_01), run through a temperature-respiration curve fitted in
+# each 14-day window of a control year, with and without the site's TAS.
+# Writes data-proc/analysis/acclimation_data_future_ssp245.csv. Slow: one
+# brms fit per window per control year per site.
 # Authors: Junna Wang, October, 2025
 
-# This script takes ~7 hours to run.
+stopifnot(requireNamespace("brms"), requireNamespace("dplyr"), requireNamespace("zoo"))
 
-library(librarian)
-shelf(dplyr, ggplot2, caret, performance, zoo, bayesplot, brms, gslnls, lubridate)
-rm(list=ls())
+dir_resp <- "data-proc/respiration"
 
-####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- 'data-proc/respiration'
-####################End Attention
+feature_gs <- read.csv(file.path("data-proc", "features", "growing_season_features.csv"))
+stopifnot("one growing-season row per site" = !anyDuplicated(feature_gs$site_ID))
 
-options(na.action = "na.omit")
-#
-# read data used for this module
-source(file.path('workflows', 'load_growing_season_features.R'))
-feature_gs <- load_growing_season_features()
-#
 acclimation <- read.csv(file.path("data-proc", "analysis", "acclimation_data.csv"))
-#
-Tmin_month <- read.csv(file.path('data-proc', 'analysis', 'Tmin_month_ssp245_wc.csv'))
-acclimation     <- acclimation %>% left_join(Tmin_month, by='site_ID')
+Tmin_month <- read.csv(file.path("data-proc", "analysis", "Tmin_month_ssp245_wc.csv"))
+acclimation <- acclimation |> dplyr::left_join(Tmin_month, by = "site_ID")
 
-# add 6 column about respiration
-acclimation$TS_TA   <- 0            # conversion between TS and TA
-acclimation$TSmin_c <- 0            # monthly min soil temperature change
-acclimation$TSmin_c_gs <- 0         # gs: growing season
+# the six result columns
+acclimation$TS_TA <- 0            # slope of TS on TA
+acclimation$TSmin_c <- 0          # monthly min soil temperature change
+acclimation$TSmin_c_gs <- 0       # ... over the growing season
 acclimation$NEE_night_mod_p <- 0
 acclimation$NEE_night_mod_f <- 0
 acclimation$NEE_night_mod_fa <- 0
 
-#
-priors_temp <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
-  brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) + 
+priors <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
+  brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) +
   brms::prior("normal(-0.001, 0.1)", nlpar = "beta", lb = -0.02, ub = 0.0)
+frmu <- NEE ~ exp(alpha * TS + beta * TS^2) * C0
+param <- alpha + beta + C0 ~ 1
+window_size <- 14
 
-frmu <- NEE ~ exp(alpha * TS + beta*TS^2) * C0
-param <- alpha+beta+C0 ~ 1
-priors <- priors_temp
-
-#
-files  <- list.files(path = dir_rawdata, pattern = '_ac.csv$', full.names = TRUE, recursive = TRUE)
-# air and soil temperature patterns
-for (i in 1:length(files)) {
-  ###
-  # i = 74
-  name_site <- sub('_ac\\.csv$', '', basename(files[i]))
-  print(paste0(i, name_site))
-  #
-  iacclimation <- which(acclimation$site_ID==name_site)
-  #
+files <- list.files(path = dir_resp, pattern = "_ac.csv$", full.names = TRUE, recursive = TRUE)
+for (i in seq_along(files)) {
+  name_site <- sub("_ac\\.csv$", "", basename(files[i]))
+  message(i, name_site)
+  iacclimation <- which(acclimation$site_ID == name_site)
   ac <- read.csv(files[i])
-  #
+
   # use only the years with qualified data
-  night_file <- list.files(dir_rawdata, pattern = paste0('^', name_site, '_nightNEE\\.csv$'), full.names = TRUE, recursive = TRUE)
+  night_file <- file.path(dirname(files[i]), paste0(name_site, "_nightNEE.csv"))
   a_measure_night_complete <- read.csv(night_file)
   good_years <- unique(a_measure_night_complete$YEAR)
-  # print(good_years)
-  
-  #
+
   gStart <- feature_gs$gStart[feature_gs$site_ID == name_site]
   gEnd <- feature_gs$gEnd[feature_gs$site_ID == name_site]
-  
-  ############I should use control year, and this control year should have enough data during every period#######
-  yearly_TSgs <- a_measure_night_complete %>% filter(between(DOY, gStart, gEnd)) %>% group_by(YEAR) %>% summarise(n = n(), TSgs=mean(TS))
-  yearly_TSgs <- yearly_TSgs %>% mutate(close_mean = abs(TSgs - median(yearly_TSgs$TSgs))) %>% filter(n > median(yearly_TSgs$n)) %>% arrange(close_mean)
-  
+
+  # Control years: the three closest to the median growing-season TS among
+  # those with more than the median number of observations.
+  yearly_TSgs <- a_measure_night_complete |>
+    dplyr::filter(dplyr::between(DOY, gStart, gEnd)) |>
+    dplyr::group_by(YEAR) |>
+    dplyr::summarise(n = dplyr::n(), TSgs = mean(TS))
+  yearly_TSgs <- yearly_TSgs |>
+    dplyr::mutate(close_mean = abs(TSgs - median(TSgs))) |>
+    dplyr::filter(n > median(n)) |>
+    dplyr::arrange(close_mean)
+
+  # TS ~ TA slope above freezing; US-Tw1 (subtropical) on the nighttime table.
+  tmp <- if (name_site != "US-Tw1") ac else a_measure_night_complete
+  acclimation$TS_TA[iacclimation] <- coef(lm(data = dplyr::filter(tmp, TA > 0), TS ~ TA))[["TA"]]
+
+  # The present nighttime pattern by DOY and time of day, and the future one.
+  night_pattern <- ac |>
+    dplyr::filter(YEAR %in% good_years & !daytime) |>
+    dplyr::group_by(DOY, HOUR, MINUTE, MONTH) |>
+    dplyr::summarise(TAp = mean(TA, na.rm = TRUE), TSp = mean(TS, na.rm = TRUE), .groups = "drop")
+  night_pattern <- night_pattern[!duplicated(night_pattern[, c("DOY", "HOUR", "MINUTE")]), ]
+  # Fill occasional gaps: TA by interpolation, TS from TA.
+  if (anyNA(night_pattern$TAp)) night_pattern$TAp <- zoo::na.approx(night_pattern$TAp)
+  if (anyNA(night_pattern$TSp)) {
+    TSp_pred <- predict(lm(data = night_pattern, TSp ~ TAp), night_pattern)
+    night_pattern$TSp[is.na(night_pattern$TSp)] <- TSp_pred[is.na(night_pattern$TSp)]
+  }
+  # Tmin1..Tmin12 by name, in month order.
+  temp_change <- data.frame(MONTH = 1:12, TAmnc = as.numeric(acclimation[iacclimation, paste0("Tmin", 1:12)]))
+  night_pattern <- night_pattern |> dplyr::left_join(temp_change, by = "MONTH")
+  night_pattern$TAf <- night_pattern$TAp + night_pattern$TAmnc
+  night_pattern$TSf <- night_pattern$TSp + night_pattern$TAmnc * acclimation$TS_TA[iacclimation]
+  in_gs <- night_pattern$DOY >= gStart & night_pattern$DOY <= gEnd
+
+  nobs_threshold <- if (name_site %in% c("US-ICt", "US-ICh", "US-ICs")) 90 else 200
+  nwindow <- max(round((gEnd - gStart + 1) / window_size), 1)
+
   df_NEE_p_f <- data.frame()
   for (control_year in yearly_TSgs$YEAR[1:3]) {
-    # control_year = outcome$control_year[outcome$site_ID == name_site]
-    a_measure_night_complete_control <- a_measure_night_complete %>% filter(YEAR == control_year)
-    # plot(a_measure_night_complete$TS[a_measure_night_complete$YEAR == 2009], a_measure_night_complete$NEE[a_measure_night_complete$YEAR == 2009], main = paste0(i, name_site))
-    
-    # recalculate TS_TA relationship using TA threshold
-    if (!name_site %in% c('US-Tw1')) {
-      tmp <- ac %>% filter(TA > 0)     # only use the data with TA > 0C; use another range to calculate the coefficient
-    } else {
-      # tropical and subtropical site: its values are obtained using observed temperature only.
-      tmp <- a_measure_night_complete %>% filter(TA > 0)
-    }
-    acclimation$TS_TA[iacclimation] <- summary(lm(data=tmp, TS~TA))$coefficients[2,1]
-    #
-    night_pattern <- ac %>% filter(YEAR %in% good_years & !daytime) %>% group_by(DOY, HOUR, MINUTE, MONTH) %>% 
-      summarise(TAp=mean(TA, na.rm=T), TSp=mean(TS, na.rm=T), SWC=mean(SWC, na.rm=T), .groups = 'drop')
-    # remove duplicate rows
-    night_pattern  <- night_pattern[!duplicated(night_pattern[,c('DOY', 'HOUR', 'MINUTE')]), ]
-    # deal with occasional TA missing cases
-    if (sum(is.na(night_pattern$TAp)) > 0) {
-      night_pattern$TAp <- na.approx(night_pattern$TAp)
-    }
-    # deal with occasional TS missing cases
-    if (sum(is.na(night_pattern$TSp)) > 0) {
-      mod_lm <- lm(data=night_pattern, TSp ~ TAp)
-      TSp_pred <- predict(mod_lm, night_pattern)
-      night_pattern$TSp[is.na(night_pattern$TSp)] <- TSp_pred[is.na(night_pattern$TSp)]
-    }
-    #
-    # Indexed by name in month order, not by `which(colnames %in% ...)`, which
-    # returns columns in *table* order. That happened to match `MONTH = 1:12`
-    # only because 04_01 writes Tmin1..Tmin12 ascending; a writer that emitted
-    # them alphabetically (Tmin1, Tmin10, Tmin11, Tmin12, Tmin2, ...) would
-    # have mis-assigned 9 of the 12 months, and the result would still look
-    # like a plausible seasonal cycle.
-    temp_change   <- data.frame(MONTH=1:12, TAmnc=as.numeric(acclimation[iacclimation, paste0('Tmin', 1:12)]))
-    #
-    night_pattern <- night_pattern %>% left_join(temp_change, by="MONTH")
-    #
-    night_pattern$TAf <- night_pattern$TAp + night_pattern$TAmnc
-    night_pattern$TSf <- night_pattern$TSp + night_pattern$TAmnc * acclimation$TS_TA[iacclimation]
-    #
-    night_pattern$NEEp <- NA
-    night_pattern$NEEf <- NA
-    
-    #--------------------------------------
-    # use uniform window size: 2 weeks
-    window_size <- 14
-    
-    # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
-    nwindow <- max(round((gEnd - gStart + 1) / window_size), 1)  
-    
-    ER_obs_pred <- data.frame()
+    a_measure_night_complete_control <- a_measure_night_complete |> dplyr::filter(YEAR == control_year)
+    NEEp <- rep(NA_real_, nrow(night_pattern))
+    NEEf <- rep(NA_real_, nrow(night_pattern))
+
     for (iwindow in 1:nwindow) {
-      window_start = gStart + window_size*(iwindow-1)
-      window_end = min(gStart + window_size*iwindow, gEnd)
-      if (iwindow == nwindow & window_end != gEnd) {
-        window_end <- gEnd
-      }
-      
-      # Skip a window if no need to estimate ER due to all daytime; 
-      # This is the case for sites ('US-ICt', 'US-ICh', 'US-ICs', 'FI-Sod') with a period of the whole day is daytime. 
-      # Data measurement sometime is not reliable, when TS is lower than 1C or 2C.
-      id <- which(between(night_pattern$DOY, window_start, window_end) & night_pattern$TSp > 1.0)
-      if ( length(id) == 0 ) { next }
-      
-      # extend the range to get TS~ER curve, because we need to predict for warming future
-      data <- a_measure_night_complete_control %>% filter(between(DOY, window_start - 7, window_end + 7) & TS > 1.0)
-      if (name_site %in% c('US-ICt', 'US-ICh', 'US-ICs')) {
-        nobs_threshold = 90
-      } else {
-        nobs_threshold = 200
-      }
-      
-      # if not enough observed data in control year, extend the window 
-      extend_days <- 0
-      while(nrow(data) < nobs_threshold) {
+      window_start <- gStart + window_size * (iwindow - 1)
+      window_end <- if (iwindow == nwindow) gEnd else min(gStart + window_size * iwindow, gEnd)
+
+      # Nothing to estimate where the whole window is daytime (US-ICt, US-ICh,
+      # US-ICs, FI-Sod), or where soil is too cold for reliable measurements.
+      id <- which(dplyr::between(night_pattern$DOY, window_start, window_end) & night_pattern$TSp > 1.0)
+      if (length(id) == 0) next
+
+      # Fit the TS-ER curve on the control year over a window widened by a
+      # week each side, and further until it has enough observations, since
+      # it has to predict for a warmer future.
+      extend_days <- 7
+      repeat {
+        data <- a_measure_night_complete_control |>
+          dplyr::filter(dplyr::between(DOY, window_start - extend_days, window_end + extend_days) & TS > 1.0)
+        if (nrow(data) >= nobs_threshold || extend_days > (gEnd - gStart) / 2.0) break
         extend_days <- extend_days + 7
-        data <- a_measure_night_complete_control %>% filter(between(DOY, window_start - extend_days, window_end + extend_days) & TS > 1.0)
-        # some conditions to break out to avoid dead loop
-        if (extend_days > (gEnd - gStart) / 2.0) {break}
       }
-      
-      # call the brm model to estimate parameters; this step takes much longer time.
+
       mod <- brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors, data = data, iter = 2000, cores = 4, chains = 4, backend = "cmdstanr",
-                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
-      # print(summary(mod), digits = 4)
-      
-      df_accurate <- data.frame(NEE=data$NEE, TS=data$TS)
-      NEE_pred <- fitted(mod, newdata=df_accurate)[, "Estimate"]
-      # plot(df_accurate$TS, df_accurate$NEE, main = paste0(iwindow, name_site))
-      ER_obs_pred <- rbind(ER_obs_pred, data.frame(pred=NEE_pred, obs=df_accurate$NEE))
-      
-      df_present <- data.frame(TS=night_pattern$TSp[id])
-      night_pattern$NEEp[id] <- fitted(mod, newdata=df_present)[, "Estimate"]
-      
-      df_future <- data.frame(TS=night_pattern$TSf[id])
-      night_pattern$NEEf[id] <- fitted(mod, newdata=df_future)[, "Estimate"]
+                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0)
+      NEEp[id] <- fitted(mod, newdata = data.frame(TS = night_pattern$TSp[id]))[, "Estimate"]
+      NEEf[id] <- fitted(mod, newdata = data.frame(TS = night_pattern$TSf[id]))[, "Estimate"]
     }
-    # check performance
-    # print(postResample(pred=ER_obs_pred$pred, obs=ER_obs_pred$obs))    
-    #
-    # NEE during growing season only   
-    df_NEE_p_f <- rbind(df_NEE_p_f, data.frame(NEE_p = mean(night_pattern$NEEp[night_pattern$DOY >= gStart & night_pattern$DOY <= gEnd], na.rm=T), 
-                                               NEE_f = mean(night_pattern$NEEf[night_pattern$DOY >= gStart & night_pattern$DOY <= gEnd], na.rm=T)))
+    # NEE during the growing season only
+    df_NEE_p_f <- rbind(df_NEE_p_f, data.frame(NEE_p = mean(NEEp[in_gs], na.rm = TRUE),
+                                               NEE_f = mean(NEEf[in_gs], na.rm = TRUE)))
   }
   df_NEE_p_f$ratio <- df_NEE_p_f$NEE_f / df_NEE_p_f$NEE_p
 
-  # get the mean of the top 2 ratios
-  acclimation$NEE_night_mod_p[iacclimation]  <- mean(df_NEE_p_f$NEE_p[-which.min(df_NEE_p_f$ratio)])
-  acclimation$NEE_night_mod_f[iacclimation]  <- mean(df_NEE_p_f$NEE_f[-which.min(df_NEE_p_f$ratio)])
-  #
-  NEE_gs <- acclimation$NEE_night_mod_f[iacclimation]
+  # Drop the control year with the lowest future/present ratio; average the rest.
+  acclimation$NEE_night_mod_p[iacclimation] <- mean(df_NEE_p_f$NEE_p[-which.min(df_NEE_p_f$ratio)])
+  acclimation$NEE_night_mod_f[iacclimation] <- mean(df_NEE_p_f$NEE_f[-which.min(df_NEE_p_f$ratio)])
   acclimation$TSmin_c[iacclimation] <- mean(temp_change$TAmnc) * acclimation$TS_TA[iacclimation]
-  acclimation$TSmin_c_gs[iacclimation] <- mean(night_pattern$TAmnc[night_pattern$DOY >= gStart & night_pattern$DOY <= gEnd], na.rm=T) * acclimation$TS_TA[iacclimation]
-  acclimation$NEE_night_mod_fa[iacclimation] <- NEE_gs * exp(acclimation$TAS_tot[iacclimation] * acclimation$TSmin_c_gs[iacclimation])
+  acclimation$TSmin_c_gs[iacclimation] <- mean(night_pattern$TAmnc[in_gs], na.rm = TRUE) * acclimation$TS_TA[iacclimation]
+  acclimation$NEE_night_mod_fa[iacclimation] <- acclimation$NEE_night_mod_f[iacclimation] *
+    exp(acclimation$TAS_tot[iacclimation] * acclimation$TSmin_c_gs[iacclimation])
 }
-#
 
-dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
-write.csv(acclimation, file=file.path('data-proc', 'analysis', 'acclimation_data_future_ssp245.csv'), row.names = F)
+dir.create("data-proc/analysis", recursive = TRUE, showWarnings = FALSE)
+write.csv(acclimation, file = file.path("data-proc", "analysis", "acclimation_data_future_ssp245.csv"), row.names = FALSE)
