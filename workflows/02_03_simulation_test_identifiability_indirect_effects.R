@@ -1,20 +1,12 @@
-# This script demonstrates identifiability of direct and apparent TAS components
-# with simulation experiments where the true contributions are known.
-# It also includes a confounded case showing when the apparent residual is not
-# interpretable as pure mediation via SWC and GPP.
-# 
+# Identifiability of the direct and apparent (indirect) TAS components, by
+# simulation with known contributions: one virtual site (4 windows x 8 years,
+# ER = exp(0.0588 T)), four scenarios -- direct only, measured indirect only,
+# direct + measured indirect, and all three plus a hidden indirect effect
+# (the confounded case, where the apparent residual is not pure mediation via
+# SWC and GPP) -- 40 replicates each. Writes
+# data-proc/analysis/simulation_identifiability_{replications,summary}.csv and
+# figures/tas_identifiability_simulation.png.
 # Authors: Sparkle Malone and Junna Wang in May, 2026.
-# It takes about 1-2 minutes to run on a laptop.
-
-# Content of this script: 
-# for a virtue site, we need to have T~ER relationship as ER = exp(0.0588 * T)
-# this site has 4 windows, 8 years
-# for each window, we have reference temperature, SWC, and GPP of each window, we calculate reference ER
-# we designed four scenarios: direct effect only, measured indirect effect only, 
-# direct + measured indirect, direct + measured indirect + hidden indirect. 
-# each scenario has 40 replicates. 
-
-rm(list = ls())
 
 set.seed(20260423)
 
@@ -62,8 +54,8 @@ simulate_scenario <- function(
           gpp_mean <- ref_gpp + lambda_gpp * t_anom + rnorm(1, mean = 0, sd = 0.05)
 
           ts_center <- rnorm(n_obs, mean = 0, sd = 0.9)
-          swc_dev <- rnorm(n_obs, mean = swc_mean - ref_swc, sd = 1.25)  # sd = 0.12
-          gpp_dev <- rnorm(n_obs, mean = gpp_mean - ref_gpp, sd = 1.5)  # sd = 0.16
+          swc_dev <- rnorm(n_obs, mean = swc_mean - ref_swc, sd = 1.25)
+          gpp_dev <- rnorm(n_obs, mean = gpp_mean - ref_gpp, sd = 1.5)
           hidden_dev <- rho_hidden * (swc_dev + gpp_dev) + rnorm(n_obs, mean = 0, sd = 0.10)
 
           direct_shift <- beta_direct * t_anom
@@ -72,7 +64,7 @@ simulate_scenario <- function(
 
           log_er <- site_effect + window_effect +
             direct_shift +
-            0.0588 * ts_center +      # this is that realistic temperature ER relationship. 
+            0.0588 * ts_center +      # a realistic temperature-ER relationship
             gamma_swc * swc_dev +
             gamma_gpp * gpp_dev +
             beta_hidden * hidden_dev +
@@ -207,18 +199,19 @@ replicate_results <- do.call(
 summary_results <- do.call(
   rbind,
   lapply(split(replicate_results, replicate_results$scenario), function(df) {
-    rbind(
-      summarise_component(df, "total", "total_true"),
-      summarise_component(df, "direct", "direct_true"),
-      summarise_component(df, "apparent", "apparent_true"),
-      summarise_component(df, "apparent", "residual_true")
+    cbind(
+      scenario = df$scenario[[1]],
+      rbind(
+        summarise_component(df, "total", "total_true"),
+        summarise_component(df, "direct", "direct_true"),
+        summarise_component(df, "apparent", "apparent_true"),
+        summarise_component(df, "apparent", "residual_true")
+      )
     )
   })
 )
-summary_results$scenario <- rep(names(split(replicate_results, replicate_results$scenario)), each = 4)
-summary_results <- summary_results[, c("scenario", "component", "target", "truth", "mean_est", "sd_est", "bias", "rmse", "coverage")]
 
-dir.create('data-proc/analysis', recursive = TRUE, showWarnings = FALSE)
+dir.create("data-proc/analysis", recursive = TRUE, showWarnings = FALSE)
 write.csv(replicate_results, file = "data-proc/analysis/simulation_identifiability_replications.csv", row.names = FALSE)
 write.csv(summary_results, file = "data-proc/analysis/simulation_identifiability_summary.csv", row.names = FALSE)
 
@@ -236,28 +229,16 @@ plot_panel <- function(df, title_text, apparent_note = FALSE) {
   abline(h = unique(df$total_true), col = cols[1], lwd = 2, lty = 2)
   abline(h = unique(df$direct_true), col = cols[2], lwd = 2, lty = 2)
   abline(h = unique(df$apparent_true), col = cols[3], lwd = 2, lty = 2)
+  key <- c("true total", "true direct", "true measured indirect")
+  key_col <- cols
+  key_lty <- c(2, 2, 2)
   if (apparent_note) {
     abline(h = unique(df$residual_true), col = "#B22222", lwd = 2, lty = 3)
-    legend(
-      "topleft",
-      legend = c("true total", "true direct", "true measured indirect", "true residual = measured + hidden indirect"),
-      col = c(cols[1], cols[2], cols[3], "#B22222"),
-      lty = c(2, 2, 2, 3),
-      lwd = 2,
-      bty = "n",
-      cex = 0.82
-    )
-  } else {
-    legend(
-      "topleft",
-      legend = c("true total", "true direct", "true measured indirect"),
-      col = cols,
-      lty = 2,
-      lwd = 2,
-      bty = "n",
-      cex = 0.82
-    )
+    key <- c(key, "true residual = measured + hidden indirect")
+    key_col <- c(key_col, "#B22222")
+    key_lty <- c(key_lty, 3)
   }
+  legend("topleft", legend = key, col = key_col, lty = key_lty, lwd = 2, bty = "n", cex = 0.82)
   mtext(title_text, side = 3, line = 0.8, font = 2, cex = 0.95)
   text(
     x = c(1, 2, 3),
@@ -273,7 +254,6 @@ png(
   height = 1600,
   res = 180
 )
-op <- par(no.readonly = TRUE)
 par(mfrow = c(2, 2), mar = c(4.8, 4.8, 3.5, 1.2), oma = c(0, 0, 2.4, 0))
 
 plot_panel(subset(replicate_results, scenario == "Direct only"), "A. Direct only")
@@ -287,7 +267,6 @@ mtext(
   cex = 1.25,
   font = 2
 )
-par(op)
 dev.off()
 
 cat("\nSaved replicate-level results to data-proc/analysis/simulation_identifiability_replications.csv\n")
