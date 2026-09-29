@@ -145,30 +145,30 @@ ts_candidate_columns <- function(dat) {
 # The columns every reader provides. `TIMESTAMP_START` is the 12-digit stamp
 # both products carry; FI-Sod's recalibration windows are expressed in it.
 TS_INPUT_REQUIRED <- c("TIMESTAMP", "TIMESTAMP_START", "YEAR", "DOY", "HOUR", "MINUTE", "TS_sensor", "TA")
-# Provided where the record has them; an arm that needs one and lacks it
-# fails by name.
-TS_INPUT_OPTIONAL <- c("TS_sensor_QC", "TA_QC", "NETRAD", "TS_depth2", "TS_depth2_QC", "TS_pi")
+# Optional, where the record has them: TS_sensor_QC, TA_QC, NETRAD,
+# TS_depth2, TS_depth2_QC, TS_pi. An arm that needs one and lacks it fails
+# by name.
 
 # The FLUXNET-family record's columns, under the shared names. `TS_F_MDS_1` is
 # the shallow sensor and `TS_F_MDS_2` the second depth; `TA_F_MDS` carries its
 # own QC flag, which the air-temperature substitute inherits.
 fluxnet_ts_input <- function(a, site_info) {
-  pick <- function(col) if (col %in% names(a)) a[[col]] else NULL
+  absent <- rep(NA_real_, nrow(a))
   out <- tibble::tibble(
     TIMESTAMP = a$TIMESTAMP, TIMESTAMP_START = a$TIMESTAMP_START,
     YEAR = a$YEAR, DOY = a$DOY, HOUR = a$HOUR, MINUTE = a$MINUTE,
-    TS_sensor = pick("TS_F_MDS_1") %||% rep(NA_real_, nrow(a)),
-    TS_sensor_QC = pick("TS_F_MDS_1_QC") %||% rep(NA_real_, nrow(a)),
+    TS_sensor = a[["TS_F_MDS_1"]] %||% absent,
+    TS_sensor_QC = a[["TS_F_MDS_1_QC"]] %||% absent,
     TA = a$TA_F_MDS,
-    TA_QC = pick("TA_F_MDS_QC") %||% rep(NA_real_, nrow(a))
+    TA_QC = a[["TA_F_MDS_QC"]] %||% absent
   )
-  if (!is.null(pick("NETRAD"))) out$NETRAD <- a$NETRAD
-  if (!is.null(pick("TS_F_MDS_2"))) {
+  if (!is.null(a[["NETRAD"]])) out$NETRAD <- a$NETRAD
+  if (!is.null(a[["TS_F_MDS_2"]])) {
     out$TS_depth2 <- a$TS_F_MDS_2
-    out$TS_depth2_QC <- pick("TS_F_MDS_2_QC") %||% rep(NA_real_, nrow(a))
+    out$TS_depth2_QC <- a[["TS_F_MDS_2_QC"]] %||% absent
   }
   # Say so here, rather than later as "no observations after the filter".
-  if (is.null(pick("TS_F_MDS_1")) && !ts_source(site_info) %in% c("ta_substitute")) {
+  if (is.null(a[["TS_F_MDS_1"]]) && ts_source(site_info) != "ta_substitute") {
     stop(
       site_info[["site_ID"]], ": the spliced record has no TS_F_MDS_1 column. Declared ",
       "products: ", paste(site_sources(site_info), collapse = " + "),
@@ -237,8 +237,7 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
   if (length(absent)) {
     stop(name_site, ": the stage-A input lacks ", paste(absent, collapse = ", "), ".")
   }
-  n <- nrow(input)
-  qc <- if ("TS_sensor_QC" %in% names(input)) input$TS_sensor_QC else rep(NA_real_, n)
+  qc <- input[["TS_sensor_QC"]] %||% rep(NA_real_, nrow(input))
 
   # Which arm runs: the declaration, or under `ts_qc = sensor` the raw sensor
   # wherever the declared arm would leave non-sensor rows.
@@ -451,7 +450,7 @@ recalibrate_fi_sod_soil_temp <- function(input, site_info) {
   need_input(input, c("TS_depth2"), site_info, "the FI-Sod recalibration")
   shallow <- input$TS_sensor
   deep <- input$TS_depth2
-  qc <- if ("TS_sensor_QC" %in% names(input)) input$TS_sensor_QC else rep(NA_real_, nrow(input))
+  qc <- input[["TS_sensor_QC"]] %||% rep(NA_real_, nrow(input))
 
   early <- in_timestamp_window(input$TIMESTAMP_START, FI_SOD_EARLY_WINDOW)
   late <- in_timestamp_window(input$TIMESTAMP_START, FI_SOD_LATE_WINDOW)
