@@ -124,7 +124,9 @@ echo "Downloading FLUXNET data..."
 # every other site's files look touched.
 echo "Extracting FLUXNET data into site-specific directories..."
 for site in "${SITES[@]}"; do
-    for zipfile in "$OUTPUT_DIR"/ICOS_"${site}"_FLUXNET_*.zip "$OUTPUT_DIR"/EUF_"${site}"_FLUXNET_*.zip; do
+    # Any network prefix (ICOS_, EUF_, AMF_, ...), as product_local_paths() in
+    # R/remote-catalog.R matches them.
+    for zipfile in "$OUTPUT_DIR"/*_"${site}"_FLUXNET_*.zip; do
         if [[ -f "$zipfile" ]]; then
             echo "  Extracting $(basename "$zipfile")..."
             unzip_dir="$OUTPUT_DIR/$site"
