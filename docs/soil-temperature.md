@@ -1,4 +1,4 @@
-# Soil temperature: how the column the model sees comes to exist
+# Soil temperature and soil water: how the columns the model sees come to exist
 
 Soil temperature reaches the respiration model through **two stages**, and the
 manuscript's logic requires that they stay two. Both live in
@@ -9,6 +9,43 @@ reader ─► stage A ─► QC · growing season · year gap scan ─► stage 
           TS_measured                                       TS_final
           (qualification-facing)                            (fit-facing)
 ```
+
+## The columns step 01 hands over
+
+`prep_nee_ac()` returns `ac` (the full half-hourly record) and `nightNEE` (the
+high-quality nighttime subset). Both carry every candidate the site offers,
+and step 02 selects:
+
+| column | what it is |
+|---|---|
+| `TS_measured` | stage A's column: the sensor, repaired or reconstructed per site |
+| `TS_linear` | a `TS ~ TA` regression, built at **every** site; inert unless selected |
+| `TS_memfill` | the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `get_soil_temperature()` under a `memory_fill` recipe |
+| `TS` | equal to `TS_measured` on the way out of step 01 (asserted) |
+| `SWC_measured` | tower soil water, in **percent** |
+| `SWC_era5` | ERA5-Land layer-1 soil water, rescaled to percent on read |
+
+Beside the tables, `site_data` carries:
+
+- `ts_bounds`: for every TS column, the 2.5/97.5 percentiles of
+  growing-season soil temperature under both definitions (`climatology`,
+  `halfhourly`), with the manuscript's row for that column flagged `native`;
+- `ts_qc`: the quality verdict on `TS_measured`;
+- `ts_provenance`: stage A's provenance row;
+- `feature_gs`: the growing season and year count.
+
+**Bounds travel with the column.** `tStart`/`tEnd` gate the window-skip
+test in `total_tas_window()`, and they are percentiles of a particular
+column, so selecting a column and selecting its bounds are one act. The two
+definitions differ a lot:
+- the measured column's native bounds are percentiles of the *day-of-year
+  climatology*, from `detect_growing_season()`;
+- the regressed column's are percentiles of the raw *half-hourly* values.
+
+Across 44 sites the half-hourly band is 16.7 °C wide against the
+climatology's 10.0 °C, before the column changes at all
+([`ts-rework.html`](ts-rework.html), F4). The `bounds` recipe axis applies one
+definition throughout.
 
 ## Why two stages
 
@@ -99,11 +136,10 @@ manuscript's own.
 
 ## What is the manuscript and what is a variant
 
-Under the `original` recipe nothing in this design changes a number:
-`tests/ts-swc-baseline.R` freezes step-01 digests and the transcribed step-02
-substitution at 20 sites — one per stage-A arm — and the pipeline must
-reproduce them. Everything a variant does differently is a `switch()` branch
-in `R/strategies.R` or the refuse rule above.
+Under the `original` recipe nothing in this design changes a number, and
+`pixi run ts-baseline` (below) holds it to that. Everything a variant does
+differently is a `switch()` branch in `R/strategies.R` or the refuse rule
+above.
 
 ## Adding a site, or a mechanism
 
@@ -127,6 +163,67 @@ whose raw sensor is too sparse to qualify a year fails step 01 and drops from
 that recipe. In `_targets.R` a variant prep key gets its own `site_data_v_*`
 and `site_fill_v_*` per site; the manuscript's `site_data` is untouched. See
 docs/recipes.md.
+
+## Soil water
+
+Soil water is not a per-site column, because the choice depends on the model
+as well as the site (`default_swc_col()` in R/soil-water-columns.R):
+
+| | total model | direct model |
+|---|---|---|
+| `SWC_use = YES` | `SWC_measured` | `SWC_measured` |
+| `SWC_use = NO` | none (soil water is not in the formula) | `SWC_era5` |
+
+Measured soil water is a requirement where it is used: nighttime rows
+without it are dropped. At DE-Tha that takes 66,874 rows down to 21,821. The
+ERA5 fallback is deliberately *not* filtered on, since it is a daily
+reanalysis with its own gaps. The asymmetry is inherited from the original.
+Many `SWC_use = NO` sites still report a soil-water column the analysis
+discards; CH-Dav has 326,351 non-missing values of it. So measured and
+reanalysis soil water can be compared through the `swc_col=` override of
+`total_tas_site()`.
+
+ERA5 is joined on in its own targets (`site_era5` → `site_data`), clipped to
+the site's own flux days, so that extending the ERA5 file re-runs only the
+join. See docs/data-provenance.md.
+
+## Ordering, and why it is load-bearing
+
+Every step-01 filter runs on **stage A's** column:
+- the QC flag test;
+- the data-gap scan;
+- growing-season detection;
+- the TS ≥ 2 °C truncation at CH-Dav, US-Ha1 and US-GLE.
+
+Estimated columns are added afterwards and selected in step 02. Filtering on
+a regressed column would keep a different set of rows. The separation also
+makes three inherited collisions visible. None is obviously wrong, and all
+are worth putting to the authors:
+
+- **US-GLE:** the 2 °C truncation raises `tStart` to 2 °C on the measured
+  column, while the substituted column's own lower bound is −2.26 °C.
+- **FI-Sod** rebuilds pre-2006 soil temperature in stage A, then, as a
+  `TS_linear` site, fits `TS ~ TA` on top of it.
+- **US-MBP** fills stage-A gaps from air temperature, then has the whole
+  column replaced by a differently fitted regression.
+
+`ts_source ∈ {lm_ta_recent, lm_ta_cold}` and `ts_col = "TS_linear"` are
+disjoint by construction, and a test checks it. A site in both would be
+regressed twice, by two different fits.
+
+## Verifying a change here
+
+```bash
+pixi run ts-baseline
+```
+
+`tests/ts-swc-baseline.R` freezes step-01 digests and a verbatim
+transcription of the step-02 substitution, as it stood at `b077bb9`, at 20
+sites: one per stage-A arm, the random-forest reconstruction included. It
+checks that the current selection path still reproduces them. It deliberately
+calls nothing in `R/`. Step 01 is cached per site, keyed by a digest of `R/`.
+Sites whose data has changed since the baseline was written are listed, and
+their digests are skipped.
 
 ## Future work
 

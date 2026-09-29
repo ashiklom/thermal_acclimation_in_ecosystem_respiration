@@ -2,7 +2,7 @@
 #
 # Everything below uses `write.csv`, never `readr::write_csv`. `write_csv` emits
 # ISO8601 timestamps (`1996-01-01T00:30:00Z`) which the downstream scripts, all
-# of which use default-format `read.csv`, cannot parse. See docs/derived-columns.md.
+# of which use default-format `read.csv`, cannot parse.
 
 DIR_ANALYSIS <- file.path("data-proc", "analysis")
 DIR_FEATURES <- file.path("data-proc", "features")

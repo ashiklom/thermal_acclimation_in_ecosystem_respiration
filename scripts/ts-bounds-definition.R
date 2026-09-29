@@ -20,7 +20,7 @@
 # window-skip test, so selecting a column silently changes the definition of
 # the gate as well as the data it is applied to.
 #
-# `docs/derived-columns.md` records that at US-Kon the bounds move from
+# `docs/soil-temperature.md` records that at US-Kon the bounds move from
 # 18.47/26.73 to 12.93/31.33 on substitution, and attributes the move to the
 # substitution. This script separates the two causes: how much of that gap is
 # the column changing, and how much is only the definition changing.

@@ -52,8 +52,8 @@ fill target declines at those sites for the same reason
 (`status = "no measured truth"`), so `fill_cv.csv` carries no rows for them.
 `site_info` is exempt — it is a declaration, and the manuscript's own two
 double-applications (FI-Sod, US-MBP) are the manuscript's. The prep-stage
-`ts_qc = sensor` strategy (*Future work*) is where a variant gets to act at
-these sites: qualify on the raw sensor, and there is a truth.
+`ts_qc = sensor` strategy (below) is where a variant gets to act at these
+sites: qualify on the raw sensor, and there is a truth.
 
 The verdict is computed by `ts_quality()` on the column step 01 leaves as
 `TS_measured` — *after* the site-specific column choices step 01 makes — because
@@ -78,14 +78,12 @@ the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
 - `whole_year` — a full year of DOY, starting where the site's growing year
   starts: 1–366 at an ordinary site, and 183–548 at one whose growing year is
   wrapped (`growing_year_start` in site_info.csv), so that the span is in the
-  same coordinates as the data. **Only the window layout changes.** The
-  detected season still drives the year gap scan (in step 01) and the
-  control-year choice, because both need a span to be defined over. See
-  *Future work*.
+  same coordinates as the data.
 
 Under every strategy **only the window layout changes**: the
 `detect_or_override` season still drives the year gap scan (in step 01) and the
-control-year choice, because both need a span to be defined over.
+control-year choice, because both need a span to be defined over. See
+*Future work*.
 
 ### `ts_qc`
 
@@ -143,24 +141,17 @@ Stan fits. Every axis whose choice can be deferred to step 02 is, so recipes
 that differ only in a *fit* choice share one step-01 result. Step 01 therefore
 produces every candidate soil-temperature column (`TS_measured`, `TS_linear`;
 `TS_memfill` comes from `site_fill`) and both bounds definitions for each, and a
-recipe *selects*. `RECIPE_PREP_AXES` names the axes that break this sharing;
-`_targets.R` asserts that every recipe in a run shares one prep key and says
-what to change when one does not.
+recipe *selects*. `RECIPE_PREP_AXES` names the axes that break this sharing:
+a recipe whose prep key differs from the manuscript's gets its own step 01 and
+fill per site (`site_data_v_*`, `site_fill_v_*`), which only its fits read.
 
 ## Scoping a run
 
-```
-THERMAL_SITES    dev (default) | all | DE-Tha,SE-Nor,...
-THERMAL_RECIPES  dev (default) | all | original,memfill,...
-THERMAL_MODELS   total,direct (default) | total | direct
-THERMAL_FIT      full (default) | fast
-```
-
-`fast` (`fit_settings("fast")`) shrinks the sampler to two chains and a few
-hundred iterations with no retry, so the whole pipeline — every recipe, every
-collector, both reports — runs end to end on a laptop in minutes. Its TAS
-values are smoke-test artefacts; `settings$fit_profile` records it and the
-report says so in a banner.
+`THERMAL_SITES`, `THERMAL_RECIPES`, `THERMAL_MODELS` and `THERMAL_FIT`; see the
+README. `THERMAL_FIT=fast` (`fit_settings("fast")`) shrinks the sampler to two
+chains and a few hundred iterations with no retry; its TAS values are
+smoke-test artefacts, which `settings$fit_profile` records and the reports
+flag.
 
 ## Adding things
 
@@ -196,16 +187,14 @@ independent of season detection altogether requires replacing two more uses of
    is closest to the long-term mean. Without a season, the natural replacement
    is the year whose mean TS *over the fitted windows* is closest to the mean.
 
-Both are `prep`-stage changes for (1) and a `fit`-stage change for (2); (1)
-needs a new `year_qc` strategy, which is the first recipe with a different prep
-key and therefore the first that needs `site_data` mapped over
-`crossing(site, prep_key)` — `_targets.R` names the spot.
+(1) is a `prep`-stage change — a new `year_qc` strategy, and so a new prep key
+with its own `site_data_v_*` — and (2) a `fit`-stage one.
 
 ### `year_qc = computed`
 
 Replace the manual `year_removed` list with a scored rule (gap statistics,
 u* coverage, residual anomalies), validated against the 20 sites that carry a
-hand list today. Same prep-key consequence as above.
+hand list today. Also a prep-stage change.
 
 ### `ts = era5`
 
