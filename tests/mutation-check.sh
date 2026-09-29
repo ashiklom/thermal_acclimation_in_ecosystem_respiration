@@ -33,8 +33,8 @@ add "FC mask via na_if (high 1)" \
     'ac <- dplyr::mutate(ac, NEE = dplyr::na_if(.data$NEE, is.na(a[[site_info[["FC"]]]])))'
 add "SWC_use presence test (high 2)" \
     R/ameriflux.R \
-    'if (isTRUE(site_info$SWC_use))' \
-    'if (!is.na(site_info$SWC_use))'
+    'if (isTRUE(site_info$SWC_use)) {' \
+    'if (!is.na(site_info$SWC_use)) {'
 add "AmeriFlux cut-off capped (high 3)" \
     R/growing-season.R \
     'uncapped = nee_min * 0.2,' \
@@ -44,7 +44,7 @@ add "FI-Sod/DE-RuC cut-off (high 3)" \
     'zero = 0.0' \
     'zero = max(nee_min * 0.2, -0.8)'
 add "ERA5 percent conversion (blocker 1)" \
-    R/total_tas.R \
+    R/era5.R \
     'SWC = .data$SWC * ERA5_SWC_TO_PERCENT' \
     'SWC = .data$SWC'
 add "splice keeps later product on overlap" \
@@ -69,18 +69,16 @@ add "flux columns typed character" \
     '.default = readr::col_character()'
 add "AmeriFlux table left a base data.frame" \
     R/ameriflux.R \
-    '  ) |>
-    tibble::as_tibble()
-  a[a == -9999] <- NA' \
-    '  )
-  a[a == -9999] <- NA'
+    'amerifluxr::amf_read_base(path, parse_timestamp = TRUE, unzip = TRUE) |>
+    tibble::as_tibble() |>' \
+    'amerifluxr::amf_read_base(path, parse_timestamp = TRUE, unzip = TRUE) |>'
 add "TS substitution wholesale, not overlaid" \
     R/soil-temp-columns.R \
-    '  ts[!is.na(ts_pred)] <- ts_pred[!is.na(ts_pred)]
-  ts
-}' \
-    '  ts_pred
-}'
+    '    overlay = {
+      ts[!is.na(estimate)] <- estimate[!is.na(estimate)]
+      ts
+    },' \
+    '    overlay = estimate,'
 add "TS fit domain loses the TA > 0 restriction" \
     R/soil-temp-columns.R \
     '    ac = ac[ac$TA > 0, ],' \
@@ -98,13 +96,13 @@ add "TS bounds taken from the nighttime table" \
     '  bounds <- ts_bounds(ac$TS, ac$DOY, gStart, gEnd)' \
     '  bounds <- ts_bounds(nightNEE$TS, nightNEE$DOY, gStart, gEnd)'
 add "TS selection ignored, always measured" \
-    R/soil-temp-columns.R \
-    '  dat[["TS"]] <- dat[[ts_col]]' \
-    '  dat[["TS"]] <- dat[["TS_measured"]]'
+    R/soil-temperature.R \
+    'dat[["TS_final"]] <- dat[[ts_col]]' \
+    'dat[["TS_final"]] <- dat[["TS_measured"]]'
 add "TS bounds fall back to the first row" \
     R/soil-temp-columns.R \
-    '  row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col, ]' \
-    '  row <- ts_bounds[1, ]'
+    'row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col & keep, ]' \
+    'row <- ts_bounds[1, ]'
 add "reanalysis SWC preferred over measured" \
     R/soil-water-columns.R \
     '  if (isTRUE(site_info[["SWC_use"]])) return("SWC_measured")
@@ -137,7 +135,7 @@ add "FI-Sod skip guard removed" \
     '  if (n_early == 0 || n_late == 0 || !any(bad)) {' \
     '  if (FALSE) {'
 add "FI-Sod windows widened to year boundaries" \
-    R/prepare-site-data.R \
+    R/soil-temperature.R \
     'FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
 FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")' \
     'FI_SOD_EARLY_WINDOW <- c("200101010000", "200512312330")
@@ -148,21 +146,25 @@ add "RH-to-VPD conversion flagged for every site" \
     'convert_rh <- TRUE'
 add "RH-to-VPD decision dropped from the result" \
     R/ameriflux.R \
-    'list(ac = ac, convert_rh = convert_rh)' \
-    'list(ac = ac)'
+    'list(ac = ac, convert_rh = convert_rh, ts_provenance = soil[["provenance"]])' \
+    'list(ac = ac, ts_provenance = soil[["provenance"]])'
 
 add "dev sample drops the random-forest site" \
     R/constants.R \
-    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo")' \
-    'DEV_SITES <- c("DE-RuC", "DE-Hte", "FI-Sod", "SE-Deg", "NL-Loo")'
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo", "US-Kon")' \
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "FI-Sod", "SE-Deg", "NL-Loo", "US-Kon")'
 add "dev sample drops the multi-product splices" \
     R/constants.R \
-    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo")' \
-    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm")'
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo", "US-Kon")' \
+    'DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "US-Kon")'
 add "unknown THERMAL_SITES falls back silently" \
     R/utils.R \
-    'stop("THERMAL_SITES must be \"dev\" or \"all\", not ", shQuote(scope), ".")' \
-    'return(handled)'
+    '    if (length(unknown)) {
+      stop(
+        "THERMAL_SITES names ' \
+    '    if (FALSE) {
+      stop(
+        "THERMAL_SITES names '
 
 add "structure-only run reports a fitted outcome" \
     R/total_tas.R \
@@ -174,8 +176,8 @@ add "structure-only run reports a fitted outcome" \
       outcome_siteyear = window_results_df,'
 add "structure-only years left without a status" \
     R/total_tas.R \
-    'year_result@status <- "not_fitted"' \
-    'year_result@status <- NA_character_'
+    'year_result$status <- "not_fitted"' \
+    'year_result$status <- NA_character_'
 add "year rejection: obs-count rule never fires" \
     R/total_tas.R \
     'if (nrow(data_subset) <= 25) {
@@ -207,14 +209,14 @@ add "year rejection: obs-count boundary off by one" \
 
 add "outcome tables written unsorted" \
     R/write-outputs.R \
-    'dplyr::bind_rows(lapply(list(...), `[[`, "outcome")) |>
-    dplyr::arrange(.data$site_ID)' \
-    'dplyr::bind_rows(lapply(list(...), `[[`, "outcome"))'
+    'dplyr::bind_rows(lapply(built(...), `[[`, "outcome")) |>
+    dplyr::arrange(dplyr::across(dplyr::any_of(c("site_ID", "recipe_id", "model"))))' \
+    'dplyr::bind_rows(lapply(built(...), `[[`, "outcome"))'
 add "growing-season features silently deduplicated away" \
     R/write-outputs.R \
-    'dplyr::bind_rows(lapply(list(...), `[[`, "feature_gs")) |>
+    'dplyr::bind_rows(lapply(built(...), `[[`, "feature_gs")) |>
     dplyr::arrange(.data$site_ID)' \
-    'dplyr::bind_rows(lapply(list(...), `[[`, "feature_gs"))[1, ]'
+    'dplyr::bind_rows(lapply(built(...), `[[`, "feature_gs"))[1, ]'
 
 caught=0; holes=0
 for i in "${!NAMES[@]}"; do
