@@ -171,6 +171,16 @@ product_file <- function(site, product) {
   hits
 }
 
+# Which rows' 12-digit TIMESTAMP_START (character, or numeric as
+# `amf_read_base()` parses it) lies in `window`, inclusive; NA is an open end.
+# YYYYMMDDHHMM is exact as a double, so the comparison is numeric.
+in_timestamp_window <- function(ts, window) {
+  ts <- as.numeric(ts)
+  lo <- as.numeric(window[[1]])
+  hi <- as.numeric(window[[2]])
+  (is.na(lo) | ts >= lo) & (is.na(hi) | ts <= hi)
+}
+
 # Parse simple `key = "value"` TOML lines.
 parse_toml <- function(path) {
   lines <- readLines(path, warn = FALSE)

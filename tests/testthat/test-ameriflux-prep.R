@@ -270,9 +270,9 @@ test_that("every AmeriFlux site's declared columns exist in its record", {
 
 test_that("site windows select by timestamp, with an open end", {
   a <- tibble::tibble(TIMESTAMP_START = c(201012312330, 201101010000, 202512312330))
-  expect_equal(ameriflux_in_window(a, US_MYB_WINDOW), c(FALSE, TRUE, TRUE))
+  expect_equal(in_timestamp_window(a$TIMESTAMP_START, US_MYB_WINDOW), c(FALSE, TRUE, TRUE))
   a <- tibble::tibble(TIMESTAMP_START = c(201701152130, 201701152200, 201701280800, 201701280830))
-  expect_equal(ameriflux_in_window(a, US_JO2_BAD_TA_WINDOW), c(FALSE, TRUE, TRUE, FALSE))
+  expect_equal(in_timestamp_window(a$TIMESTAMP_START, US_JO2_BAD_TA_WINDOW), c(FALSE, TRUE, TRUE, FALSE))
 })
 
 # The windows replaced row ranges; on the releases they were resolved against,
@@ -289,7 +289,7 @@ for (case in row_range_cases) {
     path <- file.path(DIR_RAWDATA, "Ameriflux", case$site, case$release)
     skip_if_not(file.exists(path), paste(case$release, "not on disk"))
     a <- suppressMessages(amerifluxr::amf_read_base(path, parse_timestamp = TRUE, unzip = TRUE))
-    got <- which(ameriflux_in_window(a, case$window))
+    got <- which(in_timestamp_window(a$TIMESTAMP_START, case$window))
     if (case$open_end) {
       expect_equal(got[seq_along(case$rows)], case$rows)
     } else {

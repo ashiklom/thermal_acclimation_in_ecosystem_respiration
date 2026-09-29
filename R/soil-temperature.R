@@ -426,8 +426,26 @@ ts_estimate_method <- function(site_info) {
 
 # ------------------------------------------------------------ recalibrated
 #
+# FI-Sod's shallow sensor is unreliable before 2006; the original rebuilt it
+# by chaining two regressions between depths, fitted on row ranges of one
+# release:
+#
+#   mod1 <- lm(data = a[1:24383, ],      TS_F_MDS_2 ~ TS_F_MDS_1)
+#   mod2 <- lm(data = a[90000:245000, ], TS_F_MDS_1 ~ TS_F_MDS_2)
+#
+# Row ranges select different dates -- or nothing -- on any other release.
+# These windows are those ranges resolved to timestamps on the manuscript's
+# file (FLUXNET2015 FULLSET HH, 2001-2014, 245,424 gap-free rows), so they
+# reproduce its coefficients exactly; a test checks that. Year boundaries
+# instead would be wrong: they move the early slope from 0.865 to 0.307 and
+# the rebuilt soil temperature by 8.13 C RMS.
+FI_SOD_TS_BAD_THROUGH <- 2005
+# a[1:24383, ] and a[90000:245000, ] of FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv
+FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
+FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")
+
 # FI-Sod before 2006: early-window shallow -> deep, then good-period deep ->
-# shallow. The windows and why they are what they are: `FI_SOD_*`.
+# shallow.
 recalibrate_fi_sod_soil_temp <- function(input, site_info) {
   name_site <- site_info[["site_ID"]]
   need_input(input, c("TS_depth2"), site_info, "the FI-Sod recalibration")
@@ -435,9 +453,8 @@ recalibrate_fi_sod_soil_temp <- function(input, site_info) {
   deep <- input$TS_depth2
   qc <- if ("TS_sensor_QC" %in% names(input)) input$TS_sensor_QC else rep(NA_real_, nrow(input))
 
-  in_window <- function(w) input$TIMESTAMP_START >= w[[1]] & input$TIMESTAMP_START <= w[[2]]
-  early <- in_window(FI_SOD_EARLY_WINDOW)
-  late <- in_window(FI_SOD_LATE_WINDOW)
+  early <- in_timestamp_window(input$TIMESTAMP_START, FI_SOD_EARLY_WINDOW)
+  late <- in_timestamp_window(input$TIMESTAMP_START, FI_SOD_LATE_WINDOW)
   # Verbatim from the original: fitted on windows, applied to whole years.
   bad <- input$YEAR <= FI_SOD_TS_BAD_THROUGH
 

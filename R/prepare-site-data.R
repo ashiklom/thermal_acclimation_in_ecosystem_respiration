@@ -61,24 +61,6 @@ read_spliced_products <- function(site_info) {
 }
 
 
-# FI-Sod's shallow sensor is unreliable before 2006; the original rebuilt it
-# by chaining two regressions between depths, fitted on row ranges of one
-# release:
-#
-#   mod1 <- lm(data = a[1:24383, ],      TS_F_MDS_2 ~ TS_F_MDS_1)
-#   mod2 <- lm(data = a[90000:245000, ], TS_F_MDS_1 ~ TS_F_MDS_2)
-#
-# Row ranges select different dates -- or nothing -- on any other release.
-# These windows are those ranges resolved to timestamps on the manuscript's
-# file (FLUXNET2015 FULLSET HH, 2001-2014, 245,424 gap-free rows), so they
-# reproduce its coefficients exactly; a test checks that. Year boundaries
-# instead would be wrong: they move the early slope from 0.865 to 0.307 and
-# the rebuilt soil temperature by 8.13 C RMS.
-FI_SOD_TS_BAD_THROUGH <- 2005
-# a[1:24383, ] and a[90000:245000, ] of FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv
-FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
-FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")
-
 prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   a <- read_spliced_products(site_info)

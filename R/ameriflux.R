@@ -13,49 +13,32 @@
 US_MYB_WINDOW <- c("201101010000", NA)
 US_JO2_BAD_TA_WINDOW <- c("201701152200", "201701280800")
 
-# Rows of an `amf_read_base()` table whose TIMESTAMP_START lies in `window`.
-# `amf_read_base()` parses TIMESTAMP_START as a number, and YYYYMMDDHHMM is
-# exactly representable as a double, so the comparison is done numerically.
-ameriflux_in_window <- function(a, window) {
-  ts <- as.numeric(a$TIMESTAMP_START)
-  lo <- as.numeric(window[[1]])
-  hi <- as.numeric(window[[2]])
-  (is.na(lo) | ts >= lo) & (is.na(hi) | ts <= hi)
+# A site's AmeriFlux BASE table, sentinels removed. A tibble, not
+# `amf_read_base()`'s data.frame: `a[[NA_character_]]` then errors at the
+# lookup instead of silently yielding NULL. REddyProc gives identical results
+# on either.
+read_ameriflux_base <- function(name_site) {
+  path <- product_file(name_site, "AmeriFlux_BASE")
+  if (is.na(path)) stop("No AmeriFlux BASE archive for ", name_site, " under ", DIR_RAWDATA, ".")
+  amerifluxr::amf_read_base(path, parse_timestamp = TRUE, unzip = TRUE) |>
+    tibble::as_tibble() |>
+    drop_sentinels()
 }
 
 prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
-  files_AmeriFlux_BASE <- list.files(
-    file.path(DIR_RAWDATA, "Ameriflux"), pattern = "^AMF_.*_BASE.*\\.zip$", full.names = TRUE, recursive = TRUE
-  )
-  file_path <- files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)]
-  stopifnot(length(file_path) == 1)
   message("Reading Ameriflux data...")
-  # A tibble, not `amf_read_base()`'s data.frame: `a[[NA_character_]]` then
-  # errors at the lookup instead of silently yielding NULL. REddyProc gives
-  # identical results on either.
-  a <- amerifluxr::amf_read_base(
-    file_path,
-    parse_timestamp = TRUE,
-    unzip = TRUE
-  ) |>
-    tibble::as_tibble()
-  a <- drop_sentinels(a)
+  a <- read_ameriflux_base(name_site)
 
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year.
-    a <- a[ameriflux_in_window(a, US_MYB_WINDOW), ]
+    a <- a[in_timestamp_window(a$TIMESTAMP_START, US_MYB_WINDOW), ]
     # combine TS data at two depth
     a$TS_2_1_1[is.na(a$TS_2_1_1)] <- a$TS_2_2_1[is.na(a$TS_2_1_1)] * 0.9324892 + 0.9077066
   }
 
   long_site <- site_info[["LONG"]]
   lat_site <- site_info[["LAT"]]
-
-  tz <- lutz::tz_offset(
-    as.Date("2000-01-01"),
-    lutz::tz_lookup_coords(lat = lat_site, lon = long_site, method = "accurate")
-  )
 
   sunrise_set <- site_sunlight_times(
     site_info,
@@ -88,19 +71,14 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   }
   if (name_site == "US-Jo2") {
     # TA data in this window has problems; use Tsonic data
-    bad_ta <- ameriflux_in_window(a, US_JO2_BAD_TA_WINDOW)
+    bad_ta <- in_timestamp_window(a$TIMESTAMP_START, US_JO2_BAD_TA_WINDOW)
     a$TA[bad_ta] <- a$T_SONIC[bad_ta] * 1.0183316 - 0.9299
   }
 
   if (name_site == "US-BZS") {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.
-    bzf_file <- files_AmeriFlux_BASE[grepl("US-BZF", files_AmeriFlux_BASE)]
-    stopifnot(length(bzf_file) == 1)
-    a_BZF <- amerifluxr::amf_read_base(bzf_file, parse_timestamp = TRUE, unzip = TRUE) |>
-      tibble::as_tibble()
-    a_BZF <- drop_sentinels(a_BZF)
     # Pair the two sites on the timestamp, not on position.
-    bzf_ta <- a_BZF |>
+    bzf_ta <- read_ameriflux_base("US-BZF") |>
       dplyr::select("TIMESTAMP", BZF = "TA_PI_F")
     calib <- a |>
       dplyr::select("TIMESTAMP", "YEAR", BZS = "TA_PI_F") |>
@@ -117,18 +95,11 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
     )
   }
 
-  if (name_site == 'US-Ha2') {
-    # combine data from two locations
-    a$FC_A_1_1 <- a$FC_1_1_1
-    a$FC_A_1_1[is.na(a$FC_A_1_1)] <- a$FC_2_1_1[is.na(a$FC_A_1_1)]
-    a$TA_A_1_1 <- a$TA_1_1_1
-    a$TA_A_1_1[is.na(a$TA_A_1_1)] <- a$TA_2_1_1[is.na(a$TA_A_1_1)]
-    a$PPFD_IN_A_1_1 <- a$PPFD_IN_1_1_1
-    a$PPFD_IN_A_1_1[is.na(a$PPFD_IN_A_1_1)] <- a$PPFD_IN_2_1_1[is.na(a$PPFD_IN_A_1_1)]
-    a$RH_A_1_1 <- a$RH_1_1_1
-    a$RH_A_1_1[is.na(a$RH_A_1_1)] <- a$RH_2_1_1[is.na(a$RH_A_1_1)]
-    a$USTAR_A_1_1 <- a$USTAR_1_1_1
-    a$USTAR_A_1_1[is.na(a$USTAR_A_1_1)] <- a$USTAR_2_1_1[is.na(a$USTAR_A_1_1)]
+  if (name_site == "US-Ha2") {
+    # Combine the two towers: the first where it has data, else the second.
+    for (v in c("FC", "TA", "PPFD_IN", "RH", "USTAR")) {
+      a[[paste0(v, "_A_1_1")]] <- dplyr::coalesce(a[[paste0(v, "_1_1_1")]], a[[paste0(v, "_2_1_1")]])
+    }
   }
 
   # Prepare data frame (ac) for u-star filtering
@@ -143,8 +114,6 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   )
   gStart <- gs$gStart
   gEnd <- gs$gEnd
-  tStart <- gs$tStart
-  tEnd <- gs$tEnd
 
   years <- unique(ac[["YEAR"]])
   # REddyProc wants real days of year, so unwrap the season bounds.
@@ -173,14 +142,11 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
 
   DTS <- 24 / as.numeric(dt, units = "hours")
   EProc <- REddyProc::sEddyProc$new(name_site, ac_u, c("NEE", "Rg", "Tair", "VPD", "Ustar"), DTS = DTS)
-  EProc$sSetLocationInfo(LatDeg = lat_site, LongDeg = long_site, TimeZoneHour = tz$utc_offset_h)
+  EProc$sSetLocationInfo(LatDeg = lat_site, LongDeg = long_site, TimeZoneHour = site_utc_offset(site_info))
 
   if (name_site == "US-ChR") {
     # use default season, and yearly threshold
     uStarTh <- EProc$sEstUstarThold()
-
-    EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
-    ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     # `many-to-one`: the positional `ac$uStarTh <- ac_u$uStar` below needs
     # the join to leave the row count alone (one threshold per year).
     ac_u <- ac_u |>
@@ -195,11 +161,6 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
       starts = seasonStarts
     )
     uStarTh <- EProc$sEstUstarThold(seasonFactor = ac_u$season)
-
-    # Gap-fill NEE with the annually aggregated u-star threshold (the
-    # default): some sites have no seasonal estimates.
-    EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
-    ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     ac_u <- ac_u |>
       dplyr::left_join(uStarTh[, c("season", "uStar")], by = "season",
                        relationship = "many-to-one")
@@ -207,6 +168,11 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   # Positional: `ac_u` descends from `ac` row for row and both joins are
   # guarded many-to-one.
   ac$uStarTh <- ac_u$uStar
+
+  # Gap-fill NEE with the annually aggregated u-star threshold (the default):
+  # some sites have no seasonal estimates.
+  EProc$sMDSGapFillAfterUstar("NEE", FillAll = FALSE, isVerbose = FALSE)
+  ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
 
   # `gs` is returned, not recomputed downstream, because the u-star season
   # factor was built from it.
@@ -265,14 +231,9 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
   ac <- a |>
     dplyr::select("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "TIMESTAMP", "TIMESTAMP_END")
 
+  # `NEE` may be a `+`-separated sum of columns.
   NEEvars <- trimws(unlist(strsplit(site_info$NEE, "\\+")))
-  for (iNEEvar in seq_along(NEEvars)) {
-    if (iNEEvar == 1) {
-      ac$NEE <- a[[NEEvars[iNEEvar]]]
-    } else {
-      ac$NEE <- ac$NEE + a[[NEEvars[iNEEvar]]]
-    }
-  }
+  ac$NEE <- Reduce(`+`, lapply(NEEvars, function(v) a[[v]]))
 
   # remove the NEE data without FC measurements
   if (!is.na(site_info[["FC"]])) {
@@ -373,20 +334,15 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
 # are fixed-offset with an inverted sign, and exist only at whole hours
 # (every AmeriFlux site is UTC-4 to UTC-9), hence the check.
 site_sunlight_times <- function(site_info, dates) {
-  tz <- lutz::tz_offset(
-    as.Date("2000-01-01"),
-    lutz::tz_lookup_coords(
-      lat = site_info[["LAT"]], lon = site_info[["LONG"]], method = "accurate"
-    )
-  )
-  if (tz$utc_offset_h != round(tz$utc_offset_h)) {
+  offset <- site_utc_offset(site_info)
+  if (offset != round(offset)) {
     stop(
       "Site ", site_info[["site_ID"]], " has a fractional UTC offset (",
-      tz$utc_offset_h, " h), which cannot be expressed as an Etc/GMT zone. ",
+      offset, " h), which cannot be expressed as an Etc/GMT zone. ",
       "Day/night classification needs a fixed-offset zone for this site."
     )
   }
-  tz_site <- sprintf("Etc/GMT%+d", -as.integer(tz$utc_offset_h))
+  tz_site <- sprintf("Etc/GMT%+d", -as.integer(offset))
 
   sunrise_set <- suncalc::getSunlightTimes(
     date = dates,
@@ -398,4 +354,10 @@ site_sunlight_times <- function(site_info, dates) {
   sunrise_set$sunrise <- lubridate::force_tz(sunrise_set$sunrise, "UTC")
   sunrise_set$sunset <- lubridate::force_tz(sunrise_set$sunset, "UTC")
   sunrise_set
+}
+
+# The site's standard-time UTC offset in hours (no daylight saving).
+site_utc_offset <- function(site_info) {
+  zone <- lutz::tz_lookup_coords(lat = site_info[["LAT"]], lon = site_info[["LONG"]], method = "accurate")
+  lutz::tz_offset(as.Date("2000-01-01"), zone)$utc_offset_h
 }
