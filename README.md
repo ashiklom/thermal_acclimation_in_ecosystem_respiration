@@ -1,91 +1,43 @@
 # Strength and drivers of thermal responses in ecosystem respiration
 
-## Project objectives:
+## Project objectives
 
-**1.** Develop algorithms to estimate site-specific total and direct thermal response strength in ecosystem respiration (ER) using global eddy-covariance data.
+1. Develop algorithms to estimate site-specific total and direct thermal response strength in ecosystem respiration (ER) using global eddy-covariance data.
+2. Estimate total and direct thermal response strength at 117 terrestrial ecosystems.
+3. Identify drivers of total and direct thermal response strength.
+4. Predict how thermal responses will influence future warming-induced change in ER.
 
-**2.** Estimate total and direct thermal response strength at 117 terrestrial ecosystems.
+## Setup
 
-**3.** Identify drivers of total and direct thermal response strength.
+Everything runs inside a [pixi](https://pixi.sh) environment:
 
-**4.** Predict how thermal responses will influence future warming-induced change in ER.
-
-## Prerequisites
-
-Downloading the data required for this analysis requires (free) accounts with the relevant data providers.
-These are configured via the `_creds.toml` file, which has the following structure:
-
-```toml
-user_id = "myusername"
-user_email = "my.name@email.com"
-cds_api_key = "12345-67-890ab"
+```bash
+pixi install     # R, Python, cmdstan and the packages available on conda-forge
+pixi run deps    # the rest, from CRAN/GitHub: amerifluxr, REddyProc, gslnls, base64url
+pixi run test    # unit tests, about a minute
 ```
 
-The fields are as follows:
+`pixi run deps` is not optional. Those four packages are not on conda-forge,
+and the conda-forge build of base64url is broken on osx-arm64; see
+`dependencies.R`.
 
-- `user_id` --- the username associated with the Ameriflux data portal.
-- `user_email` --- the email associated with the Ameriflux data portal.
-- `cds_api_key` --- the API key associated with your Copernicus Data Store (CDS) account.
+Downloading the data needs (free) accounts with the data providers,
+configured in `_creds.toml` at the project root:
 
-## Structure of R Scripts in *workflows*:
+```toml
+user_id = "myusername"               # AmeriFlux data portal
+user_email = "my.name@email.com"     # AmeriFlux data portal
+cds_api_key = "12345-67-890ab"       # Copernicus Data Store (ERA5-Land)
+appeears_token = "..."               # NASA AppEEARS bearer token; see docs/data-provenance.md
+```
 
-1.  Data Preparation for the Estimates of Thermal Response Strength
+## Running the pipeline
 
--   `01_01_estimate_soil_temperature_at_some_sites.R`:
-    -   Estimates top soil (\<10 cm) temperature at sites with lots of missing soil temperature data.
-    -   Exports 16 csv files containing predicted soil temperature for 16 sites with incomplete soil temperature measurements. csv files are saved as SITE_TS_rfp.csv, where SITE is the name of the site.
--   `01_02c_filter_high_quality_night_respiration_ICOS.R` and `01_02d_filter_high_quality_night_respiration_TERN.R`:
-    -   Prepare source-specific normalized ICOS and TERN data for fitting temperature-respiration curves.
-    -   Export per-site respiration files and source-specific growing-season feature tables.
--   `01_02b_filter_high_quality_night_respiration_AmeriFlux`:
-    -   Prepares data for fitting temperature-respiration curves for 71 AmeriFlux sites.
-    -   Exports 71 csv files containing gap-filled subhourly meteorological and NEE time series (one file per site).
-    -   Exports 71 csv files containing measured high-quality subhourly nightlight NEE and corresponding meteorological data (one file per site).
-    -   Exports 1 csv file containing the start and end date of growing seasons at all AmeriFlux sites.
-
-2.  Calculate Thermal Response Strength (TAS) for All Sites
-
--   `02_01a_estimate_total_TAS_use_moving_window.R`:
-    -   Run `02_00_build_cross_site_prior.R` first to persist the total-model priors across available sites.
-    -   Estimates *total* thermal response strength in ecosystem respiration using moving window methods.
-    -   Exports 2 csv files (outcome_siteyear_temp.csv and outcome_temp.csv) containing estimated *total* thermal response strength (TAS) for all sites.
--   `02_01b_estimate_direct_TAS_use_moving_window.R`:
-    -   Estimates *direct* thermal response strength in ecosystem respiration using moving window methods.
-    -   Exports 2 csv files (outcome_siteyear_temp_water_gpp.csv and outcome_temp_water_gpp.csv) containing estimated *direct* thermal response strength (TAS) for all sites.
--   `02_02_compare_different_TAS.R`:
-    -   Explores how *total* and *direct* thermal response strengths vary with climate class and vegetation class.
-    -   No export.
--   `02_03_simulation_test_identifiability_indirect_effects.R`:
-    -   a simulation experiment to demonstrate that direct and indirect thermal responses can be disentangled with known contributions
-    -   exports two csv files (simulation_identifiability_replications.csv and simulation_identifiability_summary.csv) containing parameter estimates of each replicate and summarized total, direct, indirect thermal response estimates of each scenario.
-    -   exports one figure on identified direct and indirect effects in the figures folder (tas_identifiability_simulation.png)
-
-3.  Identify Drivers of Total and Direct Thermal Response Strength
-
--   `03_01_prepare_data_for_driver_analysis.R`:
-    -   Obtains environmental and biological conditions potentially affecting thermal response strength
-    -   The information includes climate, soil organic carbon, and remotely sensed GPP, LAI, and vegetation index.
-    -   Exports 1 csv file (acclimation_data.csv) containing climate, soil, and vegetation conditions at all sites.
--   `03_02_identify_thermal_response_driver.R`:
-    -   Identifies drivers of direct and total thermal response strength using random forests.
-    -   Exports 2 csv files. One records relative importance of predictors (varImp_plot.csv). The other contains data for making partial dependence plot (partial_plot.csv).
-
-4.  Calculate Effects of Total Thermal Response on Future Ecosystem Respiration
-
--   `04_01_get_future_night_soil_temperature_change.R`:
-    -   Estimates monthly nighttime air temperature change from the current (2000-2020) to the future (2041-2060) under medium emission scenario.
-    -   Exports 1 csv file containing projected future changes in monthly nighttime air temperature at all sites (Tmin_month_ssp245_wc.csv).
--   `04_02_thermal_response_effect_on_future_ecosystem_respiration.R`:
-    -   Estimates the effects of *total* thermal responses on future (2041-2060) ecosystem respiration at all sites.
-    -   Exports 1 csv file containing projected future nighttime ecosystem respiration, with and without considering thermal response strength (acclimation_data_future_ssp245.csv).
-
-## Running the `targets` pipeline
-
-The pipeline in `_targets.R` produces the thermal-response estimates under
-several **methodology recipes** side by side — the manuscript's logic
-(`original`) and the variants derived from the soil-temperature analysis — and
-compares them in `reports/variant-comparison.qmd`. See `docs/recipes.md` for
-what a recipe is and how to add one.
+`_targets.R` downloads the flux data, prepares it (step 01), and estimates
+thermal response strength (step 02). It does this under several
+**methodology recipes** side by side: the manuscript's logic (`original`)
+and the variants derived from the soil-temperature analysis. It then
+compares them in `reports/variant-comparison.qmd`. See `docs/recipes.md`.
 
 Every dimension of the run is an environment variable:
 
@@ -100,42 +52,54 @@ THERMAL_FIT      full (default) | fast
 # smoke test, minutes: two sites, every recipe, total model, shrunken sampler
 THERMAL_SITES=DE-RuC,DE-Hte THERMAL_RECIPES=all THERMAL_MODELS=total THERMAL_FIT=fast pixi run targets
 
-# the full grid, on the cluster (submit.sh sets these)
-THERMAL_SITES=all THERMAL_RECIPES=all pixi run targets
+# the full grid, on the cluster
+sbatch submit.sh
 ```
 
-`THERMAL_FIT=fast` exists to prove the pipeline runs end to end; its TAS values
-are not results and the reports say so. Rendered reports land in `reports/`.
+`THERMAL_FIT=fast` only proves the pipeline runs end to end. Its TAS values
+are not results, and the reports say so. The rendered reports land in
+`reports/`. Running on YCRC is covered in `docs/running-on-ycrc.md`.
 
-## How to reproduce the workflow:
+## Keeping the data current
 
-1.  Download all following raw data required for this project (All data have been uploaded on Zenodo with DOI: 10.5281/zenodo.18095996; please use data from the most recent release to match script updates).
+```bash
+scripts/scan-and-run.sh
+```
 
--   raw eddy covariance data from AmeriFlux_BASE, ICOS (Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1), and TERN normalized downloads
+This asks every provider what it publishes and exits within a minute if
+nothing changed. If something did, it runs the pipeline, which re-downloads
+and refits only the affected sites. See docs/data-provenance.md,
+"Keeping it current automatically". Known limitations are listed in
+`docs/issues.md`.
 
--   ERA5-Land daily soil water content data in 1990-2024 for all sites
+## Downstream analysis (`workflows/`)
 
--   global soil carbon stock map from FAO soils portal
+These scripts run by hand, in order, after the pipeline. They read what it
+writes to `data-proc/`.
 
--   remotely sensed vegetation index (NDVI and EVI), gpp, lai, and fpar for all sites using site coordinates from NASA earth data
+| script | reads | writes |
+|---|---|---|
+| `02_02_compare_different_TAS.R` | `outcome_temp*.csv` | nothing (prints tests and plots) |
+| `02_03_simulation_test_identifiability_indirect_effects.R` | nothing (a simulation) | `simulation_identifiability_*.csv`, `figures/tas_identifiability_simulation.png` |
+| `03_01_prepare_data_for_driver_analysis.R` | the outcome tables, `respiration/`, BIF, GSOC, MODIS | `acclimation_data.csv` |
+| `03_02_identify_thermal_response_driver.R` | `acclimation_data.csv` | `varImp_plot.csv`, `partial_plot.csv` |
+| `04_01_get_future_night_soil_temperature_change.R` | WorldClim tmin | `Tmin_month_ssp245_wc.csv` |
+| `04_02_thermal_response_effect_on_future_ecosystem_respiration.R` | `acclimation_data.csv`, `Tmin_month_ssp245_wc.csv`, `respiration/`, growing-season features | `acclimation_data_future_ssp245.csv` |
 
--   BADM Data Product of all AmeriFlux sites
+The external inputs (BIF, GSOC, WorldClim) are pipeline targets. MODIS comes
+from `pixi run download-appeears`; see docs/data-provenance.md.
 
--   future global climate data from worldclimate
+## Documentation
 
-2.  Use the **site_info.csv** file in *data* folder to run every script.
-
--   This file includes basic information for each site, including lat, long, IGBP, climate class, availability of measured SWC, and key variable names in each raw flux file
--   It is pre-required to run all the workflows from the step 01_01.
-
-3.  **cmdstanr** should be installed in order to run some scripts in the *workflows* folder. Please refer to this page for *cmdstanr* installment. <https://mc-stan.org/cmdstanr/articles/cmdstanr.html>
-
-4.  The instruction of installing the package **amerifluxr**, as it was taken off CRAN: *devtools::install_github("chuhousen/amerifluxr")*
-
-5.  Scripts in the *workflows* folder should be executed in numerical order. The scrips that share the same number but have different letters (e.g., 01_02a and 01_02b) can be run in parallel.
-
-6.  In the beginning of each script, it states the approximate time for running that script. The time is tested on a Mac mini, so it may vary on different computers.
+- `docs/recipes.md`: recipes, their axes, and how to add one.
+- `docs/soil-temperature.md`: how the soil-temperature and soil-water columns the model sees come to exist.
+- `docs/growing-year.md`: sites whose growing season crosses New Year.
+- `docs/data-provenance.md`: where each site's flux data comes from, and how it is kept current.
+- `docs/running-on-ycrc.md`: cluster settings and sizing.
+- `docs/issues.md`: known issues left as they are.
+- `docs/ts-rework.html`, `docs/ts-variants.html`: the soil-temperature analysis (findings F1–F13) and the log of building the recipe grid.
 
 ## Demonstration data and scripts for one site: US-Kon
 
-Please refer to the *README* file in the "Demo_code_data_for_1site" folder.
+See the README in `Demo_code_data_for_1site/`. It is the original authors'
+self-contained demonstration, using their scripts rather than this pipeline.
