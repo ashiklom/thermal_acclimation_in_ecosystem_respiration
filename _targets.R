@@ -5,89 +5,34 @@ library(crew.cluster)
 
 tar_source()
 
-# Each brms fit runs `N_CORES` chains in parallel, so `workers * N_CORES` is the
-# peak thread demand. But a fit is not 4-cores-busy for its whole life -- much
-# of a target is serial R work -- so sizing workers at cores/N_CORES leaves the
-# machine idle and costs wall time. Measured on the six-site sample, 18 cores:
+# ------------------------------------------------------------ controllers
 #
-#   workers=10  load avg 60  sum of target times 223.0 min  wall 49.9 min
-#   workers=4   load avg 13  sum of target times 154.0 min  wall 59.8 min
-#
-# So 4 made each fit 31% faster and the whole run 20% slower: 12 targets over 4
-# workers is three scheduling waves, where 10 ran nearly all at once. 8 is the
-# midpoint and is *not yet benchmarked* -- worth timing the next time a full
-# run happens anyway.
+# Local: 8 workers, each fit running `N_CORES` chains. Slurm (YCRC): one job
+# per worker, sized by `THERMAL_SLURM_WORKERS`/`THERMAL_SLURM_MINUTES`, which
+# `submit.sh` sets. Every setting below was learned from a failed run; see
+# docs/running-on-ycrc.md before changing one.
 local <- crew_controller_local(workers = 8)
-# Worker count and worker wall time are knobs because the full grid's cost sits
-# near one scheduler window -- see docs/ts-variants.html "Running it" for the
-# arithmetic, and `submit.sh` for the numbers a full run uses. Both are read
-# here, at pipeline definition, and neither enters any target's command.
-#
-# Keep `THERMAL_SLURM_MINUTES` at or above the controller's own `--time`.
-# Workers all launch at the start of the run, so a worker limit shorter than
-# the controller's kills every one of them at the same moment, mid-fit, and
-# makes crew resubmit the whole fleet at once against a busy partition.
-#
-# `cpus_per_task`, not `n_tasks`. `n_tasks = 4` emits `--ntasks=4`, which asks
-# for four CPUs but places no locality constraint on them: on the first full
-# run, only 26 of 68 workers got all four on one node and the rest were spread
-# over two to four. brms runs its `N_CORES` chains as local processes inside
-# the one R session, which lives on a single node, so those workers were
-# sampling four chains on the one or two CPUs they held there. `--ntasks=1
-# --cpus-per-task=4` is what the comment above always meant.
-#
-# Worker logs are not optional. The 2026-09-22 run lost 87 of its 96 workers
-# in the first four seconds and the pipeline then sat for 22 hours having
-# completed nothing, because crew only rescales on a task completion and there
-# were none. The cause had to be reconstructed from `sacct` placement data,
-# since crew.cluster defaults `log_output` and `log_error` to /dev/null and
-# every abort message had gone there. An absolute path, because the worker's
-# working directory is inherited from wherever `sbatch` ran, not set here.
+
+# Absolute, because a worker inherits its working directory from `sbatch`.
 crew_log_dir <- file.path(getwd(), "_logs")
 dir.create(crew_log_dir, showWarnings = FALSE, recursive = TRUE)
 slurm <- crew_controller_slurm(
   workers = as.integer(Sys.getenv("THERMAL_SLURM_WORKERS", "20")),
-  # Hand idle workers back instead of holding them through the tail of the run,
-  # when there are fewer tasks left than workers. crew relaunches on demand.
   seconds_idle = 600,
-  # Plain TCP between controller and workers, not crew's default self-signed
-  # TLS. This is from an earlier encounter on this cluster, not from the
-  # 2026-09-22 failure: TLS was implicated in Slurm workers being terminated
-  # far sooner than they should have been, somewhere low in crew's
-  # dependencies (the nanonext/mbedtls layer) and not pinned down beyond
-  # "turning it off made it stop". Recorded here so the next person does not
-  # re-enable it casually -- if it goes back on, watch for workers dying
-  # early rather than for anything that looks like a certificate problem.
-  #
-  # The cost is that task payloads cross the cluster interconnect in the
-  # clear. That is flux tower data on an internal HPC network, so the trade is
-  # an easy one, but it is a trade.
+  # TLS was implicated in workers dying early on this cluster.
   tls = crew::crew_tls(mode = "none"),
   options_cluster = crew_options_slurm(
+    # Keep at or above the controller's own --time in submit.sh.
     time_minutes = as.integer(Sys.getenv("THERMAL_SLURM_MINUTES", "1425")),
+    # One task with N_CORES CPUs, so brms's chains share one node.
     n_tasks = 1,
     cpus_per_task = N_CORES,
-    # `%A_%a` -- crew.cluster submits each batch of workers as one job array,
-    # so the array ID plus the task ID is what identifies a worker.
+    # `%A_%a`: crew.cluster submits each batch of workers as a job array.
     log_output = file.path(crew_log_dir, "crew-%A_%a.out"),
     log_error = file.path(crew_log_dir, "crew-%A_%a.err"),
-    # Ask for memory rather than taking the partition default. Under the
-    # default the workers of the first full run got 20 GB and the biggest of
-    # them peaked at 20971 MB -- flat against the ceiling -- so several were
-    # OUT_OF_MEMORY-killed mid-fit. 32 GB is the observed peak plus room for
-    # the sites that never got far enough to report one.
     memory_gigabytes_required = 32,
-    # The instant-abort fix. This R links pthreads OpenBLAS
-    # (`libopenblasp-r0.3.33.so`), which sizes its thread pool from the
-    # machine's core count and ignores the cgroup: a worker holding 4 CPUs on
-    # a 96-core node still tried to start ~96 BLAS threads. That is survivable
-    # alone and fatal in a crowd -- on 2026-09-22 every one of the 24 workers
-    # that landed on a1130u31n04 and all 16 on a1132u35n03 aborted (exit 134)
-    # about a second in at ~120 MB RSS, which is R and BLAS loaded and nothing
-    # else, while nodes that drew one or two workers kept them. Stan does the
-    # actual arithmetic here and `backend = "cmdstanr"` runs each chain as its
-    # own single-threaded process, so capping BLAS threads costs the fits
-    # nothing.
+    # pthreads OpenBLAS sizes its pool from the node's cores, not the job's;
+    # uncapped, crowded workers abort on start. Stan does the arithmetic.
     script_lines = c(
       "export OPENBLAS_NUM_THREADS=1",
       "export OMP_NUM_THREADS=1"
@@ -97,18 +42,11 @@ slurm <- crew_controller_slurm(
 )
 
 fqdn <- system2("hostname", stdout = TRUE)
-# No global `cue = tar_cue("never")`. It was a development escape hatch from
-# when every run meant hours of Stan sampling, but as a default it means a code
-# fix to `prep_nee_ac()` invalidates nothing downstream, and the results table
-# ends up assembled from two different versions of the code. targets already
-# skips unchanged work; the way to make a run affordable is to run fewer sites,
-# which is what `pipeline_sites()` does.
-# `error = "null"`, not `"continue"`. Under `continue` an errored fit still
-# stops every target downstream of it -- the collectors, and so both reports --
-# with "could not load dependency"; one site's failure then costs the run its
-# tables. Under `null` the errored target's value is NULL, the collectors drop
-# it (`built()` in R/write-outputs.R), and the failure is a gap in the tables
-# plus a row in `tar_meta(fields = error)`, which is where a failure belongs.
+# `error = "null"`: an errored target's value is NULL, the collectors drop it
+# (`built()` in R/write-outputs.R), and one site's failure is a gap in the
+# tables plus a row in `tar_meta(fields = error)`. Under "continue" it would
+# stop the collectors and both reports. No global `cue = "never"`: a code fix
+# has to invalidate what it touches; run fewer sites to make a run cheap.
 tar_option_set(
   error = "null",
   controller = if (grepl("ycrc.yale.edu", fqdn, fixed = TRUE)) slurm else local
@@ -116,18 +54,9 @@ tar_option_set(
 
 # ----------------------------------------------------------------- the grid
 #
-# Three dimensions, each scoped by an environment variable so that a run can
-# be as small as one site x one recipe x one model on a laptop or the whole
-# grid on the cluster, from the same file:
-#
-#   THERMAL_SITES    dev (default) | all | DE-Tha,SE-Nor,...
-#   THERMAL_RECIPES  dev (default) | all | original,memfill,...
-#   THERMAL_MODELS   total,direct (default) | total | direct
-#   THERMAL_FIT      full (default) | fast   -- see fit_settings()
-#
-# `fast` shrinks the sampler so the entire pipeline can be exercised end to
-# end in minutes. Its TAS values are smoke-test artefacts; the settings table
-# and the report both say so.
+# Sites x recipes x models, each scoped by an environment variable (see
+# docs/recipes.md). THERMAL_FIT=fast shrinks the sampler for smoke tests;
+# its TAS values are not results.
 sites <- pipeline_sites()
 recipes <- pipeline_recipes()
 models <- pipeline_models()
@@ -142,13 +71,11 @@ message(
 message("  sites:   ", paste(sites, collapse = ", "))
 message("  recipes: ", paste(recipes, collapse = ", "))
 
-# Step 01 is shared across recipes with the same *prep key* -- the axes in
-# `RECIPE_PREP_AXES`. The manuscript's prep is the pipeline's spine: one
-# `site_data` per site, always built under `original_recipe()`, and it is
-# what every collector, the manuscript-layout outputs and the `workflows/`
-# scripts read. A recipe whose prep key differs gets its own step 01 per site
-# (`site_data_v_*` / `site_fill_v_*` below) that only its fits read, so
-# nothing about the manuscript's run moves when a variant is added.
+# Step 01 is shared across recipes with the same prep key (`RECIPE_PREP_AXES`).
+# The manuscript's prep is the spine: one `site_data` per site, which every
+# collector, the manuscript-layout outputs and `workflows/` read. A recipe
+# with a different prep key gets its own `site_data_v_*`/`site_fill_v_*` that
+# only its fits read.
 sanitize <- function(x) gsub("-", ".", x, fixed = TRUE)
 prep_of <- vapply(recipes, function(r) recipe_prep_key(get_recipe(r)), "")
 variant_preps <- tibble::tibble(prep_key = setdiff(unique(prep_of), MANUSCRIPT_PREP_KEY())) |>
@@ -161,25 +88,41 @@ if (nrow(variant_preps)) {
   message("  variant step-01 preps: ", paste(variant_preps$prep_key, collapse = ", "))
 }
 
-# Per-site, recipe-independent: the declaration, the download, step 01, and
-# the soil-temperature reconstruction the `memory_fill` recipes read.
+# ---------------------------------------------------------------- inputs
+
+# What every provider publishes, as of the last scan. The scan runs outside
+# the pipeline (`scripts/scan-and-run.sh`) and rewrites the file only when
+# something changed; see R/remote-catalog.R.
+remote_targets <- list(
+  tar_file(remote_catalog_file, ensure_remote_catalog(site_info_file)),
+  tar_target(remote_catalog, read_remote_catalog(remote_catalog_file), deployment = "main")
+)
+
+# Non-flux inputs for `workflows/`. Each downloader returns at once when the
+# data is on disk. MODIS (AppEEARS) is not here: it is an asynchronous
+# submit/poll/download cycle; see docs/data-provenance.md.
+external <- list(
+  tar_file(ameriflux_bif_file, download_ameriflux_bif()),
+  tar_file(gsoc_file, download_gsoc()),
+  tar_file(worldclim_files, download_worldclim())
+)
+
+# ------------------------------------------------------------- per site
+
+# Recipe-independent: the declaration, the download, step 01, and the
+# soil-temperature reconstruction the `memory_fill` recipes read.
 site_targets <- tar_map(
   values = tibble::tibble(site_name = sites),
-  # One read of the site declaration per site, threaded into every stage that
-  # needs it. It depends on `site_info_file`, so editing site_info.csv
-  # invalidates exactly the sites whose row could have changed.
+  # Depends on `site_info_file`, so an edit invalidates only the sites it touches.
   tar_target(site_info, get_site_info(site_name, path = site_info_file)),
-  # This site's slice of the remote catalogue. Compared by value, so a site
-  # whose providers published nothing new is up to date from here down.
+  # Compared by value: a site whose providers published nothing new stays
+  # up to date from here down.
   tar_target(site_remote, remote_for_site(remote_catalog, site_name), deployment = "main"),
-  # Runs again whenever `site_remote` changes, but its value is the files'
-  # hashes: a run that re-fetches nothing, or fails and restores the old copy,
-  # leaves everything downstream up to date.
+  # Its value is the files' hashes, so a re-fetch of identical bytes (or a
+  # failed update that restores the old copy) invalidates nothing.
   tar_target(site_dl, download_site(site_info, remote = site_remote), format = "file"),
-  # Step 01 in two parts: the expensive prep, then the ERA5 soil water joined
-  # on. Separate so that extending the ERA5 file -- which happens whenever any
-  # site's flux record outruns it -- only re-runs the cheap join, and only at
-  # the sites whose own days gained values. See `site_era5_swc()`.
+  # Step 01 in two parts, so that extending the ERA5 file re-runs only the
+  # cheap join, and only where the site's own days gained values.
   tar_target(site_prep, {site_dl; prep_nee_ac(site_info, era5 = NULL)}, format = "qs"),
   tar_target(site_end, site_record_end(site_prep)),
   tar_target(site_era5, site_era5_swc(site_prep, site_name, path = era5_swc_file, table = era5_swc_tbl)),
@@ -195,15 +138,13 @@ era5_targets <- list(
   tar_target(era5_swc_tbl, load_era5_table(era5_swc_file), format = "qs")
 )
 
-# One target per recipe, read from the registry file so that editing a row
-# invalidates exactly the fits made under it.
+# One target per recipe, so editing a row invalidates only its fits.
 recipe_targets <- tar_map(
   values = tibble::tibble(recipe_id = recipes),
   tar_target(recipe, get_recipe(recipe_id, path = recipes_file))
 )
 
-# Step 01 and the fill under each variant prep key, per site. The recipe is
-# threaded in for its prep axes; everything else about it is ignored here.
+# Step 01 and the fill under each variant prep key, per site.
 variant_prep_grid <- tidyr::crossing(site_name = sites, variant_preps) |>
   dplyr::mutate(
     site_info_sym = rlang::syms(paste0("site_info_", sanitize(.data$site_name))),
@@ -223,9 +164,10 @@ variant_prep_targets <- if (nrow(variant_prep_grid)) {
   list()
 }
 
-# The fits: sites x recipes x models. The per-site inputs are referenced as
-# symbols built from the site name, the same device `write_respiration_all()`
-# already relies on, so a fit target depends on exactly its own site's data.
+# ----------------------------------------------------------------- fits
+
+# Sites x recipes x models. Per-site inputs are referenced as symbols built
+# from the site name, so a fit depends on exactly its own site's data.
 grid <- tidyr::crossing(site_name = sites, recipe_id = recipes, model = models) |>
   dplyr::mutate(
     prep_key = unname(prep_of[.data$recipe_id]),
@@ -259,10 +201,8 @@ fit_targets <- tar_map(
 
 # ------------------------------------------------------------- collectors
 #
-# Everything is combined once, over the whole grid, with `recipe_id` and
-# `model` as columns. The manuscript-layout files the `workflows/` scripts
-# read are the `original` recipe's slice of those tables, so they keep their
-# names and their column contract.
+# Combined once over the whole grid, with `recipe_id` and `model` as columns.
+# The manuscript-layout files `workflows/` reads are the `original` slice.
 tas_all <- fit_targets$site_tas
 
 combined <- list(
@@ -328,41 +268,12 @@ outputs <- list(
   )))
 )
 
-# External inputs the downstream `workflows/` scripts need. Each downloader
-# returns quietly when the data is already on disk, so these are cheap to keep
-# in the graph -- the cost is re-hashing ~4.8 GB of raster on each run, which is
-# a few seconds and buys proper invalidation if a file is replaced.
-#
-# MODIS/AppEEARS is deliberately absent from this list: it's an asynchronous
-# submit/poll/download task rather than a single blocking fetch, so it doesn't
-# fit the `tar_file()` pattern here. Use `pixi run download-appeears submit`,
-# then `... download` days later; `03_01` degrades to NA spectral predictors
-# without it. See
-# docs/data-provenance.md.
-external <- list(
-  tar_file(ameriflux_bif_file, download_ameriflux_bif()),
-  tar_file(gsoc_file, download_gsoc()),
-  tar_file(worldclim_files, download_worldclim())
-)
-
-# Two reports. `tar_quarto()` scans each document for `tar_read`/`tar_load`
-# calls and makes each one a dependency, so a report re-renders whenever the
-# results it describes change rather than going quietly stale.
-#
+# `tar_quarto()` makes every literal `tar_read()` in a report a dependency.
 #   run_report      the `original` recipe's run, against the manuscript.
-#   variant_report  every recipe against `original` and against the
-#                   manuscript oracle, with per-site provenance.
+#   variant_report  every recipe against `original` and the manuscript.
 reports <- list(
   tar_quarto(run_report, path = "reports/pipeline-report.qmd", quiet = FALSE),
   tar_quarto(variant_report, path = "reports/variant-comparison.qmd", quiet = FALSE)
-)
-
-# What every provider publishes, as of the last scan. The scan itself runs
-# outside the pipeline (`scripts/scan-and-run.sh`) and rewrites the file only
-# when something changed; see R/remote-catalog.R for why.
-remote_targets <- list(
-  tar_file(remote_catalog_file, ensure_remote_catalog(site_info_file)),
-  tar_target(remote_catalog, read_remote_catalog(remote_catalog_file), deployment = "main")
 )
 
 list(
