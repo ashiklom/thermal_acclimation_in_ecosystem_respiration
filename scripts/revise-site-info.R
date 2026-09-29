@@ -4,22 +4,6 @@ library(tibble)
 
 sites <- read_csv("data-core/site_info_orig.csv")
 
-# sites |>
-#   count(source)
-#
-# sites |>
-#   filter(grepl("ICOS", source)) |>
-#   select(site_ID, source, estimate_Ts) |>
-#   arrange(site_ID) |>
-#   print(n = Inf)
-#
-# icos_sites <- sites |>
-#   filter(grepl("ICOS", source)) |>
-#   arrange(site_ID) |>
-#   pull(site_ID)
-#
-# icos_dirs <- list.files("data-raw/ICOS")
-
 tern_sites <- read_csv("data-core/tern_fluxnet_site_mapping.csv")
 netrad_sites <- tribble(
   ~site_ID, ~netrad_column,
@@ -56,11 +40,8 @@ redeclared_humidity <- tribble(
 # What each site's `TS_measured` column actually is -- see `TS_SOURCES` in
 # R/constants.R for the levels and what each means for whether the column can
 # serve as a truth. Every site not named here is `sensor`; every `estimate_Ts`
-# site is `reconstructed` (its estimator is `estimate_ts_method`). These rows
-# are the readers' hard-coded branches, written down: the `name_site ==` arms
-# in `prep_fluxnet_family()` and `prep_ustar_df()` and the `SITES_TS_FROM_TA_*`
-# lists in R/constants.R. The readers still dispatch on those for now; a test
-# holds this column to them until they switch to it.
+# site is `reconstructed` (its estimator is `estimate_ts_method`). Stage A in
+# R/soil-temperature.R dispatches on this column.
 ts_source_sites <- tribble(
   ~site_ID, ~ts_source,
   "CZ-Stn", "sensor_depth2",

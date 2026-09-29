@@ -1,5 +1,5 @@
-# Soil-temperature column selection: the per-site declarations that replaced the
-# hard-coded `site_TS_issue` vector, and the estimator they drive.
+# Soil-temperature column selection: the per-site declarations in
+# site_info.csv and the estimator they drive.
 
 use_project_root()
 

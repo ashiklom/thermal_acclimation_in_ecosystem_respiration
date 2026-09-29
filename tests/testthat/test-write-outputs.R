@@ -1,8 +1,4 @@
-# The files the `workflows/` scripts read.
-#
-# These used not to exist at all: the DAG ended at in-memory objects and both
-# `02_02` and `03_01` failed at their first `read.csv`. What is asserted here is
-# the shape those scripts depend on, not the values.
+# The files the `workflows/` scripts read: their shape, not their values.
 
 use_project_root()
 

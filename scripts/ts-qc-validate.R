@@ -8,10 +8,8 @@
 # measurement and the cheap rule-fitting are deliberately separate files.
 #
 # THE LABEL. A site is treated as hand-flagged if the project reconstructs or
-# replaces its soil temperature by any of the five mechanisms that exist:
-# `ts_col == "TS_linear"`, `estimate_Ts == "YES"`, membership of
-# `SITES_TS_FROM_TA_RECENT`, `SITES_TS_FROM_TA_COLD`, or
-# `SITES_TS_SYNTHETIC_AMERIFLUX`.
+# replaces its soil temperature: `ts_col == "TS_linear"`, or a `ts_source`
+# whose column is not a sensor reading at every row (`TS_SOURCES`).
 #
 # That label is noisy, and the disagreements matter as much as the agreements.
 # `ts_col = "TS_linear"` was not applied on a single consistent criterion --

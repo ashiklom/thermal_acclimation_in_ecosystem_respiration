@@ -1,10 +1,7 @@
 # The development site sample, and the contract it is supposed to satisfy.
 #
-# `DEV_SITES` exists to make a full `tar_make()` affordable while developing.
-# That only works if the six sites really do cover the branches the comment
-# beside them claims, so those claims are asserted here rather than left as
-# prose. Shrinking the sample to save time then silently stops exercising a
-# code path -- which is the failure mode worth guarding against.
+# The coverage claims in the comment above `DEV_SITES`, asserted, so that
+# shrinking the sample cannot silently stop exercising a code path.
 
 use_project_root()
 
@@ -35,8 +32,7 @@ test_that("an unrecognised scope is an error, not a silent empty pipeline", {
 })
 
 test_that("a DEV_SITES entry that is not a declared site is caught", {
-  # Otherwise it would produce targets that each fail on their own at download
-  # time, which under `error = "continue"` looks much like a data problem.
+  # Otherwise it would surface as per-site download failures.
   fake <- get_site_info() |> dplyr::filter(.data$site_ID != DEV_SITES[[1]])
   expect_error(pipeline_sites(scope = "dev", site_info = fake), DEV_SITES[[1]])
 })
