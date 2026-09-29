@@ -100,12 +100,22 @@ blocks_multiyear <- function(dat, k = 2) {
   split(seq_len(nrow(dat)), grp[as.character(dat$YEAR)])
 }
 
-TS_FILL_BLOCKINGS <- list(
-  random = blocks_random,
-  year = blocks_year,
-  multiyear = function(dat) blocks_multiyear(dat, k = 2),
-  season = blocks_season
-)
+# Blocks for a named scheme. A function rather than a list of closures:
+# targets hashes a list by serializing it, and a closure's serialization
+# changes once R byte-compiles it, so a list made every fill -- and every fit
+# downstream -- look outdated after the functions had been called.
+TS_FILL_BLOCKING_NAMES <- c("random", "year", "multiyear", "season")
+ts_fill_blocks <- function(dat, blocking) {
+  switch(
+    blocking,
+    random = blocks_random(dat),
+    year = blocks_year(dat),
+    multiyear = blocks_multiyear(dat, k = 2),
+    season = blocks_season(dat),
+    stop("Unknown blocking ", shQuote(blocking), "; expected one of ",
+         paste(TS_FILL_BLOCKING_NAMES, collapse = ", "), ".")
+  )
+}
 
 # Cap training rows (the manuscript's forest caps at 60,000); applied inside
 # each fold after the held-out block is removed, so it cannot leak.
@@ -276,7 +286,7 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
   gs <- feats[in_gs, , drop = FALSE]
   min_obs_day <- if (length(unique(gs$MINUTE)) > 1) 40 else 20
 
-  blocks <- TS_FILL_BLOCKINGS[[blocking]](feats)
+  blocks <- ts_fill_blocks(feats, blocking)
   scores <- list()
   for (mn in names(methods)) {
     pred <- ts_fill_oof(feats, methods[[mn]], blocks, max_train = max_train)

@@ -39,7 +39,7 @@ outfile <- parse_opt(args, "--out", file.path("data-proc", "ts-rework", "ts-fill
 blockings <- strsplit(parse_opt(args, "--blockings", "random,year,multiyear"), ",")[[1]]
 max_train <- as.integer(parse_opt(args, "--max-train", "20000"))
 
-stopifnot(all(blockings %in% names(TS_FILL_BLOCKINGS)))
+stopifnot(all(blockings %in% TS_FILL_BLOCKING_NAMES))
 
 # Training rows are capped, as the manuscript's forest caps them at 60,000, so
 # that a 20-year half-hourly record does not make the random forest the
@@ -87,7 +87,7 @@ site_cv <- function(name_site) {
   }
 
   for (bl in blockings) {
-    blocks <- TS_FILL_BLOCKINGS[[bl]](dat)
+    blocks <- ts_fill_blocks(dat, bl)
     # A block that removes the entire record leaves nothing to train on.
     blocks <- Filter(function(i) length(i) < nrow(dat), blocks)
     if (!length(blocks)) next
