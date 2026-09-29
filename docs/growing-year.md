@@ -23,7 +23,7 @@ DOY < origin  ->  DOY + 366
 
 With `origin = 183`, DOY runs 183…548, 1 January is 367, and AU-Tum's season is
 the ordinary interval `[185, 380]`. Three functions in
-`R/respiration_helpers.R` define the frame and are the only places that know
+`R/growing-season.R` define the frame and are the only places that know
 about it:
 
 - `wrap_growing_doy(doy, origin)` — into the frame, at both readers.

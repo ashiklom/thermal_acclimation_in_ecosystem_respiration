@@ -36,11 +36,11 @@ add "SWC_use presence test (high 2)" \
     'if (isTRUE(site_info$SWC_use))' \
     'if (!is.na(site_info$SWC_use))'
 add "AmeriFlux cut-off capped (high 3)" \
-    R/respiration_helpers.R \
+    R/growing-season.R \
     'uncapped = nee_min * 0.2,' \
     'uncapped = max(nee_min * 0.2, -0.8),'
 add "FI-Sod/DE-RuC cut-off (high 3)" \
-    R/respiration_helpers.R \
+    R/growing-season.R \
     'zero = 0.0' \
     'zero = max(nee_min * 0.2, -0.8)'
 add "ERA5 percent conversion (blocker 1)" \
