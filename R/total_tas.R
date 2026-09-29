@@ -109,7 +109,7 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
       }
     },
     error = function(e) {
-      message("NLS fit failed with error: ", str(e), ".\n\nKeeping priors unchanged.")
+      message("NLS fit failed (", conditionMessage(e), "); keeping the default priors.")
     }
   )
 
