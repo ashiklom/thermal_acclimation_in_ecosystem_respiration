@@ -54,14 +54,8 @@ are re-sorted by actual first timestamp rather than trusting the declared order,
 so a mis-ordered `source` string cannot silently truncate a record.
 
 The comparison is on the 12-digit timestamp *strings*, so the tables are read
-under `FLUXNET_COL_TYPES` (`R/constants.R`), which declares
-`TIMESTAMP_START`/`TIMESTAMP_END` as character and everything else as double.
-That is a contract, not a convenience: under type guessing the timestamps come
-back as doubles and have to be converted back, and a column that is `-9999` for
-its entire length -- these files are full of them -- can be typed `logical`,
-which would make the `TS >= 2 C` filter compare against a logical NA. Sentinel
-removal stays a numeric `dat[dat == -9999] <- NA` so that a future release
-writing `-9999.0` is still caught.
+under the column contract `FLUXNET_COL_TYPES` in `R/constants.R`, which
+explains why.
 
 ### FLUXNET2015, and why it is acquired by hand
 
@@ -110,10 +104,10 @@ at least the original's year count.
 
 ### Non-flux inputs
 
-Four datasets outside the flux archives feed the downstream analysis. Three
-have downloaders and `targets` targets; the fourth has a downloader script but
-no target, because it's an asynchronous submit/poll/download cycle rather than
-a single blocking fetch (see below).
+Five datasets outside the flux archives feed the pipeline or the downstream
+analysis. All have downloaders; all but MODIS are `targets` targets, because
+MODIS is an asynchronous submit/poll/download cycle rather than a blocking
+fetch (see below).
 
 | input | target | source |
 |---|---|---|
@@ -123,9 +117,19 @@ a single blocking fetch (see below).
 | MODIS EVI/NDVI/LAI/GPP | *none* | NASA AppEEARS — see below |
 | ERA5-Land layer-1 soil water | `era5_swc_file` | ARCO ERA5-Land zarr, CDS key — see below |
 
+ERA5-Land soil water (`data-raw/ERA5_daily_swc.csv`, every site in one file) is
+extended by `scripts/download-era5-swc.py`, incrementally: sites already in the
+file get the days after their last row, up to the store's last complete day;
+sites missing from it get the full range from 1990; and a run with nothing to
+add leaves the file untouched. The pipeline calls it through
+`ensure_era5_coverage()` only when some site's flux record runs past the file's
+end, and joins each site's slice on *clipped to that site's own flux days*
+(`site_era5_swc()`), so extending the file re-runs nothing at a site whose days
+gained no values.
+
 Two details worth keeping. The BIF filename carries the date it was produced and
-arrives as `.xlsx`, so `03_01` discovers it by pattern rather than naming it —
-it used to hard-code a datestamp that no longer existed. And the GSOC raster is
+arrives as `.xlsx`, so `03_01` discovers it by pattern rather than naming it.
+And the GSOC raster is
 saved as `GSOCmap1.5.0.tif` rather than under FAO's own name because `03_01`
 indexes the extraction by layer name (`terra::extract(...)$GSOCmap1.5.0`), which
 terra derives from the file.
@@ -176,18 +180,6 @@ authenticates with the `appeears_token` bearer token already present in
 and has to be refreshed by hand from a logged-in AppEEARS browser session
 (Developer tools -> Application -> Session storage -> session -> token) if the
 script reports an authentication failure.
-
----
-
-ERA5-Land soil water (`data-raw/ERA5_daily_swc.csv`, every site in one file) is
-extended by `scripts/download-era5-swc.py`, incrementally: sites already in the
-file get the days after their last row, up to the store's last complete day;
-sites missing from it get the full range from 1990; and a run with nothing to
-add leaves the file untouched. The pipeline calls it through
-`ensure_era5_coverage()` only when some site's flux record runs past the file's
-end, and joins each site's slice on *clipped to that site's own flux days*
-(`site_era5_swc()`), so extending the file re-runs nothing at a site whose days
-gained no values.
 
 ## Checking by hand
 
@@ -316,6 +308,8 @@ Things an update does *not* do for you:
   and lists them; `reconcile` never asserted equality in the first place.
 - **Re-run `workflows/`.** The `03_*` and `04_*` scripts are not targets.
 
+Other known limitations are collected in [docs/issues.md](issues.md).
+
 ---
 
 ## How this reaches the pipeline
@@ -330,7 +324,9 @@ read_spliced_products(site_info)     R/prepare-site-data.R, splices in order
         ▼
 prep_fluxnet_family() / prep_ameriflux()
         ▼
-prep_nee_ac(site_info)  ->  site_data  ->  site_tas_total / site_tas_direct
+prep_nee_ac(site_info)  ->  site_prep ─┐
+ERA5_daily_swc.csv  ->  site_era5 ─────┴─>  site_data  ->  site_fill
+                                               └──────────>  site_tas_<recipe>_<model>
 
 site_info.csv (site_info_file, a file target)
         ▼
@@ -340,17 +336,10 @@ get_site_info(site, path = site_info_file)  ->  site_info target, per site
 
 In `_targets.R` each site's `site_dl` target is `format = "file"` over the paths
 `download_site()` returns, so re-downloading a product changes the file
-fingerprint and invalidates that site's `site_data` and its model fits — and
-only that site's. The two caveats that used to sit here are both closed:
-
-- The global `tar_option_set(cue = tar_cue("never"))` is gone, so invalidation
-  actually happens. What keeps a run affordable instead is running fewer sites:
-  `pipeline_sites()` returns the six-site `DEV_SITES` sample by default, and
-  `THERMAL_SITES=all` restores the full list.
-- `site_info.csv` is a `format = "file"` target (`site_info_file`), read once
-  per site into a `site_info` target that every later stage takes as an
-  argument. Editing a `source` string now invalidates exactly the sites whose
-  row could have changed — and nothing else.
+fingerprint and invalidates that site's `site_data` and its model fits, and
+only that site's. `site_info.csv` is itself a file target (`site_info_file`),
+read once per site into a `site_info` target that every later stage takes as an
+argument, so editing a row invalidates exactly that site.
 
 One read that cannot be a target: `pipeline_sites()` itself, because `tar_map()`
 needs the site names while the pipeline is being *constructed*, before any
@@ -360,7 +349,7 @@ shape of the graph rather than invalidating a target in it.
 After a refresh, the check that the data is still sane is:
 
 ```bash
-pixi run test        # unit tests, ~10 s
+pixi run test        # unit tests, about a minute
 pixi run reconcile   # step-01 outputs vs the manuscript's, ~7 min for 8 sites
 ```
 
@@ -374,13 +363,3 @@ visible and attributable.
 re-run it; it rebuilds `data-core/site_info.csv` from
 `data-core/site_info_orig.csv` and asserts its own invariants. Then re-run the
 two checks above.
-
-### Cleaning up after the old ICOS downloader
-
-The previous script wrote a hand-normalised `data-raw/ICOS/<site>/<site>_ICOS_L2_FLUXNET_HH.csv`.
-Those files no longer match any reader pattern and are simply ignored, but they
-are dead weight and easy to mistake for current data:
-
-```bash
-find data-raw/ICOS -name '*_ICOS_L2_FLUXNET_HH.csv' -delete
-```
