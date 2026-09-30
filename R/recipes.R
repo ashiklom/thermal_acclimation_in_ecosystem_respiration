@@ -174,7 +174,10 @@ pipeline_recipes <- function(scope = Sys.getenv("THERMAL_RECIPES", "dev"),
 #   THERMAL_MODELS=total,direct (default) | total | direct
 pipeline_models <- function(scope = Sys.getenv("THERMAL_MODELS", "total,direct")) {
   wanted <- trimws(strsplit(scope, ",")[[1]])
-  bad <- setdiff(wanted, c("total", "direct"))
-  if (length(bad)) stop("THERMAL_MODELS must name `total` and/or `direct`, not ", paste(shQuote(bad), collapse = ", "))
+  bad <- setdiff(wanted, MODEL_TYPES)
+  if (length(bad)) {
+    stop("THERMAL_MODELS must name one or more of ", paste(shQuote(MODEL_TYPES), collapse = ", "),
+         ", not ", paste(shQuote(bad), collapse = ", "))
+  }
   unique(wanted)
 }

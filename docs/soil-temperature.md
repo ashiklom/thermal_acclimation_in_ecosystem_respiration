@@ -35,7 +35,7 @@ Beside the tables, `site_data` carries:
 - `feature_gs`: the growing season and year count.
 
 **Bounds travel with the column.** `tStart`/`tEnd` gate the window-skip
-test in `total_tas_window()`, and they are percentiles of a particular
+test in `fit_tas_window()`, and they are percentiles of a particular
 column, so selecting a column and selecting its bounds are one act. The two
 definitions differ a lot:
 - the measured column's native bounds are percentiles of the *day-of-year
@@ -181,7 +181,7 @@ reanalysis with its own gaps. The asymmetry is inherited from the original.
 Many `SWC_use = NO` sites still report a soil-water column the analysis
 discards; CH-Dav has 326,351 non-missing values of it. So measured and
 reanalysis soil water can be compared through the `swc_col=` override of
-`total_tas_site()`.
+`fit_tas_site()`.
 
 ERA5 is joined on in its own target (`site_prep` → `site_data`), clipped to
 the site's own flux days, so that extending the ERA5 file re-runs only the

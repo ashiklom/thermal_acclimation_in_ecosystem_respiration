@@ -16,7 +16,7 @@
 #
 # A half-hourly distribution is far wider than the climatology of the same
 # data, so the second definition yields a lower `tStart` and a higher `tEnd`
-# whatever column it is applied to. The bounds gate `total_tas_window()`'s
+# whatever column it is applied to. The bounds gate `fit_tas_window()`'s
 # window-skip test, so selecting a column silently changes the definition of
 # the gate as well as the data it is applied to.
 #

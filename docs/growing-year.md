@@ -70,11 +70,11 @@ at all, which is what the two Brazilian sites are.
    them, are given in the wrapped frame (AU-Tum's `gEnd = 380` is 14 January).
 3. A check of what it costs. A wrapped site loses one growing year at each end
    of its record — the first began before the data start, the last runs past
-   their end — which `total_tas_site()` trims.
+   their end — which `fit_tas_site()` trims.
 
 ## One known residual, inherited
 
-`total_tas_site()` attaches the previous day's daytime NEE — the GPP proxy the
+`fit_tas_site()` attaches the previous day's daytime NEE — the GPP proxy the
 direct model uses — by `DOY_gpp = DOY - 1` for the pre-noon half of each night.
 In the wrapped frame the series steps 365 → 367 over New Year, so at a wrapped
 site the 1 January mornings ask for DOY 366:

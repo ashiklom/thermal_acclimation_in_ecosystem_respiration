@@ -334,7 +334,7 @@ prep key (docs/recipes.md), named e.g. site_data_site_info_manuscript_US.Kon.
 site_info.csv (site_info_file, a file target)
         ▼
 get_site_info(site, path = site_info_file)  ->  site_info target, per site
-        └─ threaded into download_site(), prep_nee_ac(), total_tas_site()
+        └─ threaded into download_site(), prep_nee_ac(), fit_tas_site()
 ```
 
 In `_targets.R` each site's `site_dl` target is `format = "file"` over the paths

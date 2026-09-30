@@ -162,10 +162,10 @@ flag.
 - **A strategy**: one branch in the matching `choose_*()` in `R/strategies.R`
   and one entry in `RECIPE_AXES`. If it needs a column step 01 does not produce
   (ERA5-Land soil temperature, say), produce it in step 01 or as a per-site
-  target like `site_fill`, and attach it in `total_tas_site()` the way
+  target like `site_fill`, and attach it in `fit_tas_site()` the way
   `TS_memfill` is attached.
 - **An axis**: a column in the CSV, an entry in `RECIPE_AXES`, a `choose_*()`
-  function, and a call to it in `total_tas_site()` (or `prep_nee_ac()`, with
+  function, and a call to it in `fit_tas_site()` (or `prep_nee_ac()`, with
   the axis added to `RECIPE_PREP_AXES`).
 
 ## Future work, documented so it is not rediscovered
@@ -185,7 +185,7 @@ independent of season detection altogether requires replacing two more uses of
    are a per-site data-density profile (qualify a year on the fraction of the
    *site's typical* covered DOYs it covers), or qualifying per window rather
    than per year and letting the fit-stage `nobs` guard do the rest.
-2. **Control year** (`total_tas_site()`): the year whose growing-season mean TS
+2. **Control year** (`fit_tas_site()`): the year whose growing-season mean TS
    is closest to the long-term mean. Without a season, the natural replacement
    is the year whose mean TS *over the fitted windows* is closest to the mean.
 

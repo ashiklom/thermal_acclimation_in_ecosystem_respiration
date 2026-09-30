@@ -4,7 +4,7 @@
 #
 # The manuscript shipped `growing_season_feature_*.csv`, which records step-01
 # features only. Nothing external records what soil temperature or soil water
-# look like *after* the step-02 manipulation in `total_tas_site()`, so before
+# look like *after* the step-02 manipulation in `fit_tas_site()`, so before
 # moving that manipulation anywhere there has to be a reference for what it
 # currently produces.
 #

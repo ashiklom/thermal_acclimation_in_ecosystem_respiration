@@ -143,7 +143,7 @@ ts_fill_oof <- function(dat, method, blocks, max_train = 20000) {
 
 # --------------------------------------------------------------- window grid
 #
-# The (growing_year x window) grid `total_tas_site()` fits on, so a column is
+# The (growing_year x window) grid `fit_tas_site()` fits on, so a column is
 # scored on the cells the model uses.
 tas_windows <- function(gStart, gEnd) {
   nwindow <- max(round((gEnd - gStart + 1) / WINDOW_SIZE), 1)

@@ -27,7 +27,7 @@ fit_settings(FIT_PROFILE) # fail here, by name, rather than inside every fit tar
 # always built, because the site-level outputs and `workflows/` read it.
 preps <- tibble::tibble(
   prep_axes = unique(lapply(c(list(original_recipe()), recipes), `[`, RECIPE_PREP_AXES)),
-  prep = vapply(prep_axes, recipe_prep_key, "")
+  prep = vapply(.data$prep_axes, recipe_prep_key, "")
 )
 
 # Each recipe is written into its fits' commands as a literal, so editing one
@@ -35,8 +35,7 @@ preps <- tibble::tibble(
 fits <- tidyr::crossing(recipe_id = names(recipes), model = models) |>
   dplyr::mutate(
     recipe = unname(recipes[.data$recipe_id]),
-    prep = vapply(.data$recipe, recipe_prep_key, ""),
-    direct = .data$model == "direct"
+    prep = vapply(.data$recipe, recipe_prep_key, "")
   )
 
 message(
@@ -54,7 +53,7 @@ message(
 # `site_tas_original_total_site_info_manuscript_US.Kon`.
 per_prep <- function(p) {
   prep_fits <- dplyr::filter(fits, .data$prep == p$prep) |>
-    dplyr::select("recipe_id", "model", "recipe", "direct")
+    dplyr::select("recipe_id", "model", "recipe")
   tar_map(
     values = p,
     names = "prep",
@@ -75,8 +74,8 @@ per_prep <- function(p) {
         names = c("recipe_id", "model"),
         tar_target(
           site_tas,
-          total_tas_site(site_data, site_info, direct = direct, recipe = recipe,
-                         fill = site_fill, fit_profile = FIT_PROFILE),
+          fit_tas_site(site_data, site_info, model = model, recipe = recipe,
+                       fill = site_fill, fit_profile = FIT_PROFILE),
           format = "qs"
         )
       )

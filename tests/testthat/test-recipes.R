@@ -75,6 +75,8 @@ test_that("pipeline_recipes and pipeline_models scope by env var semantics", {
   expect_error(pipeline_recipes("original,nonesuch"), "nonesuch")
 
   expect_identical(pipeline_models("total,direct"), c("total", "direct"))
+  # the same names `fit_tas_site()` accepts
+  expect_setequal(pipeline_models(paste(MODEL_TYPES, collapse = ",")), MODEL_TYPES)
   expect_identical(pipeline_models("total"), "total")
   expect_error(pipeline_models("total,indirect"), "indirect")
 })
@@ -260,7 +262,7 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
   bad$ts_qc$flags <- "airlike"
 
   r <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill_hh"), fill = fill)
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill_hh"), fill = fill)
   ))
   st <- r$settings
   expect_identical(st$ts_col, "TS_memfill")
@@ -274,20 +276,20 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
 
   # `native` for the reconstructed column is the half-hourly definition.
   r_native <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = fill)
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = fill)
   ))
   expect_equal(r_native$settings$tStart, st$tStart)
 
   # No fill: fall back to the regression, and say so.
   r2 <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = NULL)
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = NULL)
   ))
   expect_identical(r2$settings$ts_col, "TS_linear")
   expect_match(r2$settings$ts_reason, "fell back")
 
   # screen_best with a BAD verdict is the regression too.
   r3 <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("screened"))
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("screened"))
   ))
   expect_identical(r3$settings$ts_col, "TS_linear")
   expect_match(r3$settings$ts_reason, "airlike")
@@ -297,7 +299,7 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
   short$ac_ts <- short$ac_ts[-1]
   expect_error(
     suppressWarnings(suppressMessages(
-      total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = short)
+      fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = short)
     ))
   )
 })

@@ -6,7 +6,7 @@
 # Everything measured so far is structural: the regression inflates the
 # within-cell spread of soil temperature, widens the quality gates and shifts
 # the control year. None of that is TAS. This runs the real thing --
-# `total_tas_site()` with Stan sampling -- on the same site under each column
+# `fit_tas_site()` with Stan sampling -- on the same site under each column
 # and reports the difference.
 #
 # A third run repeats the *measured* column unchanged. TAS comes out of a
@@ -44,7 +44,8 @@ outdir <- parse_opt(args, "--out", file.path("data-proc", "ts-rework"))
 one_run <- function(sd_, si, ts_col, label) {
   t0 <- Sys.time()
   r <- tryCatch(
-    suppressWarnings(total_tas_site(sd_, si, direct = direct, ts_col = ts_col, fit = TRUE)),
+    suppressWarnings(fit_tas_site(sd_, si, model = if (direct) "direct" else "total",
+                                  ts_col = ts_col, fit = TRUE)),
     error = function(e) e
   )
   if (inherits(r, "error")) {
