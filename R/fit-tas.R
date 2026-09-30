@@ -1,6 +1,11 @@
 N_CORES <- 4        # Used internally by brms
 WINDOW_SIZE <- 14   # Uniform window size: 2 weeks.
 
+# The models `fit_tas_site()` fits, by name: `BRM_FORMULA_TOTAL` and
+# `BRM_FORMULA_DIRECT` below. The name is the `model` column of every output
+# table and what THERMAL_MODELS selects.
+MODEL_TYPES <- c("total", "direct")
+
 # The soil-temperature column is `TS_final`: the one column
 # `get_soil_temperature()` leaves on the tables. See R/soil-temperature.R.
 BRM_FORMULA_TOTAL <- brms::bf(
@@ -143,6 +148,7 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
 
 # Step 02 for one site and model: TAS from 14-day windows across years.
 #
+#   model        one of `MODEL_TYPES`
 #   recipe       the methodology, resolved through R/strategies.R; NULL is
 #                the manuscript's
 #   fill         the site's `fill_soil_temp()` result (memory_fill recipes)
@@ -150,13 +156,16 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
 #   fit = FALSE  the same window/year loop with no model fitting: which
 #                windows and years survive, and why. Deterministic, seconds.
 #   fit_profile  see `fit_settings()`
-total_tas_site <- function(site_data, site_info, direct = FALSE,
-                           ts_col = NULL, swc_col = NULL, fit = TRUE,
-                           recipe = NULL, fill = NULL, fit_profile = "full") {
+fit_tas_site <- function(site_data, site_info, model = "total",
+                         ts_col = NULL, swc_col = NULL, fit = TRUE,
+                         recipe = NULL, fill = NULL, fit_profile = "full") {
+  model <- rlang::arg_match0(model, MODEL_TYPES)
+  # What the helpers below branch on: the direct model's extra terms, and
+  # whether it takes soil water.
+  direct <- model == "direct"
   recipe <- recipe %||% original_recipe()
   validate_recipe(recipe)
   fs <- fit_settings(fit_profile)
-  model_name <- if (direct) "direct" else "total"
 
   a_measure_night_complete <- site_data[["nightNEE"]]
   ac <- site_data[["ac"]]
@@ -280,7 +289,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   settings <- tibble::tibble(
     site_ID = name_site,
     recipe_id = recipe$recipe_id,
-    model = model_name,
+    model = model,
     fit_profile = fs$profile,
     ts_col = ts_meta[["ts_col"]],
     swc_col = if (is.na(swc_col)) NA_character_ else swc_col,
@@ -326,7 +335,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     window_start <- wStart + WINDOW_SIZE * (iwindow - 1)
     window_end <- min(wStart + WINDOW_SIZE * iwindow, wEnd)
     window_name <- paste(window_start, window_end, sep = "_")
-    window_results[[window_name]] <- total_tas_window(
+    window_results[[window_name]] <- fit_tas_window(
       ac, ac_day, a_measure_night_complete,
       window_start, window_end, nwindow, nobs_threshold, control_year,
       SWC_use, tStart, tEnd, wEnd,
@@ -344,7 +353,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   window_results_df <- window_results |>
     lapply(`[[`, "outcome_siteyear") |>
     dplyr::bind_rows() |>
-    dplyr::mutate(site_ID = name_site, recipe_id = recipe$recipe_id, model = model_name,
+    dplyr::mutate(site_ID = name_site, recipe_id = recipe$recipe_id, model = .env$model,
                   .before = 1)
 
   window_skips <- window_results |>
@@ -352,7 +361,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
     dplyr::bind_rows()
   if (nrow(window_skips)) {
     window_skips <- dplyr::mutate(window_skips, site_ID = name_site,
-                                  recipe_id = recipe$recipe_id, model = model_name,
+                                  recipe_id = recipe$recipe_id, model = .env$model,
                                   .before = 1)
   }
 
@@ -378,7 +387,7 @@ total_tas_site <- function(site_data, site_info, direct = FALSE,
   outcome <- tibble::tibble(
     site_ID = name_site,
     recipe_id = recipe$recipe_id,
-    model = model_name,
+    model = model,
     fit_profile = fs$profile,
     RMSE = fit_stats[["RMSE"]],
     R2 = fit_stats[["Rsquared"]],
@@ -430,7 +439,7 @@ across_year_tas <- function(window_results_df) {
   list(TAS = smry["TS", "Value"], TASp = smry["TS", "p-value"], status = "fitted")
 }
 
-total_tas_window <- function(
+fit_tas_window <- function(
   ac, ac_day, a_measure_night_complete,
   window_start, window_end, nwindow, nobs_threshold, control_year,
   SWC_use, tStart, tEnd, gEnd,

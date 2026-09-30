@@ -11,7 +11,7 @@ test_that("the registry reads, validates, and contains original", {
   expect_true(all(names(RECIPE_AXES) %in% names(r)))
   expect_false(anyDuplicated(r$recipe_id) > 0)
   # every row is a valid recipe
-  for (id in r$recipe_id) expect_s3_class(get_recipe(id), "recipe")
+  for (id in r$recipe_id) expect_type(get_recipe(id), "list")
 })
 
 test_that("the CSV's original row agrees with original_recipe()", {
@@ -34,6 +34,8 @@ test_that("an unknown strategy or a bad id fails by name", {
   bad <- get_recipe("memfill")
   bad$season <- "lunar"
   expect_error(validate_recipe(bad), "season")
+  # the id where a recipe belongs
+  expect_error(validate_recipe("memfill"), "pass get_recipe")
 })
 
 test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
@@ -41,12 +43,27 @@ test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
   # _targets.R; every other recipe shares the manuscript's.
   keys <- vapply(read_recipes()$recipe_id, function(id) recipe_prep_key(get_recipe(id)), "")
   expect_identical(unname(keys[["original"]]), MANUSCRIPT_PREP_KEY())
-  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info+manuscript")
-  expect_identical(unname(keys[["memfill_sensor"]]), "site_info+sensor")
+  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info_manuscript")
+  expect_identical(unname(keys[["memfill_sensor"]]), "site_info_sensor")
   expect_setequal(names(keys)[keys == MANUSCRIPT_PREP_KEY()],
                   setdiff(names(keys), "memfill_sensor"))
-  # and the label is fit for a target name
-  expect_match(prep_key_label(keys[["memfill_sensor"]]), "^[A-Za-z0-9_]+$")
+  # and the key is fit for a target name as is: `tar_map()` would otherwise
+  # rewrite it with `make.names()`, and the collectors select by it
+  expect_identical(make.names(keys), unname(keys))
+})
+
+test_that("step 01 is given the prep axes alone; a recipe is its axes and id", {
+  axes <- get_recipe("memfill_sensor")[RECIPE_PREP_AXES]
+  expect_identical(axes, list(year_qc = "site_info", ts_qc = "sensor"))
+  # `_targets.R` keys a prep from these, and it must agree with the recipe's
+  expect_identical(recipe_prep_key(axes), recipe_prep_key(get_recipe("memfill_sensor")))
+
+  # No description: it is written into fit commands, and a description edit
+  # must not invalidate fits.
+  r <- get_recipe("memfill")
+  expect_named(r, c("recipe_id", names(RECIPE_AXES)))
+  # written into a command, it has to read back as itself
+  expect_identical(eval(str2lang(paste(deparse(r), collapse = ""))), r)
 })
 
 test_that("pipeline_recipes and pipeline_models scope by env var semantics", {
@@ -58,6 +75,8 @@ test_that("pipeline_recipes and pipeline_models scope by env var semantics", {
   expect_error(pipeline_recipes("original,nonesuch"), "nonesuch")
 
   expect_identical(pipeline_models("total,direct"), c("total", "direct"))
+  # the same names `fit_tas_site()` accepts
+  expect_setequal(pipeline_models(paste(MODEL_TYPES, collapse = ",")), MODEL_TYPES)
   expect_identical(pipeline_models("total"), "total")
   expect_error(pipeline_models("total,indirect"), "indirect")
 })
@@ -243,7 +262,7 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
   bad$ts_qc$flags <- "airlike"
 
   r <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill_hh"), fill = fill)
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill_hh"), fill = fill)
   ))
   st <- r$settings
   expect_identical(st$ts_col, "TS_memfill")
@@ -257,20 +276,20 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
 
   # `native` for the reconstructed column is the half-hourly definition.
   r_native <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = fill)
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = fill)
   ))
   expect_equal(r_native$settings$tStart, st$tStart)
 
   # No fill: fall back to the regression, and say so.
   r2 <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = NULL)
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = NULL)
   ))
   expect_identical(r2$settings$ts_col, "TS_linear")
   expect_match(r2$settings$ts_reason, "fell back")
 
   # screen_best with a BAD verdict is the regression too.
   r3 <- suppressWarnings(suppressMessages(
-    total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("screened"))
+    fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("screened"))
   ))
   expect_identical(r3$settings$ts_col, "TS_linear")
   expect_match(r3$settings$ts_reason, "airlike")
@@ -280,7 +299,7 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
   short$ac_ts <- short$ac_ts[-1]
   expect_error(
     suppressWarnings(suppressMessages(
-      total_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = short)
+      fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = short)
     ))
   )
 })
