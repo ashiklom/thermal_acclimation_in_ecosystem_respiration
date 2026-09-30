@@ -49,18 +49,16 @@ test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
   expect_match(prep_key_label(keys[["memfill_sensor"]]), "^[A-Za-z0-9_]+$")
 })
 
-test_that("step 01 is given the prep axes alone, and a fit its recipe without description", {
+test_that("step 01 is given the prep axes alone; a recipe is its axes and id", {
   axes <- recipe_prep_axes(get_recipe("memfill_sensor"))
   expect_identical(axes, list(year_qc = "site_info", ts_qc = "sensor"))
   # `_targets.R` labels a prep from these, and it must agree with the recipe's
   expect_identical(recipe_prep_key(axes), recipe_prep_key(get_recipe("memfill_sensor")))
 
-  r <- recipe_for_fit("memfill")
-  expect_s3_class(r, "recipe")
-  expect_true(is.na(r$description))
-  # every axis as the registry has it, so the fit is under the same methodology
-  full <- get_recipe("memfill")
-  for (axis in names(RECIPE_AXES)) expect_identical(r[[axis]], full[[axis]])
+  # No description: it is written into fit commands, and a description edit
+  # must not invalidate fits.
+  r <- get_recipe("memfill")
+  expect_named(r, c("recipe_id", names(RECIPE_AXES)))
   # written into a command, it has to read back as itself
   expect_identical(eval(str2lang(paste(deparse(r), collapse = ""))), r)
 })

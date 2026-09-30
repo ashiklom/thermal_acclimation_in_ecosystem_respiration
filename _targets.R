@@ -17,7 +17,7 @@ tar_option_set(error = "null", controller = pipeline_controller())
 # docs/recipes.md). THERMAL_FIT=fast shrinks the sampler for smoke tests;
 # its TAS values are not results.
 sites <- pipeline_sites()
-recipes <- lapply(rlang::set_names(pipeline_recipes()), recipe_for_fit)
+recipes <- lapply(rlang::set_names(pipeline_recipes()), get_recipe)
 models <- pipeline_models()
 FIT_PROFILE <- Sys.getenv("THERMAL_FIT", "full")
 fit_settings(FIT_PROFILE) # fail here, by name, rather than inside every fit target

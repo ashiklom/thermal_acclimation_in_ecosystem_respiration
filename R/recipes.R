@@ -47,12 +47,15 @@ DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 
 # A plain S3 list, not S7: an S7 object does not come back `identical()` from
 # the qs2 store. Validation runs at construction.
-new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc,
-                       description = NA_character_) {
+#
+# The CSV's `description` column is for people (and the variant report, which
+# reads the CSV itself), not part of the recipe: `_targets.R` writes each
+# recipe into its fits' commands, so editing a description invalidates nothing.
+new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc) {
   r <- structure(
     list(
       recipe_id = recipe_id, ts = ts, season = season, bounds = bounds,
-      swc = swc, year_qc = year_qc, ts_qc = ts_qc, description = description
+      swc = swc, year_qc = year_qc, ts_qc = ts_qc
     ),
     class = "recipe"
   )
@@ -85,7 +88,6 @@ validate_recipe <- function(r) {
 print.recipe <- function(x, ...) {
   cat("<recipe> ", x$recipe_id, "\n", sep = "")
   for (axis in names(RECIPE_AXES)) cat("  ", format(axis, width = 8), x[[axis]], "\n")
-  if (!is.na(x$description)) cat("  ", x$description, "\n")
   invisible(x)
 }
 
@@ -94,8 +96,7 @@ original_recipe <- function() {
   new_recipe(
     "original",
     ts = "site_info", season = "detect_or_override", bounds = "native", swc = "site_info",
-    year_qc = "site_info", ts_qc = "manuscript",
-    description = "Exactly the manuscript logic."
+    year_qc = "site_info", ts_qc = "manuscript"
   )
 }
 
@@ -121,9 +122,7 @@ read_recipes <- function(path = RECIPES_CSV) {
   dat
 }
 
-# `path` may be a path or an already-read table. The pipeline hands in the
-# `format = "file"` target for the CSV so that editing it invalidates exactly
-# the fits whose recipe changed.
+# `path` may be a path or an already-read table.
 get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   dat <- if (is.data.frame(path)) path else {
     readr::read_csv(path, col_types = readr::cols(.default = readr::col_character()), progress = FALSE)
@@ -135,7 +134,7 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   }
   r <- new_recipe(
     row$recipe_id, ts = row$ts, season = row$season, bounds = row$bounds,
-    swc = row$swc, year_qc = row$year_qc, ts_qc = row$ts_qc, description = row$description
+    swc = row$swc, year_qc = row$year_qc, ts_qc = row$ts_qc
   )
   # The CSV's `original` row must agree with the code's definition, or the
   # oracle comparison is against the wrong thing.
@@ -163,15 +162,6 @@ MANUSCRIPT_PREP_KEY <- function() recipe_prep_key(original_recipe())
 # The prep axes alone, as a plain list: all that step 01 is given, so a
 # recipe's other axes cannot reach it. `recipe_prep_key()` accepts it too.
 recipe_prep_axes <- function(recipe) unclass(recipe)[RECIPE_PREP_AXES]
-
-# A recipe as a fit sees it: every axis, no description. `_targets.R` writes
-# it into each fit's command, so editing a row of recipes.csv invalidates that
-# recipe's fits and nothing else, and editing a description invalidates none.
-recipe_for_fit <- function(recipe_id, path = RECIPES_CSV) {
-  r <- get_recipe(recipe_id, path)
-  r$description <- NA_character_
-  r
-}
 
 # Which recipes a pipeline run includes, by analogy with `pipeline_sites()`.
 #   THERMAL_RECIPES=dev            the development sample (default)
