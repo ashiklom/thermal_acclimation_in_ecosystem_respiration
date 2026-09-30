@@ -11,7 +11,7 @@ test_that("the registry reads, validates, and contains original", {
   expect_true(all(names(RECIPE_AXES) %in% names(r)))
   expect_false(anyDuplicated(r$recipe_id) > 0)
   # every row is a valid recipe
-  for (id in r$recipe_id) expect_s3_class(get_recipe(id), "recipe")
+  for (id in r$recipe_id) expect_type(get_recipe(id), "list")
 })
 
 test_that("the CSV's original row agrees with original_recipe()", {
@@ -34,6 +34,8 @@ test_that("an unknown strategy or a bad id fails by name", {
   bad <- get_recipe("memfill")
   bad$season <- "lunar"
   expect_error(validate_recipe(bad), "season")
+  # the id where a recipe belongs
+  expect_error(validate_recipe("memfill"), "pass get_recipe")
 })
 
 test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
@@ -41,18 +43,19 @@ test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
   # _targets.R; every other recipe shares the manuscript's.
   keys <- vapply(read_recipes()$recipe_id, function(id) recipe_prep_key(get_recipe(id)), "")
   expect_identical(unname(keys[["original"]]), MANUSCRIPT_PREP_KEY())
-  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info+manuscript")
-  expect_identical(unname(keys[["memfill_sensor"]]), "site_info+sensor")
+  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info_manuscript")
+  expect_identical(unname(keys[["memfill_sensor"]]), "site_info_sensor")
   expect_setequal(names(keys)[keys == MANUSCRIPT_PREP_KEY()],
                   setdiff(names(keys), "memfill_sensor"))
-  # and the label is fit for a target name
-  expect_match(prep_key_label(keys[["memfill_sensor"]]), "^[A-Za-z0-9_]+$")
+  # and the key is fit for a target name as is: `tar_map()` would otherwise
+  # rewrite it with `make.names()`, and the collectors select by it
+  expect_identical(make.names(keys), unname(keys))
 })
 
 test_that("step 01 is given the prep axes alone; a recipe is its axes and id", {
-  axes <- recipe_prep_axes(get_recipe("memfill_sensor"))
+  axes <- get_recipe("memfill_sensor")[RECIPE_PREP_AXES]
   expect_identical(axes, list(year_qc = "site_info", ts_qc = "sensor"))
-  # `_targets.R` labels a prep from these, and it must agree with the recipe's
+  # `_targets.R` keys a prep from these, and it must agree with the recipe's
   expect_identical(recipe_prep_key(axes), recipe_prep_key(get_recipe("memfill_sensor")))
 
   # No description: it is written into fit commands, and a description edit

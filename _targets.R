@@ -25,11 +25,9 @@ fit_settings(FIT_PROFILE) # fail here, by name, rather than inside every fit tar
 # Step 01 runs once per distinct prep key (`RECIPE_PREP_AXES`), not once per
 # recipe: recipes that differ only in a fit axis share it. The manuscript's is
 # always built, because the site-level outputs and `workflows/` read it.
-prep_label <- function(recipe) prep_key_label(recipe_prep_key(recipe))
-MANUSCRIPT_PREP <- prep_key_label(MANUSCRIPT_PREP_KEY())
 preps <- tibble::tibble(
-  prep_axes = unique(lapply(c(list(original_recipe()), recipes), recipe_prep_axes)),
-  prep = vapply(prep_axes, prep_label, "")
+  prep_axes = unique(lapply(c(list(original_recipe()), recipes), `[`, RECIPE_PREP_AXES)),
+  prep = vapply(prep_axes, recipe_prep_key, "")
 )
 
 # Each recipe is written into its fits' commands as a literal, so editing one
@@ -37,7 +35,7 @@ preps <- tibble::tibble(
 fits <- tidyr::crossing(recipe_id = names(recipes), model = models) |>
   dplyr::mutate(
     recipe = unname(recipes[.data$recipe_id]),
-    prep = vapply(.data$recipe, prep_label, ""),
+    prep = vapply(.data$recipe, recipe_prep_key, ""),
     direct = .data$model == "direct"
   )
 
@@ -101,7 +99,7 @@ per_site <- tar_map(
 
 # The per-site targets whose names start with `prefix`.
 per_site_named <- function(prefix) tar_select_targets(per_site, dplyr::starts_with(prefix))
-manuscript_data <- per_site_named(paste0("site_data_", MANUSCRIPT_PREP, "_"))
+manuscript_data <- per_site_named(paste0("site_data_", MANUSCRIPT_PREP_KEY(), "_"))
 
 # ---------------------------------------------------------------- inputs
 
@@ -136,7 +134,7 @@ inputs <- list(
 outputs <- list(
   tar_combine(fit_tables, per_site_named("site_tas_"), command = collect_fit_tables(!!!.x)),
   tar_combine(site_tables, manuscript_data, command = collect_site_tables(!!!.x)),
-  tar_combine(fill_tables, per_site_named(paste0("site_fill_", MANUSCRIPT_PREP, "_")),
+  tar_combine(fill_tables, per_site_named(paste0("site_fill_", MANUSCRIPT_PREP_KEY(), "_")),
               command = collect_fill_tables(!!!.x)),
   tar_file(manuscript_siteyear_files, MANUSCRIPT_SITEYEAR_CSVS),
   # The manuscript layout `workflows/` reads, and the run report's inputs.
