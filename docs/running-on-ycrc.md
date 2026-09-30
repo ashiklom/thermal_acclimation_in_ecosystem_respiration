@@ -19,7 +19,7 @@ covered in [docs/recipes.md](recipes.md). Two more size the cluster:
 
 | variable | `submit.sh` | default | meaning |
 |---|---|---|---|
-| `THERMAL_SLURM_WORKERS` | 96 | 20 | maximum concurrent worker jobs |
+| `THERMAL_SLURM_WORKERS` | 192 | 20 | maximum concurrent worker jobs |
 | `THERMAL_SLURM_MINUTES` | 1425 | 1425 | wall time per worker job |
 
 Keep `THERMAL_SLURM_MINUTES` at or above the controller's own `--time`

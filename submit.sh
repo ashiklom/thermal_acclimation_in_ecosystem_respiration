@@ -12,7 +12,7 @@ export THERMAL_SITES=all
 export THERMAL_RECIPES=all
 export THERMAL_MODELS=total,direct
 export THERMAL_FIT=full
-export THERMAL_SLURM_WORKERS=96
+export THERMAL_SLURM_WORKERS=192
 # At or above this script's own --time.
 export THERMAL_SLURM_MINUTES=1425
 
