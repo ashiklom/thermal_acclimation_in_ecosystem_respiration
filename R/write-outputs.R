@@ -114,6 +114,75 @@ collect_feature_gs <- function(...) {
     dplyr::arrange(.data$site_ID)
 }
 
+# ------------------------------------------------------------ pipeline groups
+#
+# `_targets.R` collects each kind of per-site result once, into a named list of
+# tables, and writes them in two groups: what the run report reads and what
+# the variant report reads. A group's file target changes only when one of its
+# files does, so each report re-renders only for its own inputs.
+
+# Every fit, all recipes and models: `fit_tables`.
+collect_fit_tables <- function(...) {
+  list(
+    outcome = collect_outcome(...),
+    siteyear = collect_outcome_siteyear(...),
+    settings = collect_settings(...),
+    window_skips = collect_window_skips(...)
+  )
+}
+
+# Step 01 under the manuscript's prep: `site_tables`.
+collect_site_tables <- function(...) {
+  list(
+    feature_gs = collect_feature_gs(...),
+    ts_qc = collect_ts_qc(...),
+    ts_provenance = collect_ts_provenance(...)
+  )
+}
+
+# The soil-temperature fill under the manuscript's prep: `fill_tables`.
+collect_fill_tables <- function(...) {
+  list(fill_cv = collect_fill_cv(...), fill_summary = collect_fill_summary(...))
+}
+
+# Each table to `<dir>/<name>.csv`; returns the paths.
+write_result_csvs <- function(tables, dir = DIR_ANALYSIS) {
+  unname(vapply(names(tables), function(name) {
+    write_result_csv(tables[[name]], file.path(dir, paste0(name, ".csv")))
+  }, ""))
+}
+
+# The manuscript layout `workflows/` reads -- the `original` recipe only --
+# plus what the run report reads beside it.
+write_run_csvs <- function(fit_tables, site_tables, manuscript_paths = MANUSCRIPT_SITEYEAR_CSVS) {
+  c(
+    write_result_csvs(list(
+      outcome_temp = original_only(fit_tables$outcome, "total"),
+      outcome_temp_water_gpp = original_only(fit_tables$outcome, "direct"),
+      outcome_siteyear_temp = original_only(fit_tables$siteyear, "total"),
+      outcome_siteyear_temp_water_gpp = original_only(fit_tables$siteyear, "direct"),
+      run_settings = original_only(fit_tables$settings),
+      window_skips = original_only(fit_tables$window_skips),
+      new_siteyears = collect_new_siteyears(fit_tables$siteyear, manuscript_paths)
+    )),
+    write_result_csvs(list(growing_season_features = site_tables$feature_gs), DIR_FEATURES)
+  )
+}
+
+# The variant grid in full, and the per-site diagnostics the variant report reads.
+write_variant_csvs <- function(fit_tables, site_tables, fill_tables) {
+  write_result_csvs(list(
+    variant_outcome = fit_tables$outcome,
+    variant_siteyear = fit_tables$siteyear,
+    variant_settings = fit_tables$settings,
+    variant_window_skips = fit_tables$window_skips,
+    ts_qc = site_tables$ts_qc,
+    ts_provenance = site_tables$ts_provenance,
+    fill_cv = fill_tables$fill_cv,
+    fill_summary = fill_tables$fill_summary
+  ))
+}
+
 # Per-site half-hourly tables, which `03_01` and `04_02` find by globbing
 # `data-proc/respiration/**/*_ac.csv` -- so this owns the whole directory:
 # files with an older schema are removed, and current-schema files from sites

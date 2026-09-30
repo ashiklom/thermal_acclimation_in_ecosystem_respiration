@@ -6,7 +6,7 @@
 
 # The full grid: every site x every recipe x both models, at the manuscript's
 # sampler settings. This job is only the controller; `crew_controller_slurm()`
-# in _targets.R launches the workers as their own jobs. Sizing and the reasons
+# in R/controllers.R launches the workers as their own jobs. Sizing and the reasons
 # behind each setting: docs/running-on-ycrc.md.
 export THERMAL_SITES=all
 export THERMAL_RECIPES=all

@@ -105,9 +105,10 @@ prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
 #
 # `site_info` is the site's row of site_info.csv, read once per site by the
 # pipeline so every stage sees the same declaration. Only the recipe's
-# `RECIPE_PREP_AXES` matter here; this produces every candidate column and
-# both bounds definitions, so recipes with the same `recipe_prep_key()` share
-# one result. `era5` is a path, a site's table from `read_era5_swc()`, or NULL
+# `RECIPE_PREP_AXES` matter here, and `recipe` may be just those
+# (`recipe_prep_axes()`, which is what the pipeline passes); this produces
+# every candidate column and both bounds definitions, so recipes with the same
+# `recipe_prep_key()` share one result. `era5` is a path, a site's table from `read_era5_swc()`, or NULL
 # to leave soil water off -- the pipeline passes NULL and attaches it with
 # `attach_era5_swc()`, so extending the ERA5 file does not re-run this.
 prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_CSV) {

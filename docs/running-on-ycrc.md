@@ -2,9 +2,10 @@
 
 `submit.sh` runs the full grid: every site × every recipe × both models at
 the manuscript's sampler settings. The job it submits is only the
-controller. `crew_controller_slurm()` in `_targets.R` launches the workers
-as their own Slurm jobs, and `_targets.R` picks the Slurm controller
-whenever the host name contains `ycrc.yale.edu`. Anywhere else it uses a
+controller. `crew_controller_slurm()` in `pipeline_controller()`
+(R/controllers.R) launches the workers as their own Slurm jobs, and
+`pipeline_controller()` picks the Slurm controller whenever the host name
+contains `ycrc.yale.edu`. Anywhere else it uses a
 local controller with 8 workers.
 
 ```bash
@@ -43,7 +44,7 @@ Each of these was learned from a failed or degraded full run.
     only one or two survived.
   - The cap costs nothing: Stan does the arithmetic, and `backend =
     "cmdstanr"` runs each chain as its own single-threaded process.
-  - `_targets.R` sets these for the workers explicitly rather than relying
+  - `pipeline_controller()` sets these for the workers explicitly rather than relying
     on `sbatch` to pass the environment on, since whether it does is a site
     setting.
 - **`n_tasks = 1, cpus_per_task = N_CORES`**, not `n_tasks = 4`. That is

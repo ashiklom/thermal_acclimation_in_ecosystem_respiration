@@ -160,6 +160,19 @@ recipe_prep_key <- function(recipe) {
 prep_key_label <- function(prep_key) gsub("[^A-Za-z0-9]+", "_", prep_key)
 MANUSCRIPT_PREP_KEY <- function() recipe_prep_key(original_recipe())
 
+# The prep axes alone, as a plain list: all that step 01 is given, so a
+# recipe's other axes cannot reach it. `recipe_prep_key()` accepts it too.
+recipe_prep_axes <- function(recipe) unclass(recipe)[RECIPE_PREP_AXES]
+
+# A recipe as a fit sees it: every axis, no description. `_targets.R` writes
+# it into each fit's command, so editing a row of recipes.csv invalidates that
+# recipe's fits and nothing else, and editing a description invalidates none.
+recipe_for_fit <- function(recipe_id, path = RECIPES_CSV) {
+  r <- get_recipe(recipe_id, path)
+  r$description <- NA_character_
+  r
+}
+
 # Which recipes a pipeline run includes, by analogy with `pipeline_sites()`.
 #   THERMAL_RECIPES=dev            the development sample (default)
 #   THERMAL_RECIPES=all            every row of recipes.csv

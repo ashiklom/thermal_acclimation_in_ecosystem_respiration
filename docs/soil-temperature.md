@@ -160,8 +160,8 @@ both the declaration (`ts_source`) and what ran (`stage_a_arm`, `ts_truth`),
 and **stage B and the fill read the latter** — so under `ts_qc = sensor`
 nothing is refused and the fill has a real truth at the 27 sites. A site
 whose raw sensor is too sparse to qualify a year fails step 01 and drops from
-that recipe. In `_targets.R` a variant prep key gets its own `site_data_v_*`
-and `site_fill_v_*` per site; the manuscript's `site_data` is untouched. See
+that recipe. In `_targets.R` each prep key gets its own `site_data_<prep>_*`
+and `site_fill_<prep>_*` per site; the manuscript's is untouched. See
 docs/recipes.md.
 
 ## Soil water
@@ -183,7 +183,7 @@ discards; CH-Dav has 326,351 non-missing values of it. So measured and
 reanalysis soil water can be compared through the `swc_col=` override of
 `total_tas_site()`.
 
-ERA5 is joined on in its own targets (`site_era5` → `site_data`), clipped to
+ERA5 is joined on in its own target (`site_prep` → `site_data`), clipped to
 the site's own flux days, so that extending the ERA5 file re-runs only the
 join. See docs/data-provenance.md.
 
