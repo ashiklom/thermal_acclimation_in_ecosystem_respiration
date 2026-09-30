@@ -20,6 +20,18 @@ BRM_FORMULA_DIRECT <- brms::bf(
   nl = TRUE
 )
 
+# The priors, with their means and SDs passed as data (`prior_stanvars()`)
+# rather than written into the Stan code. The code is then the same for every
+# window and site, so cmdstanr compiles each model once per process and every
+# later fit reuses it.
+BRM_PRIORS_TOTAL <- brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
+  brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) +
+  brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0)
+
+BRM_PRIORS_DIRECT <- BRM_PRIORS_TOTAL +
+  brms::prior("normal(Hs_mu, Hs_sd)", nlpar = "Hs", lb = 0, ub = 1000) +
+  brms::prior("normal(k2_mu, k2_sd)", nlpar = "k2", lb = 0, ub = 10)
+
 ################################################################################
 
 # One growing year's result in one window, filled in as the loop goes.
@@ -75,21 +87,28 @@ fit_settings <- function(profile = "full") {
   )
 }
 
-adjust_prior <- function(priors, nlpar, p1, p2, family = "normal") {
-  priors$prior[priors$nlpar == nlpar] <- sprintf("%s(%f, %f)", family, p1, p2)
+# The prior means and SDs before `get_priors()` re-centres the means; the SDs
+# stay as they are.
+default_priors <- function(direct = FALSE) {
+  priors <- c(C0_mu = 2, C0_sd = 5, alpha_mu = 0.1, alpha_sd = 1, beta_mu = -0.001, beta_sd = 0.1)
+  if (direct) priors <- c(priors, Hs_mu = 10, Hs_sd = 10, k2_mu = 0.5, k2_sd = 2)
   priors
 }
 
+recentre_priors <- function(priors, mu) {
+  priors[paste0(names(mu), "_mu")] <- mu
+  priors
+}
+
+prior_stanvars <- function(priors) {
+  Reduce(`+`, Map(brms::stanvar, priors, names(priors)))
+}
+
 get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
-  priors <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
-    brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) +
-    brms::prior("normal(-0.001, 0.1)", nlpar = "beta", lb = -0.01, ub = 0.0)
+  priors <- default_priors(direct)
 
   # The NLS warm start is fitted on log parameters, which keeps them positive.
   if (direct) {
-    priors <- priors +
-      brms::prior("normal(10, 10)", nlpar = "Hs", lb = 0, ub = 1000) +
-      brms::prior("normal(0.5, 2)", nlpar = "k2", lb = 0, ub = 10)
     frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS_final - exp(beta_ln) * TS_final^2) *
       SWC / (exp(Hs_ln) + SWC) * (exp(C0_ln) + NEE_daytime * exp(k2_ln))
     start_nls <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6, Hs_ln = 2.3)
@@ -103,15 +122,10 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
     {
       mod_nls <- gslnls::gsl_nls(fn = frmu_nls, data = model_data, start = start_nls)
       est <- exp(stats::coef(mod_nls))
-      priors <- priors |>
-        adjust_prior("alpha", min(est[["alpha_ln"]], 0.2), 1.0) |>
-        adjust_prior("beta", -min(est[["beta_ln"]], 0.01), 0.1) |>
-        adjust_prior("C0", min(est[["C0_ln"]], 10), 5)
-      if (direct) {
-        priors <- priors |>
-          adjust_prior("k2", min(est[["k2_ln"]], 10), 2) |>
-          adjust_prior("Hs", min(est[["Hs_ln"]], 1000), 10)
-      }
+      mu <- c(alpha = min(est[["alpha_ln"]], 0.2), beta = -min(est[["beta_ln"]], 0.01),
+              C0 = min(est[["C0_ln"]], 10))
+      if (direct) mu <- c(mu, k2 = min(est[["k2_ln"]], 10), Hs = min(est[["Hs_ln"]], 1000))
+      priors <- recentre_priors(priors, mu)
     },
     error = function(e) {
       message("NLS fit failed (", conditionMessage(e), "); keeping the default priors.")
@@ -119,10 +133,10 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
   )
 
   # Then re-centre them on a brms fit across all the window's data.
-  brm_frmu <- if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL
   mod0 <- brms::brm(
-    brm_frmu,
-    prior = priors,
+    if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,
+    prior = if (direct) BRM_PRIORS_DIRECT else BRM_PRIORS_TOTAL,
+    stanvars = prior_stanvars(priors),
     data = model_data,
     iter = fs$prior_iter,
     cores = min(N_CORES, fs$chains),
@@ -132,17 +146,8 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
     refresh = 0
   )
   est <- brms::fixef(mod0)[, "Estimate"]
-  priors <- priors |>
-    adjust_prior("alpha", est[["alpha_Intercept"]], 1.0) |>
-    adjust_prior("beta", est[["beta_Intercept"]], 0.1) |>
-    adjust_prior("C0", est[["C0_Intercept"]], 5)
-  if (direct) {
-    priors <- priors |>
-      adjust_prior("k2", est[["k2_Intercept"]], 2) |>
-      adjust_prior("Hs", est[["Hs_Intercept"]], 10)
-  }
-
-  priors
+  pars <- c("alpha", "beta", "C0", if (direct) c("k2", "Hs"))
+  recentre_priors(priors, stats::setNames(est[paste0(pars, "_Intercept")], pars))
 }
 
 
@@ -642,7 +647,8 @@ fit_tas_window <- function(
 fit_with_retry <- function(data_subset, priors, direct = FALSE, fs = fit_settings("full")) {
   brm_args <- list(
     if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,
-    prior = priors,
+    prior = if (direct) BRM_PRIORS_DIRECT else BRM_PRIORS_TOTAL,
+    stanvars = prior_stanvars(priors),
     data = data_subset,
     iter = fs$iter,
     cores = min(N_CORES, fs$chains),
