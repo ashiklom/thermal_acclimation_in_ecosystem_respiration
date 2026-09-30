@@ -23,10 +23,12 @@ BRM_FORMULA_DIRECT <- brms::bf(
 # The priors, with their means and SDs passed as data (`prior_stanvars()`)
 # rather than written into the Stan code. The code is then the same for every
 # window and site, so cmdstanr compiles each model once per process and every
-# later fit reuses it.
+# later fit reuses it. `sigma` is brms's own default prior, whose scale brms
+# would otherwise compute from the data and write into the code.
 BRM_PRIORS_TOTAL <- brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
   brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) +
-  brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0)
+  brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0) +
+  brms::prior("student_t(3, 0, sigma_scale)", class = "sigma")
 
 BRM_PRIORS_DIRECT <- BRM_PRIORS_TOTAL +
   brms::prior("normal(Hs_mu, Hs_sd)", nlpar = "Hs", lb = 0, ub = 1000) +
@@ -100,8 +102,18 @@ recentre_priors <- function(priors, mu) {
   priors
 }
 
-prior_stanvars <- function(priors) {
-  Reduce(`+`, Map(brms::stanvar, priors, names(priors)))
+# brms's default scale for a Gaussian `sigma`: the response's MAD, rounded,
+# at least 2.5 -- over the rows brms fits, those complete in the model's
+# variables.
+default_sigma_scale <- function(data, direct = FALSE) {
+  vars <- c("NEE", "TS_final", if (direct) c("SWC", "NEE_daytime"))
+  nee <- data[stats::complete.cases(data[vars]), "NEE", drop = TRUE]
+  max(2.5, round(stats::mad(nee), 1))
+}
+
+prior_stanvars <- function(priors, data, direct = FALSE) {
+  values <- c(priors, sigma_scale = default_sigma_scale(data, direct))
+  Reduce(`+`, Map(brms::stanvar, values, names(values)))
 }
 
 get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
@@ -136,7 +148,7 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
   mod0 <- brms::brm(
     if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,
     prior = if (direct) BRM_PRIORS_DIRECT else BRM_PRIORS_TOTAL,
-    stanvars = prior_stanvars(priors),
+    stanvars = prior_stanvars(priors, model_data, direct),
     data = model_data,
     iter = fs$prior_iter,
     cores = min(N_CORES, fs$chains),
@@ -648,7 +660,7 @@ fit_with_retry <- function(data_subset, priors, direct = FALSE, fs = fit_setting
   brm_args <- list(
     if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,
     prior = if (direct) BRM_PRIORS_DIRECT else BRM_PRIORS_TOTAL,
-    stanvars = prior_stanvars(priors),
+    stanvars = prior_stanvars(priors, data_subset, direct),
     data = data_subset,
     iter = fs$iter,
     cores = min(N_CORES, fs$chains),
