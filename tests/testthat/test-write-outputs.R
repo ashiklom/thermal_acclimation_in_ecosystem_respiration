@@ -39,8 +39,10 @@ test_that("each outcome table is sorted and carries each site once", {
   tot <- read.csv(ft)
   dir <- read.csv(fd)
   skip_if(nrow(tot) == 0 || nrow(dir) == 0, "one model was not in this run")
-  expect_identical(tot$site_ID, sort(tot$site_ID))
-  expect_identical(dir$site_ID, sort(dir$site_ID))
+  # In C-locale order, as `dplyr::arrange()` sorts: base `sort()` follows the
+  # system locale, which on Linux puts "US-Bar" before "US-BZB".
+  expect_identical(tot$site_ID, sort(tot$site_ID, method = "radix"))
+  expect_identical(dir$site_ID, sort(dir$site_ID, method = "radix"))
   expect_identical(anyDuplicated(tot$site_ID), 0L)
   expect_identical(anyDuplicated(dir$site_ID), 0L)
 })
