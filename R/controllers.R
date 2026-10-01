@@ -14,6 +14,7 @@ pipeline_controller <- function(host = system2("hostname", stdout = TRUE)) {
   dir.create(log_dir, showWarnings = FALSE, recursive = TRUE)
   crew.cluster::crew_controller_slurm(
     workers = as.integer(Sys.getenv("THERMAL_SLURM_WORKERS", "20")),
+    host = controller_host(),
     seconds_idle = 600,
     # TLS was implicated in workers dying early on this cluster.
     tls = crew::crew_tls(mode = "none"),
@@ -36,4 +37,15 @@ pipeline_controller <- function(host = system2("hostname", stdout = TRUE)) {
       verbose = TRUE
     )
   )
+}
+
+# The address workers dial back to. crew's default is the first of
+# `nanonext::ip_addr()`, and some YCRC nodes list a link-local (169.254.x.x)
+# management interface first, which no other node can reach: with the
+# controller on one, every worker off its node timed out dialling it. The
+# `cluster` interface is the one the node's hostname resolves to.
+controller_host <- function(ips = nanonext::ip_addr()) {
+  routable <- ips[!startsWith(ips, "127.") & !startsWith(ips, "169.254.")]
+  if (!length(routable)) stop("No routable IPv4 address for the crew controller.")
+  if ("cluster" %in% names(routable)) routable[["cluster"]] else unname(routable[[1]])
 }

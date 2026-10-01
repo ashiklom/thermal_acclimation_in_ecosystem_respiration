@@ -78,6 +78,14 @@ Each of these was learned from a failed or degraded full run.
     looks like a certificate error.
   - The trade-off: task payloads (flux-tower data) cross the internal HPC
     network unencrypted.
+- **`host = controller_host()`**: the address workers dial back to.
+  - crew's default is the first of `nanonext::ip_addr()`. Some nodes (c1104u05n02,
+    for one) list a link-local USB management interface (169.254.1.2) first.
+  - On 2026-10-01 the controller landed on such a node: the 3 workers on its own
+    node connected, and all 60 elsewhere exited after 13 s with `dial ... Timed
+    out` in their `.err` logs.
+  - `controller_host()` skips loopback and link-local addresses and prefers the
+    `cluster` interface, the one the node's hostname resolves to.
 - **`seconds_idle = 600`.** Idle workers are handed back during the tail of
   the run, when fewer tasks remain than workers. crew relaunches them on
   demand.
