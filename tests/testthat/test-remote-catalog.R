@@ -103,6 +103,43 @@ test_that("FLUXNET's flat archive is superseded with its directory", {
   expect_equal(left, "ICOS_X-Tst2_FLUXNET_1996-2025_v1.3_r1.zip")
 })
 
+# One FLUXNET release for X-Tst, the way download-fluxnet.sh leaves it: the
+# archive flat in data-raw/FLUXNET, the tables extracted into the site's
+# directory.
+write_fluxnet_release <- function(span) {
+  dir <- file.path(DIR_RAWDATA, "FLUXNET", "X-Tst")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  writeLines(span, file.path(dir, sprintf("ICOS_X-Tst_FLUXNET_FLUXMET_HH_%s_v1.3_r1.csv", span)))
+  zip <- sprintf("ICOS_X-Tst_FLUXNET_%s_v1.3_r1.zip", span)
+  writeLines(span, file.path(DIR_RAWDATA, "FLUXNET", zip))
+  zip
+}
+
+fluxnet_site <- list(site_ID = "X-Tst", source = "FLUXNET")
+
+test_that("a download that brings a different release records what arrived", {
+  # fluxnet-shuttle reads its own snapshot, which can lag the catalogue: asked
+  # for 1996-2026, it fetches 1996-2025 again.
+  local_scratch_project()
+  old <- write_fluxnet_release("1996-2025")
+  mock_global("download_fluxnet", function(...) write_fluxnet_release("1996-2025"))
+  expect_warning(
+    suppressMessages(download_site(fluxnet_site, remote = c(FLUXNET = "ICOS_X-Tst_FLUXNET_1996-2026_v1.3_r1.zip"))),
+    "recording what is on disk"
+  )
+  # so the next run still sees it as out of date, rather than current
+  expect_equal(local_remote_id("X-Tst", "FLUXNET"), old)
+})
+
+test_that("a download that brings the named release records it quietly", {
+  local_scratch_project()
+  write_fluxnet_release("1996-2025")
+  new <- "ICOS_X-Tst_FLUXNET_1996-2026_v1.3_r1.zip"
+  mock_global("download_fluxnet", function(...) write_fluxnet_release("1996-2026"))
+  expect_no_warning(suppressMessages(download_site(fluxnet_site, remote = c(FLUXNET = new))))
+  expect_equal(local_remote_id("X-Tst", "FLUXNET"), new)
+})
+
 test_that("a site's catalogue slice is a named product -> id vector", {
   catalog <- tibble::tibble(
     site_ID = c("A", "A", "B"),

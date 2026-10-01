@@ -45,14 +45,14 @@ download_site <- function(site_info, remote = NULL, overwrite = FALSE) {
         }
       )
       if (fetched) {
-        record_remote_id(name_site, product, want)
+        record_remote_id(name_site, product, fetched_remote_id(name_site, product, want))
       } else {
         restore_product(moved, name_site, product)
       }
     } else if (!present || overwrite) {
       message("Fetching ", product, " for ", name_site)
       fn(name_site, overwrite = overwrite)
-      record_remote_id(name_site, product, want)
+      record_remote_id(name_site, product, fetched_remote_id(name_site, product, want))
     }
 
     got <- product_file(name_site, product)

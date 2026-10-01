@@ -73,6 +73,11 @@ local_remote_id <- function(name_site, product) {
     id <- trimws(readLines(sidecar, warn = FALSE))
     if (length(id) && nzchar(id[[1]])) return(id[[1]])
   }
+  archive_on_disk(name_site, product)
+}
+
+# The newest archive on disk for a site's product, or NA.
+archive_on_disk <- function(name_site, product) {
   paths <- product_local_paths(name_site, product)
   is_dir <- dir.exists(paths)
   zips <- c(
@@ -80,6 +85,20 @@ local_remote_id <- function(name_site, product) {
     basename(paths[!is_dir & grepl("[.]zip$", paths)])
   )
   if (length(zips)) sort(zips, decreasing = TRUE)[[1]] else NA_character_
+}
+
+# The id of what a download actually fetched. Where the id is an archive name,
+# the archive now on disk says, not the catalogue: fluxnet-shuttle downloads
+# from its own snapshot, which can name an older release than the catalogue
+# was scanned from.
+fetched_remote_id <- function(name_site, product, want) {
+  if (is.na(want) || !endsWith(want, ".zip")) return(want)
+  got <- archive_on_disk(name_site, product)
+  if (!identical(got, want)) {
+    warning(product, " for ", name_site, ": the catalogue names ", want,
+            " but the download left ", got, "; recording what is on disk.", call. = FALSE)
+  }
+  got
 }
 
 record_remote_id <- function(name_site, product, remote_id) {
