@@ -325,13 +325,16 @@ read_spliced_products(site_info)     R/prepare-site-data.R, splices in order
 prep_fluxnet_family() / prep_ameriflux()
         ▼
 prep_nee_ac(site_info)  ->  site_prep ─┐
-ERA5_daily_swc.csv  ->  site_era5 ─────┴─>  site_data  ->  site_fill
-                                               └──────────>  site_tas_<recipe>_<model>
+ERA5_daily_swc.csv  ->  era5_swc_tbl ──┴─>  site_data  ->  site_fill
+     (site_era5_swc(), the site's days)        └──────────>  site_tas_<recipe>_<model>
+
+Each of site_prep, site_data and site_fill exists once per site and step-01
+prep key (docs/recipes.md), named e.g. site_data_site_info_manuscript_US.Kon.
 
 site_info.csv (site_info_file, a file target)
         ▼
 get_site_info(site, path = site_info_file)  ->  site_info target, per site
-        └─ threaded into download_site(), prep_nee_ac(), total_tas_site()
+        └─ threaded into download_site(), prep_nee_ac(), fit_tas_site()
 ```
 
 In `_targets.R` each site's `site_dl` target is `format = "file"` over the paths

@@ -47,7 +47,7 @@ site_metrics <- function(name_site) {
   gStart <- fg$gStart
   gEnd <- fg$gEnd
 
-  # Growing season only: everything `total_tas_site()` does is confined to it,
+  # Growing season only: everything `fit_tas_site()` does is confined to it,
   # and the rest of the record would otherwise dominate the point statistics
   # with values the model never sees.
   gs <- sd_$ac |> dplyr::filter(dplyr::between(.data$DOY, gStart, gEnd))
@@ -66,7 +66,7 @@ site_metrics <- function(name_site) {
   fit_dat$TS <- fit_dat$TS_measured
   fit <- ts_ta_model(fit_dat)
 
-  # The window-skip gate. `total_tas_window()` drops a window whose mean TS
+  # The window-skip gate. `fit_tas_window()` drops a window whose mean TS
   # falls outside [max(tStart, 2), tEnd], with the bounds taken from the
   # *selected* column -- so selecting a column moves both the window means and
   # the bounds they are tested against. See scripts/ts-bounds-definition.R for

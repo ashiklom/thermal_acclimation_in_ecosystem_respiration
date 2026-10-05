@@ -101,9 +101,10 @@ control-year choice, because both need a span to be defined over. See
 
 This is a **prep** axis: a recipe with `ts_qc = sensor` has a different prep
 key from the manuscript's and gets its own step 01 and fill per site
-(`site_data_v_*`, `site_fill_v_*` in `_targets.R`), which only its fits read.
-The manuscript's `site_data` — what every collector and the `workflows/`
-scripts consume — never moves. `memfill_sensor` is the registry's example; it
+(`site_data_site_info_sensor_*`, `site_fill_site_info_sensor_*` in
+`_targets.R`), which only its fits read. The manuscript's
+(`site_data_site_info_manuscript_*`) — what every collector and the
+`workflows/` scripts consume — never moves. `memfill_sensor` is the registry's example; it
 is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
 
 ### `bounds`
@@ -142,8 +143,9 @@ that differ only in a *fit* choice share one step-01 result. Step 01 therefore
 produces every candidate soil-temperature column (`TS_measured`, `TS_linear`;
 `TS_memfill` comes from `site_fill`) and both bounds definitions for each, and a
 recipe *selects*. `RECIPE_PREP_AXES` names the axes that break this sharing:
-a recipe whose prep key differs from the manuscript's gets its own step 01 and
-fill per site (`site_data_v_*`, `site_fill_v_*`), which only its fits read.
+`_targets.R` maps step 01 and the fill over each site × distinct prep key among
+the recipes run (always including the manuscript's), and each recipe's fits
+read its own key's `site_data_<prep>_<site>` and `site_fill_<prep>_<site>`.
 
 ## Scoping a run
 
@@ -160,10 +162,10 @@ flag.
 - **A strategy**: one branch in the matching `choose_*()` in `R/strategies.R`
   and one entry in `RECIPE_AXES`. If it needs a column step 01 does not produce
   (ERA5-Land soil temperature, say), produce it in step 01 or as a per-site
-  target like `site_fill`, and attach it in `total_tas_site()` the way
+  target like `site_fill`, and attach it in `fit_tas_site()` the way
   `TS_memfill` is attached.
 - **An axis**: a column in the CSV, an entry in `RECIPE_AXES`, a `choose_*()`
-  function, and a call to it in `total_tas_site()` (or `prep_nee_ac()`, with
+  function, and a call to it in `fit_tas_site()` (or `prep_nee_ac()`, with
   the axis added to `RECIPE_PREP_AXES`).
 
 ## Future work, documented so it is not rediscovered
@@ -183,12 +185,12 @@ independent of season detection altogether requires replacing two more uses of
    are a per-site data-density profile (qualify a year on the fraction of the
    *site's typical* covered DOYs it covers), or qualifying per window rather
    than per year and letting the fit-stage `nobs` guard do the rest.
-2. **Control year** (`total_tas_site()`): the year whose growing-season mean TS
+2. **Control year** (`fit_tas_site()`): the year whose growing-season mean TS
    is closest to the long-term mean. Without a season, the natural replacement
    is the year whose mean TS *over the fitted windows* is closest to the mean.
 
 (1) is a `prep`-stage change — a new `year_qc` strategy, and so a new prep key
-with its own `site_data_v_*` — and (2) a `fit`-stage one.
+with its own `site_data_<prep>_*` — and (2) a `fit`-stage one.
 
 ### `year_qc = computed`
 

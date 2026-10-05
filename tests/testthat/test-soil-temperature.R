@@ -3,7 +3,7 @@
 # What is pinned here is the *contract*, not the estimators (those are in
 # test-soil-temp-columns.R) or the strategies' choices (test-recipes.R): one
 # column leaves, its bounds belong to it, its provenance is recorded, and the
-# selection reproduces what `total_tas_site()` did before the seam existed.
+# selection reproduces what `fit_tas_site()` did before the seam existed.
 
 use_project_root()
 
@@ -196,14 +196,14 @@ test_that("the fill declines where there is no truth, before doing any work", {
   expect_false(fill_available(out))
 })
 
-# The seam, on real data: `total_tas_site()` now reads `TS_final` from this
+# The seam, on real data: `fit_tas_site()` now reads `TS_final` from this
 # function, and the structural run has to be what it was.
-test_that("total_tas_site's soil temperature is get_soil_temperature's, at a real site", {
+test_that("fit_tas_site's soil temperature is get_soil_temperature's, at a real site", {
   skip_if(!site_raw_available("DE-RuC"), "DE-RuC not downloaded")
   si <- get_site_info("DE-RuC")
   sd_ <- prepped_site("DE-RuC")
   soil <- get_soil_temperature(sd_, si, original_recipe())
-  r <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
+  r <- suppressWarnings(suppressMessages(fit_tas_site(sd_, si, fit = FALSE)))
   expect_identical(r$settings$ts_col, soil$meta$ts_col)
   expect_equal(r$settings$tStart, soil$meta$tStart)
   expect_equal(r$settings$tEnd, soil$meta$tEnd)

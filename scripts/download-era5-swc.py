@@ -89,7 +89,7 @@ def extract_daily(site_ids, lats, lons, start):
 
     NOTE: `swvl1` is ERA5-Land volumetric soil water for layer 1 (0-7 cm), in
     m3/m3. It is returned here in that native unit; the analysis convention is
-    percent (0-100), and `read_era5_swc()` in R/total_tas.R does the conversion.
+    percent (0-100), and `read_era5_swc()` in R/era5.R does the conversion.
     """
     if len(site_ids) == 0 or start > end:
         return pd.DataFrame(index=pd.DatetimeIndex([], name="time"))

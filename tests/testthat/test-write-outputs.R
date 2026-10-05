@@ -103,3 +103,47 @@ test_that("new site-years are those past the manuscript's last year, fitted only
   expect_true(is.na(out$manuscript_last_year[out$site_ID == "B"]))
   expect_equal(nrow(collect_new_siteyears(sy[0, ], ms)), 0)
 })
+
+test_that("the run and variant writers split the tables by the report that reads them", {
+  withr::local_dir(withr::local_tempdir())
+  fit <- function(site, recipe, model) list(
+    outcome = tibble::tibble(site_ID = site, recipe_id = recipe, model = model, TAS = 1),
+    outcome_siteyear = tibble::tibble(site_ID = site, recipe_id = recipe, model = model,
+                                      growing_year = 2001L, window = "w1", ERref = 1),
+    settings = tibble::tibble(site_ID = site, recipe_id = recipe, model = model, fit_profile = "fast"),
+    window_skips = tibble::tibble()
+  )
+  ft <- collect_fit_tables(fit("A", "original", "total"), fit("A", "original", "direct"),
+                           fit("A", "memfill", "total"), NULL)
+  expect_named(ft, c("outcome", "siteyear", "settings", "window_skips"))
+  expect_equal(nrow(ft$outcome), 3)
+
+  sd <- list(feature_gs = tibble::tibble(site_ID = "A", gStart = 1),
+             ts_qc = tibble::tibble(site_ID = "A", verdict = "OK"),
+             ts_provenance = tibble::tibble(site_ID = "A", stage_a_arm = "sensor"))
+  st <- collect_site_tables(sd)
+  fl <- collect_fill_tables(list(site_ID = "A", status = "ok", method = "lm_ta"))
+
+  ms <- "manuscript_siteyear.csv"
+  write.csv(data.frame(site_ID = "A", growing_year = 2000), ms, row.names = FALSE)
+  run <- write_run_csvs(ft, st, ms)
+  var <- write_variant_csvs(ft, st, fl)
+  expect_setequal(basename(run), paste0(c(
+    "outcome_temp", "outcome_temp_water_gpp", "outcome_siteyear_temp",
+    "outcome_siteyear_temp_water_gpp", "run_settings", "window_skips", "new_siteyears",
+    "growing_season_features"
+  ), ".csv"))
+  expect_setequal(basename(var), paste0(c(
+    "variant_outcome", "variant_siteyear", "variant_settings", "variant_window_skips",
+    "ts_qc", "ts_provenance", "fill_cv", "fill_summary"
+  ), ".csv"))
+  expect_true(all(file.exists(c(run, var))))
+  expect_true(file.path(DIR_FEATURES, "growing_season_features.csv") %in% run)
+
+  # The manuscript layout is the `original` recipe and one model, its columns dropped
+  tot <- read.csv(file.path(DIR_ANALYSIS, "outcome_temp.csv"))
+  expect_equal(nrow(tot), 1)
+  expect_false(any(c("recipe_id", "model", "fit_profile") %in% names(tot)))
+  expect_equal(nrow(read.csv(file.path(DIR_ANALYSIS, "variant_outcome.csv"))), 3)
+  expect_equal(read.csv(file.path(DIR_ANALYSIS, "new_siteyears.csv"))$growing_year, 2001)
+})

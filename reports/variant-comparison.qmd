@@ -38,14 +38,22 @@ from_target <- function(path) {
 }
 or_null <- function(expr) tryCatch(expr, error = function(e) NULL)
 
-outcome  <- from_target(or_null(tar_read(variant_outcome_csv)))
-settings <- from_target(or_null(tar_read(variant_settings_csv)))
-siteyear <- from_target(or_null(tar_read(variant_siteyear_csv)))
-skips    <- from_target(or_null(tar_read(variant_window_skips_csv)))
-ts_qc    <- from_target(or_null(tar_read(ts_qc_csv)))
-fill_cv  <- from_target(or_null(tar_read(fill_cv_csv)))
-fill_sum <- from_target(or_null(tar_read(fill_summary_csv)))
-feats    <- from_target(or_null(tar_read(growing_season_features_csv)))
+# `variant_csvs` and `run_csvs` are file targets; `csv_named()` picks one out.
+csv_named <- function(paths, name) {
+  hit <- paths[basename(paths) == paste0(name, ".csv")]
+  if (length(hit)) hit else NULL
+}
+variant_csvs <- or_null(tar_read(variant_csvs))
+run_csvs <- or_null(tar_read(run_csvs))
+
+outcome  <- from_target(csv_named(variant_csvs, "variant_outcome"))
+settings <- from_target(csv_named(variant_csvs, "variant_settings"))
+siteyear <- from_target(csv_named(variant_csvs, "variant_siteyear"))
+skips    <- from_target(csv_named(variant_csvs, "variant_window_skips"))
+ts_qc    <- from_target(csv_named(variant_csvs, "ts_qc"))
+fill_cv  <- from_target(csv_named(variant_csvs, "fill_cv"))
+fill_sum <- from_target(csv_named(variant_csvs, "fill_summary"))
+feats    <- from_target(csv_named(run_csvs, "growing_season_features"))
 recipes  <- from_target(or_null(tar_read(recipes_file)))
 
 ORIG <- "data-proc-original"
@@ -195,7 +203,7 @@ A sign flip or a crossing of $p = 0.05$ is called out.
 #| echo: false
 #| results: asis
 if (is.null(outcome)) {
-  skip_note("TAS comparison", "variant_outcome_csv not built.")
+  skip_note("TAS comparison", "variant_outcome.csv not written.")
 } else {
   base <- outcome |> filter(recipe_id == "original") |>
     select(site_ID, model, TAS_original = TAS, TASp_original = TASp)
@@ -264,7 +272,7 @@ is applied and `ts_reason` says so.
 ```{r provenance}
 #| echo: false
 #| results: asis
-if (is.null(settings)) skip_note("Provenance", "variant_settings_csv not built.") else {
+if (is.null(settings)) skip_note("Provenance", "variant_settings.csv not written.") else {
   settings |>
     filter(model == first(model)) |>   # choices are model-independent except swc
     select(site_ID, recipe_id, ts_col, ts_reason, ts_verdict, ts_flags,
@@ -288,7 +296,7 @@ and which year is the control. These are exact — the same loop the fits run.
 ```{r structure}
 #| echo: false
 #| results: asis
-if (is.null(siteyear)) skip_note("Structure", "variant_siteyear_csv not built.") else {
+if (is.null(siteyear)) skip_note("Structure", "variant_siteyear.csv not written.") else {
   cells <- siteyear |>
     summarise(
       n_cells = sum(!is.na(alpha) | status %in% c("fitted", "not_fitted")),
@@ -326,7 +334,7 @@ ns <- if (!is.null(siteyear)) filter(siteyear, recipe_id == "noseason") else NUL
 if (is.null(ns) || !nrow(ns)) {
   skip_note("noseason test", "The `noseason` recipe is not in this run.")
 } else if (is.null(feats)) {
-  skip_note("noseason test", "growing_season_features_csv not built.")
+  skip_note("noseason test", "growing_season_features.csv not written.")
 } else {
   w <- ns |>
     filter(status %in% c("fitted", "not_fitted")) |>
@@ -362,7 +370,7 @@ pipeline's pre-existing `TS ~ TA` default, scored on the same folds.
 ```{r fill}
 #| echo: false
 #| results: asis
-if (is.null(fill_sum)) skip_note("Fill", "fill_summary_csv not built.") else {
+if (is.null(fill_sum)) skip_note("Fill", "fill_summary.csv not written.") else {
   cat("### Decision per site\n\n")
   print(knitr::kable(fill_sum, digits = 3))
   if (!is.null(fill_cv)) {
@@ -401,7 +409,7 @@ temperature over that of air (buried soil damps; near 1 is not soil);
 ```{r tsqc}
 #| echo: false
 #| results: asis
-if (is.null(ts_qc)) skip_note("TS quality", "ts_qc_csv not built.") else {
+if (is.null(ts_qc)) skip_note("TS quality", "ts_qc.csv not written.") else {
   ts_qc |> select(site_ID, verdict, flags, coverage, amp_ratio, lag_unwrapped,
                   stuck_frac, mean_offset, n) |>
     knitr::kable(digits = 3) |> print()

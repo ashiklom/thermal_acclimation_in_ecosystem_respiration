@@ -3,7 +3,7 @@
 # What does substituting TS ~ TA for measured soil temperature do to the
 # *structure* of a run, before any model is fitted?
 #
-# `total_tas_site(fit = FALSE)` walks the real window and year loop with no
+# `fit_tas_site(fit = FALSE)` walks the real window and year loop with no
 # Stan sampling: it reports which windows were skipped and why, which years
 # were rejected and why, how far each window had to be extended, and how many
 # observations each cell ended up with. Those decisions all read the soil
@@ -33,7 +33,7 @@ outdir <- parse_opt(args, "--out", file.path("data-proc", "ts-rework"))
 
 structure_for <- function(sd_, site_info, ts_col) {
   suppressWarnings(suppressMessages(
-    total_tas_site(sd_, site_info, direct = FALSE, ts_col = ts_col, fit = FALSE)
+    fit_tas_site(sd_, site_info, model = "total", ts_col = ts_col, fit = FALSE)
   ))
 }
 

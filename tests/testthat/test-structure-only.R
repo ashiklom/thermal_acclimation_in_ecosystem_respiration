@@ -1,4 +1,4 @@
-# `total_tas_site(fit = FALSE)`: the window layout and year selection, with no
+# `fit_tas_site(fit = FALSE)`: the window layout and year selection, with no
 # model fitting at all.
 #
 # The value of this path is that it is the *same* loop as the fitted one, so
@@ -23,7 +23,7 @@ test_that(sprintf("[%s/%s] the structure-only path fits nothing and says so", re
   skip_if(!site_raw_available(name_site), paste(name_site, "not downloaded"))
   si <- get_site_info(name_site)
   sd_ <- prepped_site(name_site)
-  r <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
+  r <- suppressWarnings(suppressMessages(fit_tas_site(sd_, si, fit = FALSE)))
 
   expect_named(r, c("outcome", "outcome_siteyear", "window_skips", "settings"))
   # NULL rather than a row of NAs, so a structure-only result cannot be
@@ -52,8 +52,8 @@ test_that(sprintf("[%s/%s] two structure-only runs agree exactly", reader, name_
   skip_if(!site_raw_available(name_site), paste(name_site, "not downloaded"))
   si <- get_site_info(name_site)
   sd_ <- prepped_site(name_site)
-  a <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
-  b <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
+  a <- suppressWarnings(suppressMessages(fit_tas_site(sd_, si, fit = FALSE)))
+  b <- suppressWarnings(suppressMessages(fit_tas_site(sd_, si, fit = FALSE)))
 
   expect_identical(a$outcome_siteyear[structural_cols],
                    b$outcome_siteyear[structural_cols])
@@ -65,9 +65,9 @@ test_that(sprintf("[%s/%s] settings record the choices that shaped the run", rea
   skip_if(!site_raw_available(name_site), paste(name_site, "not downloaded"))
   si <- get_site_info(name_site)
   sd_ <- prepped_site(name_site)
-  tot <- suppressWarnings(suppressMessages(total_tas_site(sd_, si, fit = FALSE)))
+  tot <- suppressWarnings(suppressMessages(fit_tas_site(sd_, si, fit = FALSE)))
   dir <- suppressWarnings(suppressMessages(
-    total_tas_site(sd_, si, direct = TRUE, fit = FALSE)
+    fit_tas_site(sd_, si, model = "direct", fit = FALSE)
   ))
 
   expect_equal(tot$settings$model, "total")

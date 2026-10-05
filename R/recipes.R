@@ -45,22 +45,23 @@ RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 # step 01, so it doubles a run's step-01 cost. THERMAL_RECIPES names it.
 DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 
-# A plain S3 list, not S7: an S7 object does not come back `identical()` from
-# the qs2 store. Validation runs at construction.
-new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc,
-                       description = NA_character_) {
-  r <- structure(
-    list(
-      recipe_id = recipe_id, ts = ts, season = season, bounds = bounds,
-      swc = swc, year_qc = year_qc, ts_qc = ts_qc, description = description
-    ),
-    class = "recipe"
+# A plain named list -- no class: nothing dispatches on one, and it is written
+# literally into every fit's command. (Not S7 either: an S7 object does not
+# come back `identical()` from the qs2 store.) Validation runs at construction.
+#
+# The CSV's `description` column is for people (and the variant report, which
+# reads the CSV itself), not part of the recipe: `_targets.R` writes each
+# recipe into its fits' commands, so editing a description invalidates nothing.
+new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc) {
+  r <- list(
+    recipe_id = recipe_id, ts = ts, season = season, bounds = bounds,
+    swc = swc, year_qc = year_qc, ts_qc = ts_qc
   )
   validate_recipe(r)
 }
 
 validate_recipe <- function(r) {
-  stopifnot(inherits(r, "recipe"))
+  stopifnot("a recipe is a list; pass get_recipe(id), not the id" = is.list(r))
   id <- r[["recipe_id"]]
   if (length(id) != 1 || is.na(id) || !grepl("^[a-z][a-z0-9_]*$", id)) {
     stop(
@@ -82,20 +83,12 @@ validate_recipe <- function(r) {
   r
 }
 
-print.recipe <- function(x, ...) {
-  cat("<recipe> ", x$recipe_id, "\n", sep = "")
-  for (axis in names(RECIPE_AXES)) cat("  ", format(axis, width = 8), x[[axis]], "\n")
-  if (!is.na(x$description)) cat("  ", x$description, "\n")
-  invisible(x)
-}
-
 # The manuscript's logic; the default wherever no recipe is passed.
 original_recipe <- function() {
   new_recipe(
     "original",
     ts = "site_info", season = "detect_or_override", bounds = "native", swc = "site_info",
-    year_qc = "site_info", ts_qc = "manuscript",
-    description = "Exactly the manuscript logic."
+    year_qc = "site_info", ts_qc = "manuscript"
   )
 }
 
@@ -121,9 +114,7 @@ read_recipes <- function(path = RECIPES_CSV) {
   dat
 }
 
-# `path` may be a path or an already-read table. The pipeline hands in the
-# `format = "file"` target for the CSV so that editing it invalidates exactly
-# the fits whose recipe changed.
+# `path` may be a path or an already-read table.
 get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   dat <- if (is.data.frame(path)) path else {
     readr::read_csv(path, col_types = readr::cols(.default = readr::col_character()), progress = FALSE)
@@ -135,7 +126,7 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   }
   r <- new_recipe(
     row$recipe_id, ts = row$ts, season = row$season, bounds = row$bounds,
-    swc = row$swc, year_qc = row$year_qc, ts_qc = row$ts_qc, description = row$description
+    swc = row$swc, year_qc = row$year_qc, ts_qc = row$ts_qc
   )
   # The CSV's `original` row must agree with the code's definition, or the
   # oracle comparison is against the wrong thing.
@@ -152,12 +143,13 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
 }
 
 # The part of a recipe that step 01 sees. Two recipes with the same prep key
-# can share a `site_data` target. `prep_key_label()` is the same thing spelled
-# so it can sit inside a target name.
+# share one step-01 result per site, and the key is the suffix of its target
+# names (`site_data_site_info_manuscript_<site>`), so it is joined with `_`.
+# Strategy names contain `_` too, so two different preps could in principle
+# share a key; `_targets.R` would then fail on a duplicate target name.
 recipe_prep_key <- function(recipe) {
-  paste(vapply(RECIPE_PREP_AXES, function(a) recipe[[a]], ""), collapse = "+")
+  paste(vapply(RECIPE_PREP_AXES, function(a) recipe[[a]], ""), collapse = "_")
 }
-prep_key_label <- function(prep_key) gsub("[^A-Za-z0-9]+", "_", prep_key)
 MANUSCRIPT_PREP_KEY <- function() recipe_prep_key(original_recipe())
 
 # Which recipes a pipeline run includes, by analogy with `pipeline_sites()`.
@@ -182,7 +174,10 @@ pipeline_recipes <- function(scope = Sys.getenv("THERMAL_RECIPES", "dev"),
 #   THERMAL_MODELS=total,direct (default) | total | direct
 pipeline_models <- function(scope = Sys.getenv("THERMAL_MODELS", "total,direct")) {
   wanted <- trimws(strsplit(scope, ",")[[1]])
-  bad <- setdiff(wanted, c("total", "direct"))
-  if (length(bad)) stop("THERMAL_MODELS must name `total` and/or `direct`, not ", paste(shQuote(bad), collapse = ", "))
+  bad <- setdiff(wanted, MODEL_TYPES)
+  if (length(bad)) {
+    stop("THERMAL_MODELS must name one or more of ", paste(shQuote(MODEL_TYPES), collapse = ", "),
+         ", not ", paste(shQuote(bad), collapse = ", "))
+  }
   unique(wanted)
 }
