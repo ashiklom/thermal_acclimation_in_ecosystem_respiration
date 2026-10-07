@@ -6,25 +6,25 @@ tar_source()
 # `error = "null"`: an errored target's value is NULL, the collectors drop it
 # (`built()` in R/write-outputs.R), and one site's failure is a gap in the
 # tables plus a row in `tar_meta(fields = error)`. Under "continue" it would
-# stop the collectors and both reports. No global `cue = "never"`: a code fix
-# has to invalidate what it touches; run fewer sites to make a run cheap.
-# The controller (local, or Slurm on YCRC) is in R/controllers.R.
+# stop the collectors and both reports. 
 tar_option_set(error = "null", controller = pipeline_controller())
 
 # ----------------------------------------------------------------- the grid
 #
 # Sites x recipes x models, each scoped by an environment variable (see
-# docs/recipes.md). THERMAL_FIT=fast shrinks the sampler for smoke tests;
-# its TAS values are not results.
+# docs/recipes.md).
 sites <- pipeline_sites()
 recipes <- lapply(rlang::set_names(pipeline_recipes()), get_recipe)
 models <- pipeline_models()
+# THERMAL_FIT=fast shrinks the sampler for quick tests, but produces fake results.
 FIT_PROFILE <- Sys.getenv("THERMAL_FIT", "full")
-fit_settings(FIT_PROFILE) # fail here, by name, rather than inside every fit target
+fit_settings(FIT_PROFILE) # check and fail early
 
-# Step 01 runs once per distinct prep key (`RECIPE_PREP_AXES`), not once per
-# recipe: recipes that differ only in a fit axis share it. The manuscript's is
-# always built, because the site-level outputs and `workflows/` read it.
+# Data preparation:
+# Only a subset of recipe parts (e.g., `year_qc`, `ts_qc`) affect data prep, 
+# and the same data prep can be shared by fits of different models.
+# Always build the original manuscript prep because the site-level outputs and 
+# `workflows/` scripts need it.
 preps <- tibble::tibble(
   prep_axes = unique(lapply(c(list(original_recipe()), recipes), `[`, RECIPE_PREP_AXES)),
   prep = vapply(.data$prep_axes, recipe_prep_key, "")
@@ -51,14 +51,20 @@ message(
 # site's under its own recipe's prep, e.g. `site_tas_original_total` under the
 # `site_info_manuscript` prep at US-Kon is
 # `site_tas_original_total_site_info_manuscript_US.Kon`.
+
+# For each kind of data preparation ("prep"):
 per_prep <- function(p) {
-  prep_fits <- dplyr::filter(fits, .data$prep == p$prep) |>
+  # Get the fits matching that prep 
+  prep_fits <- fits |> 
+    dplyr::filter(.data$prep == p$prep) |>
     dplyr::select("recipe_id", "model", "recipe")
   tar_map(
     values = p,
     names = "prep",
     # Step 01 in two parts, so that extending the ERA5 file re-runs only the
     # cheap join, and only where the site's own days gained values.
+    # Prepare the site nighttime respiration according to the method.
+    # `era5 = NULL` here because we attach it later in a separate step.
     tar_target(site_prep, {site_dl; prep_nee_ac(site_info, recipe = prep_axes, era5 = NULL)}, format = "qs"),
     tar_target(site_end, site_record_end(site_prep)),
     tar_target(
