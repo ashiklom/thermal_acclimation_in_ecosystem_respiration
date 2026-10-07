@@ -1,43 +1,59 @@
-N_CORES <- 4        # Used internally by brms
-WINDOW_SIZE <- 14   # Uniform window size: 2 weeks.
+#' Number of CPU cores per fit
+#'
+#' Used internally by brms
+N_CORES <- 4
 
-# The models `fit_tas_site()` fits, by name: `BRM_FORMULA_TOTAL` and
-# `BRM_FORMULA_DIRECT` below. The name is the `model` column of every output
-# table and what THERMAL_MODELS selects.
+#' Uniform window size: 2 weeks
+WINDOW_SIZE <- 14
+
+#' The models `fit_tas_site()` fits, by name
+#'
+#' `BRM_FORMULA_TOTAL` and `BRM_FORMULA_DIRECT` below. The name is the `model`
+#' column of every output table and what THERMAL_MODELS selects.
 MODEL_TYPES <- c("total", "direct")
 
-# The soil-temperature column is `TS_final`: the one column
-# `get_soil_temperature()` leaves on the tables. See R/soil-temperature.R.
+#' The total model's brms formula
+#'
+#' The soil-temperature column is `TS_final`: the one column
+#' `get_soil_temperature()` leaves on the tables. See R/soil-temperature.R.
 BRM_FORMULA_TOTAL <- brms::bf(
   NEE ~ exp(alpha * TS_final + beta * TS_final^2) * C0,
   alpha + beta + C0 ~ 1,
   nl = TRUE
 )
 
+#' The direct model's brms formula
 BRM_FORMULA_DIRECT <- brms::bf(
   NEE ~ exp(alpha * TS_final + beta * TS_final^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2),
   alpha + beta + C0 + Hs + k2 ~ 1,
   nl = TRUE
 )
 
-# The priors, with their means and SDs passed as data (`prior_stanvars()`)
-# rather than written into the Stan code. The code is then the same for every
-# window and site, so cmdstanr compiles each model once per process and every
-# later fit reuses it. `sigma` is brms's own default prior, whose scale brms
-# would otherwise compute from the data and write into the code.
+#' Priors for the total model
+#'
+#' The priors, with their means and SDs passed as data (`prior_stanvars()`)
+#' rather than written into the Stan code. The code is then the same for every
+#' window and site, so cmdstanr compiles each model once per process and every
+#' later fit reuses it. `sigma` is brms's own default prior, whose scale brms
+#' would otherwise compute from the data and write into the code.
 BRM_PRIORS_TOTAL <- brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
   brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) +
   brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0) +
   brms::prior("student_t(3, 0, sigma_scale)", class = "sigma")
 
+#' Priors for the direct model: the total model's plus `Hs` and `k2`
 BRM_PRIORS_DIRECT <- BRM_PRIORS_TOTAL +
   brms::prior("normal(Hs_mu, Hs_sd)", nlpar = "Hs", lb = 0, ub = 1000) +
   brms::prior("normal(k2_mu, k2_sd)", nlpar = "k2", lb = 0, ub = 10)
 
 ################################################################################
 
-# One growing year's result in one window, filled in as the loop goes.
-# `status` records why a year produced no fit, which a row of NAs cannot.
+#' One growing year's result in one window, filled in as the loop goes
+#'
+#' `status` records why a year produced no fit, which a row of NAs cannot.
+#'
+#' @return A named list of NA scalars: `status`, `nobsv`, `extend_days`, the
+#'   model parameters (`alpha`, `beta`, `C0`, `k2`, `Hs`), `TS` and `ERref`.
 empty_year_result <- function() {
   list(
     status = NA_character_, nobsv = NA_integer_, extend_days = NA_integer_,
@@ -46,15 +62,32 @@ empty_year_result <- function() {
   )
 }
 
-# Whether a year's subset is too small, or too narrow in soil temperature to
-# contain TSref, to fit on as it is.
+#' Whether a year's subset needs a wider window
+#'
+#' Whether a year's subset is too small, or too narrow in soil temperature to
+#' contain TSref, to fit on as it is.
+#'
+#' @param data_subset One growing year's nighttime NEE rows in the window, with
+#'   `TS_final`.
+#' @param TSref Reference soil temperature: the window's mean `TS_final` (degC).
+#' @param nobs_threshold Minimum observations per window-year.
+#' @return `TRUE` if `data_subset` has fewer than `nobs_threshold` rows or
+#'   `TSref` lies outside its 2.5--97.5 % `TS_final` quantiles.
 window_needs_widening <- function(data_subset, TSref, nobs_threshold) {
   ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
   nrow(data_subset) < nobs_threshold || !dplyr::between(TSref, ts_quants[[1]], ts_quants[[2]])
 }
 
-# The first of the four year-level rules, in the original's order, that
-# rejects a subset; NA if none does.
+#' The first year-level rule that rejects a subset
+#'
+#' The first of the four year-level rules, in the original's order, that
+#' rejects a subset; NA if none does.
+#'
+#' @param data_subset One growing year's nighttime NEE rows in the window, with
+#'   `NEE` and `TS_final`.
+#' @param TSref Reference soil temperature: the window's mean `TS_final` (degC).
+#' @return The rule's status string (e.g. `"year_too_few_obs"`), or
+#'   `NA_character_`.
 year_rejection <- function(data_subset, TSref) {
   ts_quants <- quantile(data_subset$TS_final, c(0.025, 0.975), na.rm = TRUE)
   if (nrow(data_subset) <= 25) {
@@ -75,9 +108,13 @@ year_rejection <- function(data_subset, TSref) {
 
 ################################################################################
 
-# Sampler settings. `full` is the manuscript's; `fast` is for end-to-end smoke
-# tests and its TAS values mean nothing. An argument rather than an
-# environment variable, so it is part of each fit's command.
+#' Sampler settings
+#'
+#' @param profile `"full"` or `"fast"`. `full` is the manuscript's; `fast` is
+#'   for end-to-end smoke tests and its TAS values mean nothing. An argument
+#'   rather than an environment variable, so it is part of each fit's command.
+#' @return A list of `profile`, `prior_iter`, `iter`, `chains`, `retry` and
+#'   `retry_iter`. Errors on an unknown profile.
 fit_settings <- function(profile = "full") {
   switch(
     profile,
@@ -89,33 +126,67 @@ fit_settings <- function(profile = "full") {
   )
 }
 
-# The prior means and SDs before `get_priors()` re-centres the means; the SDs
-# stay as they are.
+#' Default prior means and SDs
+#'
+#' The prior means and SDs before `get_priors()` re-centres the means; the SDs
+#' stay as they are.
+#'
+#' @param direct Whether the model is the direct model, which adds `Hs` and
+#'   `k2`.
+#' @return Named numeric vector of `<par>_mu` and `<par>_sd` values.
 default_priors <- function(direct = FALSE) {
   priors <- c(C0_mu = 2, C0_sd = 5, alpha_mu = 0.1, alpha_sd = 1, beta_mu = -0.001, beta_sd = 0.1)
   if (direct) priors <- c(priors, Hs_mu = 10, Hs_sd = 10, k2_mu = 0.5, k2_sd = 2)
   priors
 }
 
+#' Re-centre prior means
+#'
+#' @param priors Named numeric vector of prior means and SDs, as from
+#'   `default_priors()`.
+#' @param mu Named numeric vector of new means, named by parameter (`alpha`,
+#'   `C0`, ...).
+#' @return `priors`, with each `<par>_mu` replaced by `mu[["<par>"]]`.
 recentre_priors <- function(priors, mu) {
   priors[paste0(names(mu), "_mu")] <- mu
   priors
 }
 
-# brms's default scale for a Gaussian `sigma`: the response's MAD, rounded,
-# at least 2.5 -- over the rows brms fits, those complete in the model's
-# variables.
+#' brms's default scale for a Gaussian `sigma`
+#'
+#' The response's MAD, rounded, at least 2.5 -- over the rows brms fits, those
+#' complete in the model's variables.
+#'
+#' @param data Nighttime NEE rows the model is fitted to.
+#' @param direct Whether the model is the direct model, which adds `SWC` and
+#'   `NEE_daytime` to its variables.
+#' @return A single number: the Student-t scale of the `sigma` prior, in NEE
+#'   units (umol/m2/s).
 default_sigma_scale <- function(data, direct = FALSE) {
   vars <- c("NEE", "TS_final", if (direct) c("SWC", "NEE_daytime"))
   nee <- data[stats::complete.cases(data[vars]), "NEE", drop = TRUE]
   max(2.5, round(stats::mad(nee), 1))
 }
 
+#' Prior hyperparameters as brms stanvars
+#'
+#' @param priors Named numeric vector of prior means and SDs.
+#' @param data Nighttime NEE rows the model is fitted to.
+#' @param direct Whether the model is the direct model.
+#' @return A `brms::stanvar()` object passing every prior mean and SD, plus
+#'   `sigma_scale`, to Stan as data.
 prior_stanvars <- function(priors, data, direct = FALSE) {
   values <- c(priors, sigma_scale = default_sigma_scale(data, direct))
   Reduce(`+`, Map(brms::stanvar, values, names(values)))
 }
 
+#' Data-centred prior means for one window
+#'
+#' @param model_data The window's nighttime NEE rows, across all growing years.
+#' @param direct Whether the model is the direct model.
+#' @param fs Sampler settings from `fit_settings()`.
+#' @return Named numeric vector of prior means and SDs, as `default_priors()`,
+#'   with the means re-centred on a brms fit to `model_data`.
 get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
   priors <- default_priors(direct)
 
@@ -163,16 +234,24 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
 }
 
 
-# Step 02 for one site and model: TAS from 14-day windows across years.
-#
-#   model        one of `MODEL_TYPES`
-#   recipe       the methodology, resolved through R/strategies.R; NULL is
-#                the manuscript's
-#   fill         the site's `fill_soil_temp()` result (memory_fill recipes)
-#   ts_col, swc_col  override the recipe's columns, for sensitivity runs
-#   fit = FALSE  the same window/year loop with no model fitting: which
-#                windows and years survive, and why. Deterministic, seconds.
-#   fit_profile  see `fit_settings()`
+#' Step 02 for one site and model: TAS from 14-day windows across years
+#'
+#' @param site_data The site's step 01 result (`prep_nee_ac()` with ERA5 soil
+#'   water attached): a list with `ac`, `nightNEE`, `feature_gs` and
+#'   `ts_bounds`.
+#' @param site_info One row of the site declaration table.
+#' @param model One of `MODEL_TYPES`.
+#' @param ts_col,swc_col Override the recipe's columns, for sensitivity runs.
+#' @param fit If `FALSE`, the same window/year loop with no model fitting:
+#'   which windows and years survive, and why. Deterministic, seconds.
+#' @param recipe The methodology, resolved through R/strategies.R; NULL is the
+#'   manuscript's.
+#' @param fill The site's `fill_soil_temp()` result (memory_fill recipes).
+#' @param fit_profile Sampler profile; see `fit_settings()`.
+#' @return A list of `outcome` (one-row tibble with `TAS`, `TASp`, `RMSE` and
+#'   `R2`; `NULL` when `fit = FALSE`), `outcome_siteyear` (one row per window
+#'   and growing year), `window_skips` (skipped windows and why) and `settings`
+#'   (one-row tibble of every choice behind the run).
 fit_tas_site <- function(site_data, site_info, model = "total",
                          ts_col = NULL, swc_col = NULL, fit = TRUE,
                          recipe = NULL, fill = NULL, fit_profile = "full") {
@@ -424,12 +503,19 @@ fit_tas_site <- function(site_data, site_info, model = "total",
 }
 
 
-# The across-year regression that defines TAS: log respiration ratio on
-# window-mean soil temperature, with `window` as a factor and an AR(1) error
-# within window across years.
-#
-# Too few windows, or a singular fit, is a result -- the site did not earn an
-# estimate -- so it returns NA TAS with a `status` rather than an error.
+#' The across-year regression that defines TAS
+#'
+#' Log respiration ratio on window-mean soil temperature, with `window` as a
+#' factor and an AR(1) error within window across years.
+#'
+#' Too few windows, or a singular fit, is a result -- the site did not earn an
+#' estimate -- so it returns NA TAS with a `status` rather than an error.
+#'
+#' @param window_results_df Per-window, per-growing-year results from
+#'   `fit_tas_window()`, bound across windows: needs `lnRatio`, `TS`, `window`
+#'   and `growing_year`.
+#' @return A list of `TAS` (the slope on `TS`), `TASp` (its p-value) and
+#'   `status` (`"fitted"`, or why not).
 across_year_tas <- function(window_results_df) {
   usable <- window_results_df[!is.na(window_results_df[["lnRatio"]]), , drop = FALSE]
   n_windows <- length(unique(usable[["window"]]))
@@ -456,6 +542,36 @@ across_year_tas <- function(window_results_df) {
   list(TAS = smry["TS", "Value"], TASp = smry["TS", "p-value"], status = "fitted")
 }
 
+#' Fit one window across every growing year
+#'
+#' @param ac The site's flux table, with `TS_final`, `growing_year` and, when
+#'   used, `SWC`.
+#' @param ac_day Daily daytime NEE by `YEAR` and `DOY`, with its 3-day rolling
+#'   mean `NEE_daytime` (umol/m2/s).
+#' @param a_measure_night_complete Nighttime NEE rows, with `NEE_daytime1`,
+#'   `NEE_daytime` and `growing_year` attached.
+#' @param window_start,window_end First and last DOY of the window (possibly
+#'   wrapped past 366).
+#' @param nwindow Number of windows in the season; a lone window is never
+#'   skipped for its soil temperature.
+#' @param nobs_threshold Minimum observations per window-year.
+#' @param control_year The growing year whose reference respiration the other
+#'   years are compared against.
+#' @param SWC_use Whether the model uses soil water, so the reference
+#'   conditions include `SWC`.
+#' @param tStart,tEnd Soil-temperature bounds (degC). With more than one
+#'   window, a window whose mean lies outside `[max(tStart, 2), tEnd]` is
+#'   skipped.
+#' @param gEnd Last DOY of the span the windows tile; a year's window stops
+#'   widening at it once the year has enough rows and `TSref` is at or above
+#'   their maximum `TS_final`.
+#' @param direct Whether the model is the direct model.
+#' @param fit If `FALSE`, run the window/year layout with no model fitting.
+#' @param fs Sampler settings from `fit_settings()`.
+#' @return A list of `outcome_siteyear` (one row per growing year: `status`,
+#'   parameters, `TS`, `ERref` and, when fitted, `lnRatio`), `ER_obs_pred`
+#'   (observed rows with fitted `NEE_pred`) and `skipped` (a one-row tibble
+#'   saying why, if the window was skipped; otherwise `NULL`).
 fit_tas_window <- function(
   ac, ac_day, a_measure_night_complete,
   window_start, window_end, nwindow, nobs_threshold, control_year,
@@ -656,6 +772,14 @@ fit_tas_window <- function(
   )
 }
 
+#' Fit one year's brms model, retrying on failure or divergences
+#'
+#' @param data_subset One growing year's nighttime NEE rows in the window.
+#' @param priors Prior means and SDs from `get_priors()`.
+#' @param direct Whether the model is the direct model.
+#' @param fs Sampler settings from `fit_settings()`; `retry` and `retry_iter`
+#'   govern the second attempt.
+#' @return The `brmsfit`, or a `try-error` if the last attempt failed.
 fit_with_retry <- function(data_subset, priors, direct = FALSE, fs = fit_settings("full")) {
   brm_args <- list(
     if (direct) BRM_FORMULA_DIRECT else BRM_FORMULA_TOTAL,

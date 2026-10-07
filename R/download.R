@@ -1,14 +1,20 @@
-# Fetch every product in a site's provenance list, returning the local paths.
-#
-# Most sites need more than one product: see `FLUX_PRODUCTS` in R/constants.R
-# and docs/data-provenance.md for why.
-#
-# `remote` is the site's slice of the remote catalogue (`remote_for_site()`),
-# product -> remote_id. A product already on disk is re-fetched when its
-# recorded remote_id differs from the provider's current one: the old copy is
-# moved to data-raw/_superseded/ first, and moved back if the new download
-# fails, so a flaky provider costs a warning and never the data we had. An NA
-# remote_id -- the provider could not be asked -- keeps what is on disk.
+#' Fetch every product in a site's provenance list
+#'
+#' Most sites need more than one product: see `FLUX_PRODUCTS` in R/constants.R
+#' and docs/data-provenance.md for why.
+#'
+#' A product already on disk is re-fetched when its recorded remote_id differs
+#' from the provider's current one: the old copy is moved to
+#' data-raw/_superseded/ first, and moved back if the new download fails, so a
+#' flaky provider costs a warning and never the data we had. An NA remote_id --
+#' the provider could not be asked -- keeps what is on disk.
+#'
+#' @param site_info One row of the site declaration table.
+#' @param remote The site's slice of the remote catalogue (`remote_for_site()`),
+#'   product -> remote_id. `NULL` treats every remote_id as NA.
+#' @param overwrite Re-download every product even if it is already on disk.
+#' @return The local paths: a character vector with each product's half-hourly table, in
+#'   provenance order.
 download_site <- function(site_info, remote = NULL, overwrite = FALSE) {
   name_site <- site_info[["site_ID"]]
   downloaders <- list(
@@ -68,8 +74,12 @@ download_site <- function(site_info, remote = NULL, overwrite = FALSE) {
   paths
 }
 
-# The account and data-use terms every AmeriFlux request carries, from
-# `_creds.toml` (see the README).
+#' The account and data-use terms every AmeriFlux request carries
+#'
+#' From `_creds.toml` (see the README).
+#'
+#' @return Named list of `amerifluxr` request arguments: `user_id`, `user_email`, the
+#'   data policy and the intended use.
 ameriflux_request <- function() {
   creds <- RcppTOML::parseTOML("_creds.toml")
   list(
@@ -82,6 +92,12 @@ ameriflux_request <- function() {
   )
 }
 
+#' Download a site's AmeriFlux BASE-BADM archive
+#'
+#' @param name_site Site ID.
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return Path to the downloaded zip (from `amerifluxr::amf_download_base()`), or
+#'   `NULL`, invisibly, if the product was already present.
 download_ameriflux <- function(name_site, overwrite = FALSE) {
   if (!is.na(product_file(name_site, "AmeriFlux_BASE")) && !overwrite) {
     message("  already present, skipping download")
@@ -94,10 +110,19 @@ download_ameriflux <- function(name_site, overwrite = FALSE) {
   )))
 }
 
-# Run an external downloader unless the product is already on disk. Presence is
-# decided by `product_file()` -- the same lookup the readers use -- so a
-# downloader that succeeds but leaves nothing readable is caught immediately
-# rather than at model-fitting time.
+#' Run an external downloader unless the product is already on disk
+#'
+#' Presence is decided by `product_file()` -- the same lookup the readers use -- so a
+#' downloader that succeeds but leaves nothing readable is caught immediately
+#' rather than at model-fitting time.
+#'
+#' @param name_site Site ID.
+#' @param product Name of a `FLUX_PRODUCTS` entry.
+#' @param command Program to run (`"python"`, `"bash"`).
+#' @param args Character vector of arguments to `command`.
+#' @param overwrite Run the downloader even if the product is already on disk.
+#' @return The downloader's captured output, invisibly, or `NULL`, invisibly, if the
+#'   product was already present. Errors on a nonzero exit status.
 run_if_missing <- function(name_site, product, command, args, overwrite) {
   if (!is.na(product_file(name_site, product)) && !overwrite) {
     message("  already present, skipping download")
@@ -114,6 +139,12 @@ run_if_missing <- function(name_site, product, command, args, overwrite) {
   invisible(status)
 }
 
+#' Download a site's ICOS archive
+#'
+#' @param name_site Site ID.
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return The downloader's captured output, invisibly, or `NULL`, invisibly, if the
+#'   product was already present.
 download_icos <- function(name_site, overwrite = FALSE) {
   run_if_missing(
     name_site, "ICOS", "python",
@@ -123,8 +154,15 @@ download_icos <- function(name_site, overwrite = FALSE) {
   )
 }
 
-# Warm Winter 2020 (1989-2020): the pre-labelling history for the sites whose
-# ICOS and FLUXNET-Archive products both start too late.
+#' Download a site's Warm Winter 2020 archive
+#'
+#' Warm Winter 2020 (1989-2020): the pre-labelling history for the sites whose
+#' ICOS and FLUXNET-Archive products both start too late.
+#'
+#' @param name_site Site ID.
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return The downloader's captured output, invisibly, or `NULL`, invisibly, if the
+#'   product was already present.
 download_ww2020 <- function(name_site, overwrite = FALSE) {
   run_if_missing(
     name_site, "WW2020", "python",
@@ -134,6 +172,12 @@ download_ww2020 <- function(name_site, overwrite = FALSE) {
   )
 }
 
+#' Download a site's TERN data
+#'
+#' @param name_site Site ID.
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return The downloader's captured output, invisibly, or `NULL`, invisibly, if the
+#'   product was already present.
 download_tern <- function(name_site, overwrite = FALSE) {
   run_if_missing(
     name_site, "TERN", "python",
@@ -143,6 +187,12 @@ download_tern <- function(name_site, overwrite = FALSE) {
   )
 }
 
+#' Download a site's FLUXNET archive
+#'
+#' @param name_site Site ID.
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return The downloader's captured output, invisibly, or `NULL`, invisibly, if the
+#'   product was already present.
 download_fluxnet <- function(name_site, overwrite = FALSE) {
   run_if_missing(
     name_site, "FLUXNET", "bash",
@@ -153,10 +203,17 @@ download_fluxnet <- function(name_site, overwrite = FALSE) {
 }
 
 
-# FLUXNET2015 has no programmatic interface: it is a static release behind an
-# interactive login and a per-site-year data policy, and the FLUXNET Shuttle
-# does not carry it (FluxDataKit concludes the same). So this prints what to
-# download and where to put it.
+#' Explain how to download a site's FLUXNET2015 archive by hand
+#'
+#' FLUXNET2015 has no programmatic interface: it is a static release behind an
+#' interactive login and a per-site-year data policy, and the FLUXNET Shuttle
+#' does not carry it (FluxDataKit concludes the same). So this prints what to
+#' download and where to put it.
+#'
+#' @param name_site Site ID.
+#' @param overwrite Give the instructions even if the file is already on disk.
+#' @return `NULL`, invisibly, if the product is already present; otherwise errors with
+#'   the instructions.
 download_fluxnet2015 <- function(name_site, overwrite = FALSE) {
   if (!is.na(product_file(name_site, "FLUXNET2015")) && !overwrite) {
     message("  already present, skipping download")
@@ -182,31 +239,46 @@ download_fluxnet2015 <- function(name_site, overwrite = FALSE) {
 }
 
 # ---------------------------------------------------------------- WorldClim
-#
-# `04_01` needs 2.5-arc-minute tmin for a 2000-2020 baseline and 2041-2060
-# under SSP2-4.5 (13 CMIP6 GCMs). The baseline is the CRU-TS-downscaled
-# monthly *series*, one GeoTIFF per year-month -- not the 1970-2000
-# climatology, which would shift every projected change by the warming
-# between the two periods.
+
+#' URL of the WorldClim historical monthly series
+#'
+#' `04_01` needs 2.5-arc-minute tmin for a 2000-2020 baseline and 2041-2060
+#' under SSP2-4.5 (13 CMIP6 GCMs). The baseline is the CRU-TS-downscaled
+#' monthly *series*, one GeoTIFF per year-month -- not the 1970-2000
+#' climatology, which would shift every projected change by the warming
+#' between the two periods.
 WORLDCLIM_BASE <- "https://geodata.ucdavis.edu/climate/worldclim/2_1/hist/cts4.06/2.5m"
+#' URL of the WorldClim CMIP6 projections
 WORLDCLIM_CMIP6 <- "https://geodata.ucdavis.edu/cmip6/2.5m"
+#' Decade archives the baseline series comes in
 WORLDCLIM_DECADES <- c("2000-2009", "2010-2019", "2020-2021")
+#' Years of the WorldClim baseline
 WORLDCLIM_BASELINE_YEARS <- 2000:2020
 
-# The 13 GCMs WorldClim publishes tmin for at 2.5m under ssp245, matching the
-# "13 global circulation models" in `04_01`'s header. GFDL-ESM4 is listed by
-# WorldClim for other variables but has no tmin raster at this resolution.
+#' GCMs for the WorldClim projections
+#'
+#' The 13 GCMs WorldClim publishes tmin for at 2.5m under ssp245, matching the
+#' "13 global circulation models" in `04_01`'s header. GFDL-ESM4 is listed by
+#' WorldClim for other variables but has no tmin raster at this resolution.
 WORLDCLIM_GCMS <- c(
   "ACCESS-CM2", "BCC-CSM2-MR", "CMCC-ESM2", "EC-Earth3-Veg", "FIO-ESM-2-0",
   "GISS-E2-1-G", "HadGEM3-GC31-LL", "INM-CM5-0", "IPSL-CM6A-LR", "MIROC6",
   "MPI-ESM1-2-HR", "MRI-ESM2-0", "UKESM1-0-LL"
 )
 
+#' Directory of the WorldClim baseline GeoTIFFs
 DIR_WORLDCLIM_BASELINE <- file.path(DIR_RAWDATA, "Climate", "wc2.1_2.5m_tmin")
+#' Directory of the WorldClim projection GeoTIFFs
 DIR_WORLDCLIM_FUTURE <- file.path(DIR_RAWDATA, "Climate", "wc2.1_2.5m_tmin_2041-2060")
 
-# Fetch to a `.part` file and rename on success, so an interrupted download can
-# never be mistaken for a complete one by the presence check.
+#' Download a URL to a file
+#'
+#' Fetch to a `.part` file and rename on success, so an interrupted download can
+#' never be mistaken for a complete one by the presence check.
+#'
+#' @param url URL to download.
+#' @param dest Path to save it to.
+#' @return `dest`.
 fetch_file <- function(url, dest) {
   dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
   part <- paste0(dest, ".part")
@@ -223,6 +295,11 @@ fetch_file <- function(url, dest) {
   dest
 }
 
+#' Download the WorldClim tmin baseline and projections
+#'
+#' @param overwrite Re-download even if the files are already on disk (baseline zips
+#'   already in data-raw/Climate/_zips/ are reused).
+#' @return Sorted character vector of paths to the baseline and projection GeoTIFFs.
 download_worldclim <- function(overwrite = FALSE) {
   # Baseline: one `wc2.1_2.5m_tmin_<YYYY>-<MM>.tif` per year-month, flat.
   wanted <- as.vector(outer(
@@ -269,16 +346,23 @@ download_worldclim <- function(overwrite = FALSE) {
 }
 
 # ---------------------------------------------------------------- FAO GSOC
-#
-# Global Soil Organic Carbon map v1.5.0, `03_01`'s fallback soil carbon. The
-# filename matters: `03_01` indexes the extraction by the layer name terra
-# derives from it (`$GSOCmap1.5.0`).
+
+#' URL of the FAO GSOC map
+#'
+#' Global Soil Organic Carbon map v1.5.0, `03_01`'s fallback soil carbon. The
+#' filename matters: `03_01` indexes the extraction by the layer name terra
+#' derives from it (`$GSOCmap1.5.0`).
 GSOC_URL <- paste0(
   "https://storage.googleapis.com/fao-gismgr-gsocseq-data/",
   "DATA/GSOCSEQ/MAP/GSOCSEQ.GSOCMAP1-5-0.tif"
 )
+#' Local path of the FAO GSOC map
 GSOC_PATH <- file.path(DIR_RAWDATA, "GSOCmap1.5.0.tif")
 
+#' Download the FAO GSOC map
+#'
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return `GSOC_PATH`.
 download_gsoc <- function(overwrite = FALSE) {
   if (!overwrite && file.exists(GSOC_PATH)) return(GSOC_PATH)
   message("  GSOC: fetching GSOCmap v1.5.0 (~760 MB)")
@@ -286,9 +370,15 @@ download_gsoc <- function(overwrite = FALSE) {
 }
 
 # ------------------------------------------------------- AmeriFlux BADM/BIF
-#
-# Site metadata, for `03_01`'s measured soil carbon. The filename is
-# date-stamped, so it is discovered, not declared.
+
+#' Download the AmeriFlux BADM/BIF site metadata
+#'
+#' Site metadata, for `03_01`'s measured soil carbon. The filename is
+#' date-stamped, so it is discovered, not declared.
+#'
+#' @param overwrite Re-download even if the file is already on disk.
+#' @return Path to the newest BIF file on disk, or, when downloading, the path
+#'   `amerifluxr::amf_download_bif()` returns.
 download_ameriflux_bif <- function(overwrite = FALSE) {
   existing <- list.files(
     DIR_RAWDATA, pattern = "^AMF_AA-Net_BIF_.*[.](xlsx|csv)$", full.names = TRUE

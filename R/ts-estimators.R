@@ -10,6 +10,16 @@
 #   predict(model, newdata) -> one value per row of `newdata`, NA where a
 #               predictor is missing (never a shorter vector)
 
+#' Construct a soil-temperature estimator
+#'
+#' @param family The kind of function of which predictors, as `ts_family()`
+#'   spells it.
+#' @param predictors Character vector of the columns `fit` and `predict` read.
+#' @param fit Function of a training data frame, returning a model.
+#' @param predict Function of a model and `newdata`, returning one value per row
+#'   of `newdata`.
+#' @return A `ts_estimator`: a list of `family`, `predictors`, `fit` and
+#'   `predict`.
 ts_estimator <- function(family, predictors, fit, predict) {
   structure(
     list(family = family, predictors = predictors, fit = fit, predict = predict),
@@ -17,10 +27,22 @@ ts_estimator <- function(family, predictors, fit, predict) {
   )
 }
 
+#' The family label of an estimator
+#'
+#' @param kind Kind of model: `"lm"`, `"rf"` or `"fixed"`.
+#' @param predictors Character vector of predictor column names.
+#' @return A string `"<kind>:<predictor>+<predictor>"`, e.g. `"rf:TA+NETRAD"`.
 ts_family <- function(kind, predictors) paste0(kind, ":", paste(predictors, collapse = "+"))
 
-# `lm(TS ~ <predictors>)`, fitted on the rows `fit_subset` keeps (above
-# freezing, recent years). `na.omit` makes NA rows in the input harmless.
+#' Linear-regression soil-temperature estimator
+#'
+#' `lm(TS ~ <predictors>)`, fitted on the rows `fit_subset` keeps (above
+#' freezing, recent years). `na.omit` makes NA rows in the input harmless.
+#'
+#' @param predictors Character vector of predictor column names.
+#' @param fit_subset Function of the training data returning a logical row
+#'   index, or `NULL` to fit on every row.
+#' @return A `ts_estimator`.
 lm_estimator <- function(predictors, fit_subset = NULL) {
   ts_estimator(
     family = ts_family("lm", predictors),
@@ -35,8 +57,15 @@ lm_estimator <- function(predictors, fit_subset = NULL) {
   )
 }
 
-# A line with coefficients from elsewhere (US-Cwt's neighbour, US-MBP's gap
-# fill); `fit` ignores its data.
+#' Fixed-coefficient linear soil-temperature estimator
+#'
+#' A line with coefficients from elsewhere (US-Cwt's neighbour, US-MBP's gap
+#' fill); `fit` ignores its data.
+#'
+#' @param intercept Intercept of the line (degrees C).
+#' @param slope Slope of the line on `predictor`.
+#' @param predictor Name of the single predictor column.
+#' @return A `ts_estimator`.
 fixed_linear_estimator <- function(intercept, slope, predictor = "TA") {
   ts_estimator(
     family = ts_family("fixed", predictor),
@@ -46,7 +75,14 @@ fixed_linear_estimator <- function(intercept, slope, predictor = "TA") {
   )
 }
 
-# `ranger` forest for the fill: much faster than `randomForest`, and seeded.
+#' `ranger` forest for the fill
+#'
+#' Much faster than `randomForest`, and seeded.
+#'
+#' @param predictors Character vector of predictor column names.
+#' @param num_trees Number of trees.
+#' @return A `ts_estimator`. Its `fit` errors on fewer than 50 complete
+#'   training rows.
 rf_ranger_estimator <- function(predictors, num_trees = 200) {
   ts_estimator(
     family = ts_family("rf", predictors),
@@ -76,9 +112,15 @@ rf_ranger_estimator <- function(predictors, num_trees = 200) {
   )
 }
 
-# The manuscript's forest, as workflow 01_01 fitted it: `randomForest` on at
-# most 60,000 random rows split 70/30, with the original's train/test report
-# (via `message()`). Unseeded here; targets seeds each target.
+#' The manuscript's random-forest soil-temperature estimator
+#'
+#' The manuscript's forest, as workflow 01_01 fitted it: `randomForest` on at
+#' most 60,000 random rows split 70/30, with the original's train/test report
+#' (via `message()`). Unseeded here; targets seeds each target.
+#'
+#' @param predictors Character vector of predictor column names.
+#' @param max_rows Most rows sampled from the training data.
+#' @return A `ts_estimator`.
 rf_manuscript_estimator <- function(predictors = c("TA", "NETRAD"), max_rows = 60000) {
   ts_estimator(
     family = ts_family("rf", predictors),
@@ -109,7 +151,11 @@ rf_manuscript_estimator <- function(predictors = c("TA", "NETRAD"), max_rows = 6
   )
 }
 
-# The registry. `num_trees` reaches only the `ranger` forests.
+#' The registry of soil-temperature estimators
+#'
+#' @param num_trees Number of trees. Reaches only the `ranger` forests.
+#' @return Named list of `ts_estimator`s: the manuscript's (`lm_ta`, `lm_ta_pos`,
+#'   `lm_ta_recent`, `lm_ta_netrad`, `rf_ta_netrad_manuscript`) and the fill's.
 ts_estimators <- function(num_trees = 200) {
   memory <- TS_FILL_FEATURES_MEMORY
   list(
@@ -128,6 +174,16 @@ ts_estimators <- function(num_trees = 200) {
   )
 }
 
-# The manuscript's `TS ~ TA` line, by name.
+#' The manuscript's `TS ~ TA` line, by name
+#'
+#' @param fit_data Data frame with `TS` and `TA` columns, as `ts_fit_data()`
+#'   returns.
+#' @return The fitted `lm`.
 ts_ta_model <- function(fit_data) ts_estimators()$lm_ta$fit(fit_data)
+#' Predict soil temperature from the manuscript's `TS ~ TA` line
+#'
+#' @param mod A model from `ts_ta_model()`.
+#' @param ta Numeric vector of air temperature.
+#' @return Numeric vector of predicted soil temperature, one per `ta`; NA where
+#'   `ta` is.
 predict_ts_from_ta <- function(mod, ta) ts_estimators()$lm_ta$predict(mod, data.frame(TA = ta))

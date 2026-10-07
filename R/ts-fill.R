@@ -4,13 +4,20 @@
 # 42 of 43 sites (docs/ts-rework.html, F12-F13).
 
 # ------------------------------------------------------------------ features
-#
-# Shallow soil temperature is a damped, lagged integral of the surface
-# forcing, which an instantaneous `TS ~ TA` map cannot represent. Running
-# means of air temperature over 3, 7 and 30 days supply the memory. They are
-# computed on a daily series completed over the whole date range, because
-# half-hourly row offsets would span however many days the (gappy) rows
-# happened to cover.
+
+#' Add the air-temperature memory and harmonic features
+#'
+#' Shallow soil temperature is a damped, lagged integral of the surface
+#' forcing, which an instantaneous `TS ~ TA` map cannot represent. Running
+#' means of air temperature over 3, 7 and 30 days supply the memory. They are
+#' computed on a daily series completed over the whole date range, because
+#' half-hourly row offsets would span however many days the (gappy) rows
+#' happened to cover.
+#'
+#' @param dat Half-hourly data frame with `YEAR`, `MONTH`, `DAY`, `DOY`, `HOUR` and `TA`.
+#' @return `dat` with `date`, the daily air-temperature features (`TA_day`, `TA_lag1`,
+#'   `TA_amp_lag1`, `TA_m3`, `TA_m7`, `TA_m30`, in degC) and the seasonal and diurnal
+#'   harmonics (`doy_s1`, `doy_c1`, `doy_s2`, `doy_c2`, `hr_s1`, `hr_c1`).
 ts_fill_add_features <- function(dat) {
   need <- c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "TA")
   absent <- setdiff(need, names(dat))
@@ -61,15 +68,22 @@ ts_fill_add_features <- function(dat) {
   dat
 }
 
+#' Predictor columns of the memory methods
 TS_FILL_FEATURES_MEMORY <- c(
   "TA", "TA_day", "TA_lag1", "TA_amp_lag1", "TA_m3", "TA_m7", "TA_m30",
   "doy_s1", "doy_c1", "doy_s2", "doy_c2", "hr_s1", "hr_c1"
 )
 
 # ------------------------------------------------------------------- methods
-#
-# The fill's candidates, from the registry in R/ts-estimators.R. The
-# manuscript's fit-once forest is not one, but its family is (`rf_ta_netrad`).
+
+#' The fill's candidates
+#'
+#' From the registry in R/ts-estimators.R. The manuscript's fit-once forest is
+#' not one, but its family is (`rf_ta_netrad`).
+#'
+#' @param have_netrad Whether the site has usable `NETRAD`; adds the net-radiation methods.
+#' @param num_trees Number of trees in the `ranger` forests.
+#' @return Named list of `ts_estimator`s, each with `fit` and `predict`.
 ts_fill_methods <- function(have_netrad = FALSE, num_trees = 200) {
   all <- ts_estimators(num_trees = num_trees)
   wanted <- c("lm_ta_pos", "lm_ta", "rf_ta", "lm_memory", "rf_memory")
@@ -84,15 +98,35 @@ ts_fill_methods <- function(have_netrad = FALSE, num_trees = 200) {
 # being filled. The pipeline uses `year`; the others are for
 # scripts/ts-fill-cv.R.
 
+#' Random folds
+#'
+#' @param dat Half-hourly data frame.
+#' @param nfold Number of folds.
+#' @param seed RNG seed for the fold assignment.
+#' @return List of integer row-index vectors, one per fold.
 blocks_random <- function(dat, nfold = 5, seed = 222) {
   set.seed(seed)
   split(seq_len(nrow(dat)), sample(rep_len(seq_len(nfold), nrow(dat))))
 }
+#' One fold per year
+#'
+#' @param dat Half-hourly data frame with `YEAR`.
+#' @return List of integer row-index vectors, one per `YEAR`.
 blocks_year <- function(dat) split(seq_len(nrow(dat)), dat$YEAR)
+#' One fold per quarter of each year
+#'
+#' @param dat Half-hourly data frame with `YEAR` and `MONTH`.
+#' @return List of integer row-index vectors, one per year and calendar quarter.
 blocks_season <- function(dat) {
   # Four folds a year: the most expensive scheme.
   split(seq_len(nrow(dat)), paste(dat$YEAR, (dat$MONTH - 1) %/% 3))
 }
+#' Folds of `k` consecutive years
+#'
+#' @param dat Half-hourly data frame with `YEAR`.
+#' @param k Number of years per fold.
+#' @return List of integer row-index vectors, one per run of `k` years; one per year
+#'   (`blocks_year()`) if the data span fewer than `2 * k` years.
 blocks_multiyear <- function(dat, k = 2) {
   yrs <- sort(unique(dat$YEAR))
   if (length(yrs) < 2 * k) return(blocks_year(dat))
@@ -100,11 +134,18 @@ blocks_multiyear <- function(dat, k = 2) {
   split(seq_len(nrow(dat)), grp[as.character(dat$YEAR)])
 }
 
-# Blocks for a named scheme. A function rather than a list of closures:
-# targets hashes a list by serializing it, and a closure's serialization
-# changes once R byte-compiles it, so a list made every fill -- and every fit
-# downstream -- look outdated after the functions had been called.
+#' Names of the blocking schemes `ts_fill_blocks()` accepts
 TS_FILL_BLOCKING_NAMES <- c("random", "year", "multiyear", "season")
+#' Blocks for a named scheme
+#'
+#' A function rather than a list of closures: targets hashes a list by
+#' serializing it, and a closure's serialization changes once R byte-compiles
+#' it, so a list made every fill -- and every fit downstream -- look outdated
+#' after the functions had been called.
+#'
+#' @param dat Half-hourly data frame.
+#' @param blocking Name of the blocking scheme, one of `TS_FILL_BLOCKING_NAMES`.
+#' @return List of integer row-index vectors, one per held-out block.
 ts_fill_blocks <- function(dat, blocking) {
   switch(
     blocking,
@@ -117,15 +158,30 @@ ts_fill_blocks <- function(dat, blocking) {
   )
 }
 
-# Cap training rows (the manuscript's forest caps at 60,000); applied inside
-# each fold after the held-out block is removed, so it cannot leak.
+#' Cap training rows
+#'
+#' The manuscript's forest caps at 60,000. Applied inside each fold after the
+#' held-out block is removed, so it cannot leak.
+#'
+#' @param dat Data frame of training rows.
+#' @param n Maximum number of rows to keep.
+#' @param seed RNG seed for the sample.
+#' @return `dat` if it has at most `n` rows; otherwise `n` of its rows, sampled without
+#'   replacement and kept in their original order.
 subsample_rows <- function(dat, n, seed) {
   if (nrow(dat) <= n) return(dat)
   set.seed(seed)
   dat[sort(sample(nrow(dat), n)), , drop = FALSE]
 }
 
-# One out-of-fold prediction per row.
+#' One out-of-fold prediction per row
+#'
+#' @param dat Feature table (`ts_fill_add_features()`) with the target column `TS`.
+#' @param method A `ts_estimator`, with `fit` and `predict`.
+#' @param blocks List of row-index vectors, each held out in turn.
+#' @param max_train Cap on training rows per fold.
+#' @return Numeric vector of out-of-fold predictions, one per row of `dat`; NA where a
+#'   fold could not be fitted or predicted.
 ts_fill_oof <- function(dat, method, blocks, max_train = 20000) {
   out <- rep(NA_real_, nrow(dat))
   for (bi in seq_along(blocks)) {
@@ -142,9 +198,16 @@ ts_fill_oof <- function(dat, method, blocks, max_train = 20000) {
 }
 
 # --------------------------------------------------------------- window grid
-#
-# The (growing_year x window) grid `fit_tas_site()` fits on, so a column is
-# scored on the cells the model uses.
+
+#' Windows tiling the growing season
+#'
+#' The (growing_year x window) grid `fit_tas_site()` fits on, so a column is
+#' scored on the cells the model uses.
+#'
+#' @param gStart First day of year of the growing season.
+#' @param gEnd Last day of year of the growing season.
+#' @return Tibble with one row per window of `WINDOW_SIZE` days: `iwindow`, and the
+#'   `window_start` and `window_end` day of year.
 tas_windows <- function(gStart, gEnd) {
   nwindow <- max(round((gEnd - gStart + 1) / WINDOW_SIZE), 1)
   tibble::tibble(
@@ -154,6 +217,14 @@ tas_windows <- function(gStart, gEnd) {
   )
 }
 
+#' Summarise a column on the window grid
+#'
+#' @param dat Half-hourly data frame with `DOY`, `YEAR` and `col`.
+#' @param gStart First day of year of the growing season.
+#' @param gEnd Last day of year of the growing season.
+#' @param col Name of the column to summarise.
+#' @return Tibble with one row per window and growing year: `iwindow`, `growing_year`,
+#'   `n` (non-NA values), `cell_mean` and `cell_sd`.
 window_cells <- function(dat, gStart, gEnd, col) {
   wins <- tas_windows(gStart, gEnd)
   dat <- dat |>
@@ -173,15 +244,25 @@ window_cells <- function(dat, gStart, gEnd, col) {
 }
 
 # ------------------------------------------------- scoring a reconstruction
-#
-# Scored for what the model does with the column, not only on RMSE:
-#
-#   within_sd_ratio          spread inside a cell; identifies alpha.
-#   across_year_spread_ratio spread of cell means across years within a
-#                            window; the variation that identifies TAS.
-#
-# `gs` is already restricted to the growing season; `truth` and `pred` align
-# to its rows.
+
+#' Score a soil-temperature reconstruction
+#'
+#' Scored for what the model does with the column, not only on RMSE:
+#'
+#'   within_sd_ratio          spread inside a cell; identifies alpha.
+#'   across_year_spread_ratio spread of cell means across years within a
+#'                            window; the variation that identifies TAS.
+#'
+#' @param gs Half-hourly feature rows with `YEAR`, `DOY`, `HOUR` and `TA`, already
+#'   restricted to the growing season.
+#' @param truth Measured soil temperature; aligns to the rows of `gs`.
+#' @param pred Reconstructed soil temperature; aligns to the rows of `gs`.
+#' @param gStart First day of year of the growing season.
+#' @param gEnd Last day of year of the growing season.
+#' @param min_obs_day Minimum observations in a day for its diurnal amplitude to count.
+#' @return One-row tibble of metrics: error (`rmse`, `bias`, `mae`, `r2`), spread and
+#'   2.5/97.5% quantiles, diurnal amplitude and peak lag against `TA`, and the
+#'   window-cell scores above.
 ts_reconstruction_metrics <- function(gs, truth, pred, gStart, gEnd, min_obs_day = 40) {
   stopifnot(length(truth) == nrow(gs), length(pred) == nrow(gs))
   both <- !is.na(truth) & !is.na(pred)
@@ -248,12 +329,24 @@ ts_reconstruction_metrics <- function(gs, truth, pred, gStart, gEnd, min_obs_day
 }
 
 # --------------------------------------------------------- the fill target
-#
-# Per site, recipe-independent: score every candidate out of fold, pick the
-# lowest RMSE, refit it on every measured row and predict everywhere. Returns
-# `TS_memfill` aligned to `ac` and `nightNEE`, the CV table, and bounds rows.
-# Never errors: where nothing can be fitted it returns `status != "ok"` and
-# the strategy falls back, recording why.
+
+#' Fill a site's soil temperature with the best-scoring method
+#'
+#' Per site, recipe-independent: score every candidate out of fold, pick the
+#' lowest RMSE, refit it on every measured row and predict everywhere.
+#' Never errors: where nothing can be fitted it returns `status != "ok"` and
+#' the strategy falls back, recording why.
+#'
+#' @param site_data The site's prepared data (`prep_nee_ac()`): `ac`, `nightNEE`,
+#'   `feature_gs` and `ts_provenance`.
+#' @param site_info One row of the site declaration table.
+#' @param blocking Name of the cross-validation blocking scheme (`ts_fill_blocks()`).
+#' @param max_train Cap on training rows per fit.
+#' @param num_trees Number of trees in the `ranger` forests.
+#' @return A list: `TS_memfill` aligned to `ac` and `nightNEE` (`ac_ts`, `night_ts`),
+#'   the CV table (`cv`), and bounds rows (`ts_bounds`), with `site_ID`, `status`
+#'   (`"ok"`, or why not) and the winning `method`; on success also `blocking`,
+#'   `cv_rmse`, `degenerate`, `truth_synthetic` and `n_train`.
 fill_soil_temp <- function(site_data, site_info, blocking = "year",
                            max_train = 20000, num_trees = 200) {
   name_site <- site_info[["site_ID"]]

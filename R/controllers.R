@@ -1,9 +1,14 @@
-# The crew controller `_targets.R` runs under.
-#
-# Local: 8 workers, each fit running `N_CORES` chains. Slurm (YCRC): one job
-# per worker, sized by `THERMAL_SLURM_WORKERS`/`THERMAL_SLURM_MINUTES`, which
-# `submit.sh` sets. Every setting below was learned from a failed run; see
-# docs/running-on-ycrc.md before changing one.
+#' The crew controller `_targets.R` runs under
+#'
+#' Local: 8 workers, each fit running `N_CORES` chains. Slurm (YCRC): one job
+#' per worker, sized by `THERMAL_SLURM_WORKERS`/`THERMAL_SLURM_MINUTES`, which
+#' `submit.sh` sets. Every setting below was learned from a failed run; see
+#' docs/running-on-ycrc.md before changing one.
+#'
+#' @param host Hostname of the machine the pipeline runs on; a name containing
+#'   `ycrc.yale.edu` selects Slurm.
+#' @return A crew controller: `crew::crew_controller_local()` off the cluster,
+#'   `crew.cluster::crew_controller_slurm()` on YCRC.
 pipeline_controller <- function(host = system2("hostname", stdout = TRUE)) {
   if (!grepl("ycrc.yale.edu", host, fixed = TRUE)) {
     return(crew::crew_controller_local(workers = 8))
@@ -39,11 +44,18 @@ pipeline_controller <- function(host = system2("hostname", stdout = TRUE)) {
   )
 }
 
-# The address workers dial back to. crew's default is the first of
-# `nanonext::ip_addr()`, and some YCRC nodes list a link-local (169.254.x.x)
-# management interface first, which no other node can reach: with the
-# controller on one, every worker off its node timed out dialling it. The
-# `cluster` interface is the one the node's hostname resolves to.
+#' The address workers dial back to
+#'
+#' crew's default is the first of `nanonext::ip_addr()`, and some YCRC nodes
+#' list a link-local (169.254.x.x) management interface first, which no other
+#' node can reach: with the controller on one, every worker off its node timed
+#' out dialling it. The `cluster` interface is the one the node's hostname
+#' resolves to.
+#'
+#' @param ips Named character vector of IPv4 addresses, named by interface, as
+#'   `nanonext::ip_addr()` returns.
+#' @return A single IPv4 address: the `cluster` interface's if routable,
+#'   otherwise the first routable one. Errors if none is routable.
 controller_host <- function(ips = nanonext::ip_addr()) {
   routable <- ips[!startsWith(ips, "127.") & !startsWith(ips, "169.254.")]
   if (!length(routable)) stop("No routable IPv4 address for the crew controller.")

@@ -1,15 +1,30 @@
 # Soil-water column selection between `SWC_measured` (tower) and `SWC_era5`
 # (ERA5-Land), both in percent. See docs/soil-temperature.md, "Soil water".
 
-# Which column a run uses: measured where the site uses it; otherwise ERA5 for
-# the direct model, and none for the total model, which has no soil water.
+#' Which soil-water column a run uses
+#'
+#' Measured where the site uses it; otherwise ERA5 for the direct model, and
+#' none for the total model, which has no soil water.
+#'
+#' @param site_info One row of the site declaration table.
+#' @param direct Whether the model is the direct model (`TRUE`) rather than the
+#'   total model.
+#' @return `"SWC_measured"`, `"SWC_era5"`, or `NA_character_` for no column.
 default_swc_col <- function(site_info, direct) {
   if (isTRUE(site_info[["SWC_use"]])) return("SWC_measured")
   if (isTRUE(direct)) return("SWC_era5")
   NA_character_
 }
 
-# Materialise the chosen column as `SWC`, the name the model formula uses.
+#' Materialise the chosen column as `SWC`, the name the model formula uses
+#'
+#' @param dat A site's flux table (`ac` or the nighttime NEE table), with the
+#'   `SWC_*` columns `prep_nee_ac()` produces.
+#' @param swc_col Name of the soil-water column to use, e.g. `"SWC_measured"`
+#'   or `"SWC_era5"`.
+#' @param name_site Site ID.
+#' @return `dat` with an `SWC` column copied from `swc_col` (percent). Errors if
+#'   the column is absent, or is the ERA5 fallback and entirely NA.
 resolve_swc_column <- function(dat, swc_col, name_site) {
   if (!swc_col %in% names(dat)) {
     stop(

@@ -7,11 +7,14 @@
 #
 # How to add a recipe, strategy or axis: docs/recipes.md.
 
+#' The recipe table
 RECIPES_CSV <- file.path("data-core", "recipes.csv")
 
-# Every axis and the strategies it admits. Order within an axis is not
-# meaningful; the first entry is not a default. Defaults live in
-# `original_recipe()`, which is the one recipe that has to be right.
+#' Every axis and the strategies it admits
+#'
+#' Order within an axis is not meaningful; the first entry is not a default.
+#' Defaults live in `original_recipe()`, which is the one recipe that has to be
+#' right.
 RECIPE_AXES <- list(
   # Which soil-temperature column the model is fitted on.
   ts = c("site_info", "screen_best", "memory_fill"),
@@ -32,26 +35,42 @@ RECIPE_AXES <- list(
   ts_qc = c("manuscript", "sensor")
 )
 
-# The axes that change what step 01 produces. Recipes that agree on these
-# share one step-01 result; every other axis is resolved in step 02.
+#' The axes that change what step 01 produces
+#'
+#' Recipes that agree on these share one step-01 result; every other axis is
+#' resolved in step 02.
 RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 
-# The development sample of recipes, by analogy with `DEV_SITES`: chosen to
-# exercise every strategy that has its own code path, not to be exhaustive.
-#   original    site_info ts, native bounds, detected season -- the oracle
-#   memfill_hh  memory_fill ts (needs the per-site fill), halfhourly bounds
-#   noseason    whole_year season
-# `memfill_sensor` is not in the sample: it is the first recipe with its own
-# step 01, so it doubles a run's step-01 cost. THERMAL_RECIPES names it.
+#' The development sample of recipes
+#'
+#' By analogy with `DEV_SITES`: chosen to exercise every strategy that has its
+#' own code path, not to be exhaustive.
+#'   original    site_info ts, native bounds, detected season -- the oracle
+#'   memfill_hh  memory_fill ts (needs the per-site fill), halfhourly bounds
+#'   noseason    whole_year season
+#' `memfill_sensor` is not in the sample: it is the first recipe with its own
+#' step 01, so it doubles a run's step-01 cost. THERMAL_RECIPES names it.
 DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 
-# A plain named list -- no class: nothing dispatches on one, and it is written
-# literally into every fit's command. (Not S7 either: an S7 object does not
-# come back `identical()` from the qs2 store.) Validation runs at construction.
-#
-# The CSV's `description` column is for people (and the variant report, which
-# reads the CSV itself), not part of the recipe: `_targets.R` writes each
-# recipe into its fits' commands, so editing a description invalidates nothing.
+#' Construct a recipe
+#'
+#' A plain named list -- no class: nothing dispatches on one, and it is written
+#' literally into every fit's command. (Not S7 either: an S7 object does not
+#' come back `identical()` from the qs2 store.) Validation runs at construction.
+#'
+#' The CSV's `description` column is for people (and the variant report, which
+#' reads the CSV itself), not part of the recipe: `_targets.R` writes each
+#' recipe into its fits' commands, so editing a description invalidates nothing.
+#'
+#' @param recipe_id Recipe ID: a single lower-case identifier, used in target
+#'   names.
+#' @param ts Strategy for the `ts` axis; one of `RECIPE_AXES$ts`.
+#' @param season Strategy for the `season` axis; one of `RECIPE_AXES$season`.
+#' @param bounds Strategy for the `bounds` axis; one of `RECIPE_AXES$bounds`.
+#' @param swc Strategy for the `swc` axis; one of `RECIPE_AXES$swc`.
+#' @param year_qc Strategy for the `year_qc` axis; one of `RECIPE_AXES$year_qc`.
+#' @param ts_qc Strategy for the `ts_qc` axis; one of `RECIPE_AXES$ts_qc`.
+#' @return The recipe: a named list of `recipe_id` and one strategy per axis.
 new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc) {
   r <- list(
     recipe_id = recipe_id, ts = ts, season = season, bounds = bounds,
@@ -60,6 +79,10 @@ new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc) {
   validate_recipe(r)
 }
 
+#' Check a recipe's ID and that every axis names a known strategy
+#'
+#' @param r A recipe, as built by `new_recipe()`.
+#' @return `r`, unchanged. Errors on an invalid ID or strategy.
 validate_recipe <- function(r) {
   stopifnot("a recipe is a list; pass get_recipe(id), not the id" = is.list(r))
   id <- r[["recipe_id"]]
@@ -83,7 +106,11 @@ validate_recipe <- function(r) {
   r
 }
 
-# The manuscript's logic; the default wherever no recipe is passed.
+#' The manuscript's logic
+#'
+#' The default wherever no recipe is passed.
+#'
+#' @return The `original` recipe.
 original_recipe <- function() {
   new_recipe(
     "original",
@@ -92,6 +119,12 @@ original_recipe <- function() {
   )
 }
 
+#' Read and validate the recipe table
+#'
+#' @param path Path to recipes.csv.
+#' @return A tibble of all-character columns: `recipe_id`, one column per
+#'   `RECIPE_AXES` axis, and `description`. Errors if a column is missing, an ID
+#'   is duplicated, `original` is absent, or any row is not a valid recipe.
 read_recipes <- function(path = RECIPES_CSV) {
   cols <- readr::cols(.default = readr::col_character())
   dat <- readr::read_csv(path, col_types = cols, progress = FALSE)
@@ -114,7 +147,14 @@ read_recipes <- function(path = RECIPES_CSV) {
   dat
 }
 
-# `path` may be a path or an already-read table.
+#' Look up a recipe by ID
+#'
+#' @param recipe_id Recipe ID.
+#' @param path Path to recipes.csv. `path` may be a path or an already-read
+#'   table.
+#' @return The recipe, as built by `new_recipe()`. Errors if `recipe_id` does not
+#'   match exactly one row, or if the table's `original` row disagrees with
+#'   `original_recipe()`.
 get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   dat <- if (is.data.frame(path)) path else {
     readr::read_csv(path, col_types = readr::cols(.default = readr::col_character()), progress = FALSE)
@@ -142,20 +182,35 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
   r
 }
 
-# The part of a recipe that step 01 sees. Two recipes with the same prep key
-# share one step-01 result per site, and the key is the suffix of its target
-# names (`site_data_site_info_manuscript_<site>`), so it is joined with `_`.
-# Strategy names contain `_` too, so two different preps could in principle
-# share a key; `_targets.R` would then fail on a duplicate target name.
+#' The part of a recipe that step 01 sees
+#'
+#' Two recipes with the same prep key share one step-01 result per site, and
+#' the key is the suffix of its target names
+#' (`site_data_site_info_manuscript_<site>`), so it is joined with `_`.
+#' Strategy names contain `_` too, so two different preps could in principle
+#' share a key; `_targets.R` would then fail on a duplicate target name.
+#'
+#' @param recipe A recipe, or just its `RECIPE_PREP_AXES` entries.
+#' @return A single string: the `RECIPE_PREP_AXES` strategies joined with `_`.
 recipe_prep_key <- function(recipe) {
   paste(vapply(RECIPE_PREP_AXES, function(a) recipe[[a]], ""), collapse = "_")
 }
+#' The prep key of the `original` recipe
+#'
+#' @return A single string, `recipe_prep_key(original_recipe())`.
 MANUSCRIPT_PREP_KEY <- function() recipe_prep_key(original_recipe())
 
-# Which recipes a pipeline run includes, by analogy with `pipeline_sites()`.
-#   THERMAL_RECIPES=dev            the development sample (default)
-#   THERMAL_RECIPES=all            every row of recipes.csv
-#   THERMAL_RECIPES=original,memfill  an explicit list
+#' Which recipes a pipeline run includes
+#'
+#' By analogy with `pipeline_sites()`.
+#'
+#' @param scope Which recipes:
+#'   THERMAL_RECIPES=dev            the development sample (default)
+#'   THERMAL_RECIPES=all            every row of recipes.csv
+#'   THERMAL_RECIPES=original,memfill  an explicit list
+#' @param path Path to recipes.csv.
+#' @return Character vector of recipe IDs. Errors if `scope` names an unknown
+#'   recipe.
 pipeline_recipes <- function(scope = Sys.getenv("THERMAL_RECIPES", "dev"),
                              path = RECIPES_CSV) {
   available <- read_recipes(path)$recipe_id
@@ -170,8 +225,11 @@ pipeline_recipes <- function(scope = Sys.getenv("THERMAL_RECIPES", "dev"),
   wanted
 }
 
-# Which models a run fits.
-#   THERMAL_MODELS=total,direct (default) | total | direct
+#' Which models a run fits
+#'
+#' @param scope Which models:
+#'   THERMAL_MODELS=total,direct (default) | total | direct
+#' @return Character vector of `MODEL_TYPES` entries, without duplicates.
 pipeline_models <- function(scope = Sys.getenv("THERMAL_MODELS", "total,direct")) {
   wanted <- trimws(strsplit(scope, ",")[[1]])
   bad <- setdiff(wanted, MODEL_TYPES)

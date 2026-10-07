@@ -1,29 +1,34 @@
+#' Directory holding the downloaded raw flux data
 DIR_RAWDATA <- "data-raw"
 
-# The site declaration table. Named here rather than spelled out at each
-# reader so the pipeline can register it as a `format = "file"` target.
+#' The site declaration table
+#'
+#' Named here rather than spelled out at each reader so the pipeline can
+#' register it as a `format = "file"` target.
 SITE_INFO_CSV <- file.path("data-core", "site_info.csv")
 
-# Flux data products, keyed by the token used in `site_info$source`.
-#
-# A site's `source` is a `+`-separated, ordered provenance list -- oldest
-# product first -- because no single product covers the full record at most
-# sites. This mirrors the original workflow, whose `source` strings were
-# underscore-joined for the same reason (`FLUXNET2025_ICOS2025`).
-#
-# The reason it is needed: the ICOS "Ecosystem final quality (L2) product in
-# ETC-Archive format" covers only the period since a station was ICOS-labelled,
-# so a station labelled in 2019 has an L2 product starting in 2019 however long
-# it has run. The pre-label history is in the FLUXNET-format products. See
-# docs/data-provenance.md and scripts/audit-icos-coverage.R.
-#
-#   dir     -- directory under data-raw/ holding one sub-directory per site
-#   pattern -- regex matching the half-hourly table inside a site directory
-#
-# The patterns are anchored on `.csv` because the downloaders keep the archive
-# they extracted from alongside the table: the archive filename encodes the
-# product, year span and release, which is what `scripts/check-data-updates.py`
-# compares against the provider.
+#' Flux data products
+#'
+#' Keyed by the token used in `site_info$source`.
+#'
+#' A site's `source` is a `+`-separated, ordered provenance list -- oldest
+#' product first -- because no single product covers the full record at most
+#' sites. This mirrors the original workflow, whose `source` strings were
+#' underscore-joined for the same reason (`FLUXNET2025_ICOS2025`).
+#'
+#' The reason it is needed: the ICOS "Ecosystem final quality (L2) product in
+#' ETC-Archive format" covers only the period since a station was ICOS-labelled,
+#' so a station labelled in 2019 has an L2 product starting in 2019 however long
+#' it has run. The pre-label history is in the FLUXNET-format products. See
+#' docs/data-provenance.md and scripts/audit-icos-coverage.R.
+#'
+#'   dir     -- directory under data-raw/ holding one sub-directory per site
+#'   pattern -- regex matching the half-hourly table inside a site directory
+#'
+#' The patterns are anchored on `.csv` because the downloaders keep the archive
+#' they extracted from alongside the table: the archive filename encodes the
+#' product, year span and release, which is what `scripts/check-data-updates.py`
+#' compares against the provider.
 FLUX_PRODUCTS <- list(
   # Warm Winter 2020 (1989-2020): FLUXNET2015 FULLSET format, deepest history.
   WW2020 = list(dir = "WW2020", pattern = "_FLUXNET2015_FULLSET_(HH|HR)_.*[.]csv$"),
@@ -39,57 +44,59 @@ FLUX_PRODUCTS <- list(
   AmeriFlux_BASE = list(dir = "Ameriflux", pattern = "^AMF_.*_BASE.*[.]zip$")
 )
 
-# Column contract for every FLUXNET-format half-hourly table (FLUXNET-Archive,
-# ICOS ETC L2, TERN L3, Warm Winter 2020). Reading these with type *guessing*
-# has two failure modes that this spec closes:
-#
-#   * The timestamps are 12-digit stamps like 199601010000. Guessed, they come
-#     back as doubles, and `splice_products()` orders and compares them as
-#     strings -- so the previous code converted them back with `as.character()`
-#     and depended on R not choosing scientific notation. Declaring them
-#     character makes the contract the splice relies on explicit.
-#   * These files are mostly sentinel-filled, and many columns are -9999 for
-#     their entire length. Guessed *with* `-9999` treated as NA, such a column
-#     is typed `logical`, and a later `TS >= TS_MIN_VALID` filter then silently
-#     compares against a logical NA. `.default = col_double()` keeps it double.
-#
-# Sentinel removal stays a numeric comparison (`dat[dat == -9999] <- NA`) rather
-# than moving into readr's `na` argument, because `na` matches the raw string:
-# all 110 tables currently on disk write a bare `-9999`, but a future release
-# writing `-9999.0` would slip straight through a string match. It lives in
-# `drop_sentinels()` so the FLUXNET-family and AmeriFlux BASE readers cannot
-# drift apart on what counts as missing.
+#' Column contract for every FLUXNET-format half-hourly table
+#'
+#' (FLUXNET-Archive, ICOS ETC L2, TERN L3, Warm Winter 2020). Reading these
+#' with type *guessing* has two failure modes that this spec closes:
+#'
+#'   * The timestamps are 12-digit stamps like 199601010000. Guessed, they come
+#'     back as doubles, and `splice_products()` orders and compares them as
+#'     strings -- so the previous code converted them back with `as.character()`
+#'     and depended on R not choosing scientific notation. Declaring them
+#'     character makes the contract the splice relies on explicit.
+#'   * These files are mostly sentinel-filled, and many columns are -9999 for
+#'     their entire length. Guessed *with* `-9999` treated as NA, such a column
+#'     is typed `logical`, and a later `TS >= TS_MIN_VALID` filter then silently
+#'     compares against a logical NA. `.default = col_double()` keeps it double.
+#'
+#' Sentinel removal stays a numeric comparison (`dat[dat == -9999] <- NA`) rather
+#' than moving into readr's `na` argument, because `na` matches the raw string:
+#' all 110 tables currently on disk write a bare `-9999`, but a future release
+#' writing `-9999.0` would slip straight through a string match. It lives in
+#' `drop_sentinels()` so the FLUXNET-family and AmeriFlux BASE readers cannot
+#' drift apart on what counts as missing.
 FLUXNET_COL_TYPES <- readr::cols(
   TIMESTAMP_START = readr::col_character(),
   TIMESTAMP_END = readr::col_character(),
   .default = readr::col_double()
 )
 
-# Values that survive the -9999 sweep but cannot be measurements at all. Three
-# sites put garbage through into REddyProc's plausibility check on the first
-# full run: relative humidity of -10000 at CA-Man (a second sentinel, one digit
-# wider than the documented one) and of 33457 and -33269 at US-UMB.
-#
-# These are bounds on what an instrument can report, not on what is likely, and
-# they are deliberately far outside the data. Two calibrations:
-#
-#   * US-BZo is Alaskan permafrost at 65 N and its -80 C reading may well be
-#     real, so the floor sits at -100 C -- below the -89.2 C recorded at
-#     Vostok, and so below anything a surface station can legitimately report.
-#   * Relative humidity tops out at 150 %, not 100 %. Supersaturation and
-#     rounding put 100-113 % in the record at roughly a quarter of the sites
-#     (22355 half-hours at CA-Cbo alone); clamping there would be a scientific
-#     change dressed up as a QC fix, and it would invalidate most of the
-#     pipeline into the bargain.
-#
-# Nothing else currently on disk is out of bound, which is the point: this
-# catches encoding garbage and leaves measurements alone. SWC and incoming
-# shortwave are not bounded here for the same reason -- slightly negative
-# night-time `SW_IN` of -0 to -5 W/m2 is normal and appears at ~30 sites.
-#
-# Matched against column names by prefix, so `TA`, `TA_F`, `TA_PI_F`,
-# `TA_1_1_1` and `TA_ERA` all take the air-temperature bound. `*_QC` columns
-# are quality flags on a different scale and are skipped.
+#' Values that survive the -9999 sweep but cannot be measurements at all
+#'
+#' Three sites put garbage through into REddyProc's plausibility check on the
+#' first full run: relative humidity of -10000 at CA-Man (a second sentinel, one
+#' digit wider than the documented one) and of 33457 and -33269 at US-UMB.
+#'
+#' These are bounds on what an instrument can report, not on what is likely, and
+#' they are deliberately far outside the data. Two calibrations:
+#'
+#'   * US-BZo is Alaskan permafrost at 65 N and its -80 C reading may well be
+#'     real, so the floor sits at -100 C -- below the -89.2 C recorded at
+#'     Vostok, and so below anything a surface station can legitimately report.
+#'   * Relative humidity tops out at 150 %, not 100 %. Supersaturation and
+#'     rounding put 100-113 % in the record at roughly a quarter of the sites
+#'     (22355 half-hours at CA-Cbo alone); clamping there would be a scientific
+#'     change dressed up as a QC fix, and it would invalidate most of the
+#'     pipeline into the bargain.
+#'
+#' Nothing else currently on disk is out of bound, which is the point: this
+#' catches encoding garbage and leaves measurements alone. SWC and incoming
+#' shortwave are not bounded here for the same reason -- slightly negative
+#' night-time `SW_IN` of -0 to -5 W/m2 is normal and appears at ~30 sites.
+#'
+#' Matched against column names by prefix, so `TA`, `TA_F`, `TA_PI_F`,
+#' `TA_1_1_1` and `TA_ERA` all take the air-temperature bound. `*_QC` columns
+#' are quality flags on a different scale and are skipped.
 IMPLAUSIBLE_BOUNDS <- list(
   TA      = c(-100, 70),
   T_SONIC = c(-100, 70),
@@ -97,49 +104,58 @@ IMPLAUSIBLE_BOUNDS <- list(
   RH      = c(-10, 150)
 )
 
-# Arctic tundra sites with periods of the year where the whole day is daytime
-# (or night). Two consequences: sunrise/sunset are undefined on those days and
-# have to be filled in by month, and the nighttime respiration filter also keeps
-# low-light daytime observations, since otherwise these sites would contribute
-# almost no data in peak growing season.
+#' Arctic tundra sites with polar day or night
+#'
+#' Arctic tundra sites with periods of the year where the whole day is daytime
+#' (or night). Two consequences: sunrise/sunset are undefined on those days and
+#' have to be filled in by month, and the nighttime respiration filter also keeps
+#' low-light daytime observations, since otherwise these sites would contribute
+#' almost no data in peak growing season.
 SITES_LOW_LIGHT_NIGHT <- c("US-ICt", "US-ICh", "US-ICs")
 
-# The EuroFlux workflow used a plain `NEE < 0` growing-season cut-off at these
-# two sites instead of the usual proportional one. See `detect_growing_season()`.
+#' Sites with a plain `NEE < 0` growing-season cut-off
+#'
+#' The EuroFlux workflow used a plain `NEE < 0` growing-season cut-off at these
+#' two sites instead of the usual proportional one. See `detect_growing_season()`.
 SITES_GS_NEE_ZERO <- c("FI-Sod", "DE-RuC")
 
-# Sites where measured NEE below 2 C is unreliable. Both the reported
-# growing-season temperature floor and the observations themselves are
-# truncated there.
+#' Soil-temperature floor (C) at the `SITES_TS_MIN_2C` sites
 TS_MIN_VALID <- 2.0
+
+#' Sites where measured NEE below 2 C is unreliable
+#'
+#' Both the reported growing-season temperature floor and the observations
+#' themselves are truncated there.
 SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 
-# What the column step 01 leaves as `TS_measured` actually is, per site --
-# declared in site_info.csv as `ts_source`, one level per mechanism the readers
-# apply. The value is the level's answer to the only question downstream
-# needs: does this column contain measured soil temperature at every row it
-# has, so that a reconstruction can be scored against it?
-#
-#   sensor         the declared sensor, untouched
-#   sensor_depth2  a different depth of the same profile (CZ-Stn) -- a sensor
-#   gapfill_pi     the sensor, with its gaps taken from the PI's gap-filled
-#                  product (US-NR1, US-ICh, US-ICs): the data provider's own
-#                  MDS fill, the same thing `TS_F_MDS_1` already is at every
-#                  FLUXNET-family site
-#   recalibrated   FI-Sod: the pre-2006 third of the record rebuilt by
-#                  chaining two regressions between depths
-#   gapfill_ta     US-MBP: gaps filled from air temperature
-#   ta_substitute  GF-Guy: air temperature, wholesale
-#   borrowed_site  US-Cwt: `TA * 0.647 + 5.14`, coefficients from a neighbour
-#   lm_ta_recent   US-BZo: `TS ~ TA` fitted on recent years, wholesale
-#   lm_ta_cold     six AmeriFlux sites: `TS ~ TA` fitted above freezing, wholesale
-#   reconstructed  the 16 `estimate_Ts` sites: `fix_soil_temp()`'s estimator,
-#                  named in `estimate_ts_method`, wholesale
-#
-# "none" is deliberately strict: a column that is a sensor reading at *most*
-# rows still has rows that are not, and a fill cross-validated against it is
-# partly scoring itself against a regression. FI-Sod and US-MBP fall on that
-# side for that reason; relaxing it is a one-word change here.
+#' Whether each `ts_source` level is measured soil temperature
+#'
+#' What the column step 01 leaves as `TS_measured` actually is, per site --
+#' declared in site_info.csv as `ts_source`, one level per mechanism the readers
+#' apply. The value is the level's answer to the only question downstream
+#' needs: does this column contain measured soil temperature at every row it
+#' has, so that a reconstruction can be scored against it?
+#'
+#'   sensor         the declared sensor, untouched
+#'   sensor_depth2  a different depth of the same profile (CZ-Stn) -- a sensor
+#'   gapfill_pi     the sensor, with its gaps taken from the PI's gap-filled
+#'                  product (US-NR1, US-ICh, US-ICs): the data provider's own
+#'                  MDS fill, the same thing `TS_F_MDS_1` already is at every
+#'                  FLUXNET-family site
+#'   recalibrated   FI-Sod: the pre-2006 third of the record rebuilt by
+#'                  chaining two regressions between depths
+#'   gapfill_ta     US-MBP: gaps filled from air temperature
+#'   ta_substitute  GF-Guy: air temperature, wholesale
+#'   borrowed_site  US-Cwt: `TA * 0.647 + 5.14`, coefficients from a neighbour
+#'   lm_ta_recent   US-BZo: `TS ~ TA` fitted on recent years, wholesale
+#'   lm_ta_cold     six AmeriFlux sites: `TS ~ TA` fitted above freezing, wholesale
+#'   reconstructed  the 16 `estimate_Ts` sites: `fix_soil_temp()`'s estimator,
+#'                  named in `estimate_ts_method`, wholesale
+#'
+#' "none" is deliberately strict: a column that is a sensor reading at *most*
+#' rows still has rows that are not, and a fill cross-validated against it is
+#' partly scoring itself against a regression. FI-Sod and US-MBP fall on that
+#' side for that reason; relaxing it is a one-word change here.
 TS_SOURCES <- c(
   sensor        = "sensor",
   sensor_depth2 = "sensor",
@@ -153,6 +169,11 @@ TS_SOURCES <- c(
   reconstructed = "none"
 )
 
+#' The site's declared `ts_source`
+#'
+#' @param site_info One row of the site declaration table.
+#' @return The site's `ts_source`, one of `names(TS_SOURCES)`. Errors if the
+#'   site declares none or an unknown level.
 ts_source <- function(site_info) {
   src <- site_info[["ts_source"]]
   if (length(src) != 1 || is.na(src) || !src %in% names(TS_SOURCES)) {
@@ -166,30 +187,37 @@ ts_source <- function(site_info) {
   src
 }
 
-# "sensor" or "none": whether `TS_measured` is measured soil temperature at
-# every row, and so can serve as the truth a reconstruction is scored against.
+#' Whether `TS_measured` is measured soil temperature at every row
+#'
+#' Whether `TS_measured` is measured soil temperature at every row, and so can
+#' serve as the truth a reconstruction is scored against.
+#'
+#' @param site_info One row of the site declaration table.
+#' @return "sensor" or "none".
 ts_measured_truth <- function(site_info) {
   unname(TS_SOURCES[[ts_source(site_info)]])
 }
 
-# The development site sample: what `_targets.R` runs by default
-# (THERMAL_SITES=dev). Chosen to be cheap and to cover every branch the
-# pipeline has, so a breaking change shows up in minutes. The number is a
-# cost proxy -- manuscript years x round(season length / 14) fits per model.
-#
-#   DE-RuC   40  TS_linear selection; measured soil water; SITES_GS_NEE_ZERO
-#   DE-Hte   63  fix_soil_temp()'s linear-regression arm; SWC_use NO, so the
-#                direct model takes the ERA5 path
-#   DE-Akm   78  fix_soil_temp()'s random-forest (NETRAD) arm
-#   FI-Sod  100  a three-product splice (FLUXNET2015+FLUXNET+ICOS), the
-#                pre-2006 recalibration, the other NEE-zero site, sparse gaps
-#   SE-Deg  176  Warm Winter 2020 in the splice
-#   NL-Loo  176  a two-product splice (FLUXNET+ICOS); TS_linear
-#   US-Kon   84  the AmeriFlux reader: u-star filtering and gap fill, the
-#                compound `FC + SC` read, RH -> VPD, the uncapped cut-off
-#
-# Left out because expensive, and pinned by tests/ts-swc-baseline.R instead:
-# CH-Dav's pre-gap-scan TS >= 2 C truncation (364) and GF-Guy's year-round
-# season with air temperature for soil (520). tests/testthat/test-pipeline-sites.R
-# checks the coverage claims above.
+#' The development site sample
+#'
+#' What `_targets.R` runs by default (THERMAL_SITES=dev). Chosen to be cheap
+#' and to cover every branch the pipeline has, so a breaking change shows up in
+#' minutes. The number is a cost proxy -- manuscript years x round(season
+#' length / 14) fits per model.
+#'
+#'   DE-RuC   40  TS_linear selection; measured soil water; SITES_GS_NEE_ZERO
+#'   DE-Hte   63  fix_soil_temp()'s linear-regression arm; SWC_use NO, so the
+#'                direct model takes the ERA5 path
+#'   DE-Akm   78  fix_soil_temp()'s random-forest (NETRAD) arm
+#'   FI-Sod  100  a three-product splice (FLUXNET2015+FLUXNET+ICOS), the
+#'                pre-2006 recalibration, the other NEE-zero site, sparse gaps
+#'   SE-Deg  176  Warm Winter 2020 in the splice
+#'   NL-Loo  176  a two-product splice (FLUXNET+ICOS); TS_linear
+#'   US-Kon   84  the AmeriFlux reader: u-star filtering and gap fill, the
+#'                compound `FC + SC` read, RH -> VPD, the uncapped cut-off
+#'
+#' Left out because expensive, and pinned by tests/ts-swc-baseline.R instead:
+#' CH-Dav's pre-gap-scan TS >= 2 C truncation (364) and GF-Guy's year-round
+#' season with air temperature for soil (520). tests/testthat/test-pipeline-sites.R
+#' checks the coverage claims above.
 DEV_SITES <- c("DE-RuC", "DE-Hte", "DE-Akm", "FI-Sod", "SE-Deg", "NL-Loo", "US-Kon")

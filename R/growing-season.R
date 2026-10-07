@@ -1,5 +1,10 @@
 # Growing season, growing year and year qualification (step 01).
 
+#' Parse a site's hand-removed years
+#'
+#' @param value The `year_removed` entry of site_info.csv: comma-separated
+#'   years or `start:end` ranges, e.g. `"2007, 2008, 2010"` or `"2007:2009"`.
+#' @return Numeric vector of years; empty if `value` is NA or blank.
 parse_removed_years <- function(value) {
   if (is.na(value) || !nzchar(trimws(value))) return(numeric())
   unlist(lapply(strsplit(value, ",")[[1]], function(part) {
@@ -13,7 +18,12 @@ parse_removed_years <- function(value) {
   }))
 }
 
-# Calendar columns from the midpoint of each interval (`dt` is the time step).
+#' Calendar columns from the midpoint of each interval
+#'
+#' @param a Data frame of half-hourly flux data with a 12-digit `TIMESTAMP_START`.
+#' @param dt The time step, a difftime.
+#' @return `a` with `TIMESTAMP` (POSIXct, UTC, the interval midpoint) and
+#'   `YEAR`, `MONTH`, `DAY`, `DOY`, `HOUR`, `MINUTE` taken from it.
 add_timestamp_columns <- function(a, dt) {
   a$TIMESTAMP <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
   a$YEAR <- lubridate::year(a$TIMESTAMP)
@@ -25,31 +35,63 @@ add_timestamp_columns <- function(a, dt) {
   a
 }
 
-# Wrap day-of-year so that a growing season straddling New Year is one
-# contiguous interval. Days before `origin` belong to the growing year that
-# began the previous calendar year, and are pushed past the end of it: with
-# `origin = 183`, DOY runs 183..548 and 1 January is 367.
-#
-# The shift is 366 whatever the year's length, as in the original, so a
-# non-leap year skips DOY 366; see docs/growing-year.md. Invariant: `DOY > 366`
-# iff the row is in the calendar year after its growing year began.
+#' Wrap day of year into the growing year
+#'
+#' Wrap day-of-year so that a growing season straddling New Year is one
+#' contiguous interval. Days before `origin` belong to the growing year that
+#' began the previous calendar year, and are pushed past the end of it: with
+#' `origin = 183`, DOY runs 183..548 and 1 January is 367.
+#'
+#' The shift is 366 whatever the year's length, as in the original, so a
+#' non-leap year skips DOY 366; see docs/growing-year.md. Invariant: `DOY > 366`
+#' iff the row is in the calendar year after its growing year began.
+#'
+#' @param doy Calendar day of year.
+#' @param origin The day of year the site's growing year begins, from
+#'   `growing_year_start()`.
+#' @return `doy`, with days before `origin` shifted up by 366; unchanged if
+#'   `origin <= 1`.
 wrap_growing_doy <- function(doy, origin) {
   if (origin <= 1) return(doy)
   ifelse(doy < origin, doy + 366, doy)
 }
 
-# The inverse, where a real day of year is needed. A no-op on unwrapped values.
+#' Unwrap a growing-year day of year
+#'
+#' The inverse, where a real day of year is needed. A no-op on unwrapped values.
+#'
+#' @param doy Day of year, possibly wrapped by `wrap_growing_doy()`.
+#' @return `doy`, with values above 366 shifted down by 366.
 unwrap_growing_doy <- function(doy) {
   ifelse(doy > 366, doy - 366, doy)
 }
 
-# The growing year a row belongs to, from its (possibly wrapped) DOY.
+#' The growing year a row belongs to
+#'
+#' From its (possibly wrapped) DOY.
+#'
+#' @param doy Day of year, possibly wrapped by `wrap_growing_doy()`.
+#' @param year Calendar year of the row.
+#' @return Integer vector: `year`, or `year - 1` where `doy` is past 366.
 growing_year_of <- function(doy, year) {
   year <- as.integer(year)
   dplyr::if_else(doy <= 366, year, year - 1L)
 }
 
 
+#' Detect a site's growing season from its NEE climatology
+#'
+#' @param ac Data frame of half-hourly flux data with `DOY` and the NEE and
+#'   soil-temperature columns.
+#' @param site_info One row of the site declaration table.
+#' @param nee_col Name of the NEE column.
+#' @param ts_col Name of the soil-temperature column.
+#' @param nee_threshold Growing-season NEE cut-off: `"capped"`, `"uncapped"` or
+#'   `"zero"`.
+#' @return A list: `gStart` and `gEnd`, the season bounds as (possibly wrapped)
+#'   DOY after the site_info.csv overrides; `tStart` and `tEnd`, the 2.5/97.5
+#'   percentiles of DOY-mean soil temperature over the qualifying DOYs;
+#'   `gStart_detected` and `gEnd_detected`, the bounds before the overrides.
 detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
                                   nee_threshold) {
   nee_threshold <- match.arg(nee_threshold, c("capped", "uncapped", "zero"))
@@ -106,9 +148,17 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
   )
 }
 
-# Season start and end as timestamps, one pair per year, so the gap scan sees
-# gaps running off either end. TIMESTAMP uses the unwrapped bound (a real
-# date); DOY keeps the wrapped one, which the season filter compares.
+#' Season start and end as timestamps, one pair per year
+#'
+#' So the gap scan sees gaps running off either end. TIMESTAMP uses the
+#' unwrapped bound (a real date); DOY keeps the wrapped one, which the season
+#' filter compares.
+#'
+#' @param gStart,gEnd Growing-season bounds, as (possibly wrapped) DOY.
+#' @param yStart,yEnd First and last calendar year of the record.
+#' @param dt The time step, a difftime.
+#' @return Data frame with `TIMESTAMP` (POSIXct, UTC) and `DOY`: the season
+#'   start in every year, then the season end in every year.
 build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt) {
   gStart_adj <- unwrap_growing_doy(gStart)
   gEnd_adj <- unwrap_growing_doy(gEnd)
@@ -127,6 +177,15 @@ build_gs_dates <- function(gStart, gEnd, yStart, yEnd, dt) {
   )
 }
 
+#' Growing years with few enough gaps in the season
+#'
+#' @param measured Data frame of the quality-filtered nighttime observations,
+#'   with `TIMESTAMP`, `YEAR` and `DOY`.
+#' @param gStart,gEnd Growing-season bounds, as (possibly wrapped) DOY.
+#' @param dt The time step, a difftime.
+#' @param site_info One row of the site declaration table.
+#' @return Integer vector of the growing years whose largest and total in-season
+#'   gaps are under `compute_gap_thresholds()`'s thresholds.
 get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
 
   name_site <- site_info[["site_ID"]]
@@ -167,6 +226,12 @@ get_good_years <- function(measured, gStart, gEnd, dt, site_info) {
   setdiff(good_years, parse_removed_years(site_info[["year_removed"]]))
 }
 
+#' Gap thresholds a growing year must pass
+#'
+#' @param gStart,gEnd Growing-season bounds, as (possibly wrapped) DOY.
+#' @param site_name Site ID.
+#' @return A list: `gap_max_thresh`, the largest allowed gap in days, and
+#'   `gap_total_thresh`, the allowed fraction of the season in gaps over 14 days.
 compute_gap_thresholds <- function(gStart, gEnd, site_name) {
   if (site_name %in% c("US-ICt", "US-ICh", "US-ICs", "BR-Ma2", "BR-Sa1")) {
     list(gap_max_thresh = 60, gap_total_thresh = 0.8)
@@ -179,6 +244,14 @@ compute_gap_thresholds <- function(gStart, gEnd, site_name) {
   }
 }
 
+#' Write a site's respiration tables to CSV
+#'
+#' @param ac Data frame of the site's half-hourly data.
+#' @param measured_night Data frame of the site's nighttime NEE observations.
+#' @param output_dir Directory to write into; created if absent.
+#' @param site_name Site ID.
+#' @return Called for its side effect of writing `<site_name>_ac.csv` and
+#'   `<site_name>_nightNEE.csv`; returns `NULL`, invisibly.
 write_respiration_outputs <- function(ac, measured_night, output_dir, site_name) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   output_files <- file.path(output_dir, paste0(site_name, c("_ac.csv", "_nightNEE.csv")))

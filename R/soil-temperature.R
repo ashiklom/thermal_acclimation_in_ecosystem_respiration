@@ -8,6 +8,19 @@
 #     the recipe, attaches the fill if asked, looks up its bounds, and drops
 #     every other candidate. What leaves is `TS_final` and a `meta` row;
 #     downstream there is one soil-temperature column and no branching.
+
+#' Stage B: select the soil-temperature column under a recipe
+#'
+#' @param site_data The site's step-01 result, from `prep_nee_ac()`.
+#' @param site_info One row of the site declaration table.
+#' @param recipe A recipe: one strategy per `RECIPE_AXES` axis; `NULL` for
+#'   `original_recipe()`.
+#' @param fill The site's `fill_soil_temp()` result, or `NULL`.
+#' @param ts_col Soil-temperature column to use whatever the recipe says, for
+#'   sensitivity runs; `NULL` to let the strategy choose.
+#' @return A list: `ac` and `nightNEE`, with `TS_final` in place of every
+#'   soil-temperature column, and `meta`, a one-row tibble of the choice, its
+#'   reason, provenance and bounds (`tStart`, `tEnd`).
 get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NULL,
                                  ts_col = NULL) {
   recipe <- recipe %||% original_recipe()
@@ -110,14 +123,30 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   list(ac = ac, nightNEE = night, meta = meta)
 }
 
-# What stage A actually did at this site, from its provenance row -- under
-# `ts_qc = sensor` that is not what `ts_source` declares.
+#' Whether stage A left measured soil temperature at this site
+#'
+#' What stage A actually did at this site, from its provenance row -- under
+#' `ts_qc = sensor` that is not what `ts_source` declares.
+#'
+#' @param site_data The site's step-01 result, from `prep_nee_ac()`.
+#' @return `"sensor"` or `"none"`.
 stage_a_truth <- function(site_data) site_data[["ts_provenance"]][["ts_truth"]][[1]]
+#' The stage-A arm that ran at this site
+#'
+#' @param site_data The site's step-01 result, from `prep_nee_ac()`.
+#' @return A `TS_SOURCES` name.
 stage_a_arm <- function(site_data) site_data[["ts_provenance"]][["stage_a_arm"]][[1]]
 
-# `TS_final`, and no other soil-temperature column, so that "no branching
-# downstream" is a checked property (test-soil-temperature.R) rather than a
-# convention.
+#' Materialise the chosen column as `TS_final`
+#'
+#' `TS_final`, and no other soil-temperature column, so that "no branching
+#' downstream" is a checked property (test-soil-temperature.R) rather than a
+#' convention.
+#'
+#' @param dat A half-hourly table, `ac` or `nightNEE`.
+#' @param ts_col Name of the soil-temperature column to keep.
+#' @return `dat` with `TS_final` a copy of `ts_col` and every other `TS` and
+#'   `TS_*` column dropped.
 materialise_ts_final <- function(dat, ts_col) {
   if (!ts_col %in% names(dat)) {
     stop(
@@ -130,7 +159,10 @@ materialise_ts_final <- function(dat, ts_col) {
   dat[setdiff(names(dat), setdiff(ts_candidate_columns(dat), "TS_final"))]
 }
 
-# Every soil-temperature column on a table: `TS` and anything `TS_*`.
+#' Every soil-temperature column on a table
+#'
+#' @param dat A data frame.
+#' @return Character vector of column names: `TS` and anything `TS_*`.
 ts_candidate_columns <- function(dat) {
   grep("^TS($|_)", names(dat), value = TRUE)
 }
@@ -142,16 +174,28 @@ ts_candidate_columns <- function(dat) {
 # (`TS_SOURCES` in R/constants.R); the only site names tested are the
 # manuscript's three training-target rules in the `reconstructed` arm.
 
-# The columns every reader provides. `TIMESTAMP_START` is the 12-digit stamp
-# both products carry; FI-Sod's recalibration windows are expressed in it.
+#' The columns every reader provides
+#'
+#' `TIMESTAMP_START` is the 12-digit stamp both products carry; FI-Sod's
+#' recalibration windows are expressed in it.
+#'
+#' Optional, where the record has them: TS_sensor_QC, TA_QC, NETRAD,
+#' TS_depth2, TS_depth2_QC, TS_pi. An arm that needs one and lacks it fails
+#' by name.
 TS_INPUT_REQUIRED <- c("TIMESTAMP", "TIMESTAMP_START", "YEAR", "DOY", "HOUR", "MINUTE", "TS_sensor", "TA")
-# Optional, where the record has them: TS_sensor_QC, TA_QC, NETRAD,
-# TS_depth2, TS_depth2_QC, TS_pi. An arm that needs one and lacks it fails
-# by name.
 
-# The FLUXNET-family record's columns, under the shared names. `TS_F_MDS_1` is
-# the shallow sensor and `TS_F_MDS_2` the second depth; `TA_F_MDS` carries its
-# own QC flag, which the air-temperature substitute inherits.
+#' The FLUXNET-family record's columns, under the shared names
+#'
+#' `TS_F_MDS_1` is the shallow sensor and `TS_F_MDS_2` the second depth;
+#' `TA_F_MDS` carries its own QC flag, which the air-temperature substitute
+#' inherits.
+#'
+#' @param a The site's spliced FLUXNET-format half-hourly record, with the
+#'   timestamp columns added.
+#' @param site_info One row of the site declaration table.
+#' @return The stage-A input: a tibble of the `TS_INPUT_REQUIRED` columns plus
+#'   `TS_sensor_QC` and `TA_QC`, and `NETRAD`, `TS_depth2` and `TS_depth2_QC`
+#'   where the record has them.
 fluxnet_ts_input <- function(a, site_info) {
   absent <- rep(NA_real_, nrow(a))
   out <- tibble::tibble(
@@ -178,9 +222,17 @@ fluxnet_ts_input <- function(a, site_info) {
   out
 }
 
-# The AmeriFlux BASE record's columns, under the shared names: the declared
-# sensor and air temperature, net radiation (`netrad_column`, else a bare
-# `NETRAD`), and the PI's gap-filled `TS_PI_1` where present. No QC flags.
+#' The AmeriFlux BASE record's columns, under the shared names
+#'
+#' The declared sensor and air temperature, net radiation (`netrad_column`, else
+#' a bare `NETRAD`), and the PI's gap-filled `TS_PI_1` where present. No QC
+#' flags.
+#'
+#' @param a The site's AmeriFlux BASE half-hourly record, with the timestamp
+#'   columns added.
+#' @param site_info One row of the site declaration table.
+#' @return The stage-A input: a tibble of the `TS_INPUT_REQUIRED` columns, plus
+#'   `NETRAD` and `TS_pi` where the record has them.
 ameriflux_ts_input <- function(a, site_info) {
   n <- nrow(a)
   out <- tibble::tibble(
@@ -204,9 +256,20 @@ ameriflux_ts_input <- function(a, site_info) {
   out
 }
 
-# One row describing what stage A did, carried in site_data as
-# `ts_provenance` and copied into every fit's settings by
-# `get_soil_temperature()`.
+#' One row describing what stage A did
+#'
+#' Carried in site_data as `ts_provenance` and copied into every fit's settings
+#' by `get_soil_temperature()`.
+#'
+#' @param site_info One row of the site declaration table.
+#' @param estimator Name of the estimator or swap that ran, or NA.
+#' @param family The estimator's family label (`ts_family()`), or NA.
+#' @param mode The `write_back_ts()` mode, `"none"` if nothing was written, or
+#'   NA.
+#' @param n_train Number of complete training rows, or NA.
+#' @param note Free-text note, or NA.
+#' @return A one-row tibble: `site_ID`, `ts_source`, `ts_truth` and the
+#'   `stage_a_*` fields.
 ts_provenance_row <- function(site_info, estimator = NA_character_, family = NA_character_,
                               mode = NA_character_, n_train = NA_integer_, note = NA_character_) {
   tibble::tibble(
@@ -221,6 +284,14 @@ ts_provenance_row <- function(site_info, estimator = NA_character_, family = NA_
   )
 }
 
+#' Fail unless the stage-A input has the columns an arm needs
+#'
+#' @param input The stage-A input, from `*_ts_input()`.
+#' @param cols Character vector of required column names.
+#' @param site_info One row of the site declaration table.
+#' @param why What needs the columns, for the error message.
+#' @return Called for its side effect (an error naming the absent columns);
+#'   returns `NULL`, invisibly.
 need_input <- function(input, cols, site_info, why) {
   absent <- setdiff(cols, names(input))
   if (length(absent)) {
@@ -231,6 +302,16 @@ need_input <- function(input, cols, site_info, why) {
   }
 }
 
+#' Stage A: the soil-temperature column step 01 qualifies on
+#'
+#' @param input The stage-A input, from `fluxnet_ts_input()` or
+#'   `ameriflux_ts_input()`.
+#' @param site_info One row of the site declaration table.
+#' @param ts_qc Soil-temperature qualification strategy, `"manuscript"` or
+#'   `"sensor"` (see `RECIPE_AXES`).
+#' @return A list of `TS` and `TS_QC`, aligned to `input`'s rows, and
+#'   `provenance`, a `ts_provenance_row()` with `ts_qc`, `stage_a_arm` and
+#'   `ts_truth` set to what ran.
 qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   absent <- setdiff(TS_INPUT_REQUIRED, names(input))
@@ -326,11 +407,18 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
 }
 
 # ---------------------------------------------------------- reconstructed
-#
-# Workflow 01_01, transcribed: the whole column is the estimator's prediction
-# from air temperature (and net radiation, where present), predictors first
-# gap-filled from their DOY x time-of-day climatology. The estimator is
-# `estimate_ts_method` in site_info.csv.
+
+#' Reconstruct soil temperature from air temperature
+#'
+#' Workflow 01_01, transcribed: the whole column is the estimator's prediction
+#' from air temperature (and net radiation, where present), predictors first
+#' gap-filled from their DOY x time-of-day climatology. The estimator is
+#' `estimate_ts_method` in site_info.csv.
+#'
+#' @param input The stage-A input, from `*_ts_input()`.
+#' @param site_info One row of the site declaration table.
+#' @return A list of `TS` and `TS_QC`, aligned to `input`'s rows, and
+#'   `provenance`, a `ts_provenance_row()`.
 fix_soil_temp <- function(input, site_info) {
   name_site <- site_info[["site_ID"]]
   data <- tibble::tibble(
@@ -403,9 +491,16 @@ fix_soil_temp <- function(input, site_info) {
   )
 }
 
-# The mean of `col` at each day-of-year x hour x minute, aligned to `dat`'s
-# rows: the value the original gap-filled a predictor with. NaN where a slot
-# has no observations at all, which `write_back_ts()` writes through as NA.
+#' Day-of-year x time-of-day climatology of a column
+#'
+#' The mean of `col` at each day-of-year x hour x minute, aligned to `dat`'s
+#' rows: the value the original gap-filled a predictor with. NaN where a slot
+#' has no observations at all, which `write_back_ts()` writes through as NA.
+#'
+#' @param dat Data frame with `DOY`, `HOUR`, `MINUTE` and `col`.
+#' @param col Name of the column to average.
+#' @return Numeric vector, one value per row of `dat`; NA where the slot has no
+#'   observations.
 doy_hour_climatology <- function(dat, col) {
   key <- c("DOY", "HOUR", "MINUTE")
   clim <- dat |>
@@ -415,8 +510,14 @@ doy_hour_climatology <- function(dat, col) {
   out
 }
 
-# `estimate_ts_method` (derived in scripts/revise-site-info.R), with empty
-# spelled "TA only" so every branch of `fix_soil_temp()` has a name.
+#' The site's soil-temperature reconstruction method
+#'
+#' `estimate_ts_method` (derived in scripts/revise-site-info.R), with empty
+#' spelled "TA only" so every branch of `fix_soil_temp()` has a name.
+#'
+#' @param site_info One row of the site declaration table.
+#' @return The declared method (`"NETRAD"` or `"linear regression"`), or
+#'   `"TA only"` where none is declared.
 ts_estimate_method <- function(site_info) {
   declared <- site_info[["estimate_ts_method"]]
   if (is.null(declared) || length(declared) != 1 || is.na(declared)) return("TA only")
@@ -424,27 +525,40 @@ ts_estimate_method <- function(site_info) {
 }
 
 # ------------------------------------------------------------ recalibrated
-#
-# FI-Sod's shallow sensor is unreliable before 2006; the original rebuilt it
-# by chaining two regressions between depths, fitted on row ranges of one
-# release:
-#
-#   mod1 <- lm(data = a[1:24383, ],      TS_F_MDS_2 ~ TS_F_MDS_1)
-#   mod2 <- lm(data = a[90000:245000, ], TS_F_MDS_1 ~ TS_F_MDS_2)
-#
-# Row ranges select different dates -- or nothing -- on any other release.
-# These windows are those ranges resolved to timestamps on the manuscript's
-# file (FLUXNET2015 FULLSET HH, 2001-2014, 245,424 gap-free rows), so they
-# reproduce its coefficients exactly; a test checks that. Year boundaries
-# instead would be wrong: they move the early slope from 0.865 to 0.307 and
-# the rebuilt soil temperature by 8.13 C RMS.
+
+#' Last year of FI-Sod's unreliable shallow-sensor record
+#'
+#' FI-Sod's shallow sensor is unreliable before 2006; the original rebuilt it
+#' by chaining two regressions between depths, fitted on row ranges of one
+#' release:
+#'
+#'   mod1 <- lm(data = a[1:24383, ],      TS_F_MDS_2 ~ TS_F_MDS_1)
+#'   mod2 <- lm(data = a[90000:245000, ], TS_F_MDS_1 ~ TS_F_MDS_2)
+#'
+#' Row ranges select different dates -- or nothing -- on any other release.
+#' These windows are those ranges resolved to timestamps on the manuscript's
+#' file (FLUXNET2015 FULLSET HH, 2001-2014, 245,424 gap-free rows), so they
+#' reproduce its coefficients exactly; a test checks that. Year boundaries
+#' instead would be wrong: they move the early slope from 0.865 to 0.307 and
+#' the rebuilt soil temperature by 8.13 C RMS.
 FI_SOD_TS_BAD_THROUGH <- 2005
-# a[1:24383, ] and a[90000:245000, ] of FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv
+#' FI-Sod's early recalibration window
+#'
+#' a[1:24383, ] and a[90000:245000, ] of FLX_FI-Sod_FLUXNET2015_FULLSET_HH_2001-2014_1-4.csv
 FI_SOD_EARLY_WINDOW <- c("200101010000", "200205232300")
+#' FI-Sod's late recalibration window
 FI_SOD_LATE_WINDOW <- c("200602182330", "201412230330")
 
-# FI-Sod before 2006: early-window shallow -> deep, then good-period deep ->
-# shallow.
+#' Recalibrate FI-Sod's shallow soil temperature
+#'
+#' FI-Sod before 2006: early-window shallow -> deep, then good-period deep ->
+#' shallow.
+#'
+#' @param input The stage-A input, with `TS_depth2`.
+#' @param site_info One row of the site declaration table.
+#' @return A list of `TS` and `TS_QC`, aligned to `input`'s rows, and
+#'   `provenance`, a `ts_provenance_row()`. The sensor is returned unchanged
+#'   where the record does not cover both windows and a year through 2005.
 recalibrate_fi_sod_soil_temp <- function(input, site_info) {
   name_site <- site_info[["site_ID"]]
   need_input(input, c("TS_depth2"), site_info, "the FI-Sod recalibration")

@@ -1,22 +1,31 @@
 # Step 01's AmeriFlux BASE reader.
 
-# Site-specific windows as inclusive `TIMESTAMP_START` bounds (NA = open),
-# converted from the original's row ranges on the releases then on disk
-# (US-Myb BASE-BADM 17-5, US-Jo2 2-5; both gap-free), so each selects exactly
-# the rows the range did:
-#
-#   US-Myb  a[17521:245424, ]   2011-01-01 00:00 .. (open)
-#   US-Jo2  a[123453:124049]    2017-01-15 22:00 .. 2017-01-28 08:00
-#
-# US-Myb's upper row was just the end of the record then (the intent is "drop
-# the first year"), so the end is left open.
+#' US-Myb's data window
+#'
+#' Site-specific windows as inclusive `TIMESTAMP_START` bounds (NA = open),
+#' converted from the original's row ranges on the releases then on disk
+#' (US-Myb BASE-BADM 17-5, US-Jo2 2-5; both gap-free), so each selects exactly
+#' the rows the range did:
+#'
+#'   US-Myb  a[17521:245424, ]   2011-01-01 00:00 .. (open)
+#'   US-Jo2  a[123453:124049]    2017-01-15 22:00 .. 2017-01-28 08:00
+#'
+#' US-Myb's upper row was just the end of the record then (the intent is "drop
+#' the first year"), so the end is left open.
 US_MYB_WINDOW <- c("201101010000", NA)
+
+#' US-Jo2's window of bad air temperature
 US_JO2_BAD_TA_WINDOW <- c("201701152200", "201701280800")
 
-# A site's AmeriFlux BASE table, sentinels removed. A tibble, not
-# `amf_read_base()`'s data.frame: `a[[NA_character_]]` then errors at the
-# lookup instead of silently yielding NULL. REddyProc gives identical results
-# on either.
+#' A site's AmeriFlux BASE table, sentinels removed
+#'
+#' A tibble, not `amf_read_base()`'s data.frame: `a[[NA_character_]]` then
+#' errors at the lookup instead of silently yielding NULL. REddyProc gives
+#' identical results on either.
+#'
+#' @param name_site Site ID.
+#' @return Tibble of the site's half-hourly BASE record as `amf_read_base()`
+#'   parses it (`TIMESTAMP`, `YEAR`, `DOY`, ... added), sentinels set to NA.
 read_ameriflux_base <- function(name_site) {
   path <- product_file(name_site, "AmeriFlux_BASE")
   if (is.na(path)) stop("No AmeriFlux BASE archive for ", name_site, " under ", DIR_RAWDATA, ".")
@@ -25,6 +34,15 @@ read_ameriflux_base <- function(name_site) {
     drop_sentinels()
 }
 
+#' Read, repair and u-star filter one AmeriFlux BASE site
+#'
+#' @param site_info One row of the site declaration table.
+#' @param ts_qc Soil-temperature qualification strategy, `"manuscript"` or
+#'   `"sensor"` (see `RECIPE_AXES`).
+#' @return A list: `ac`, the half-hourly table from `prep_ustar_df()` plus
+#'   `uStarTh` and `NEE_uStar_f`; `dt`, the time step (difftime); `gs`, the
+#'   growing season from `detect_growing_season()`; and `ts_provenance`, stage
+#'   A's provenance row.
 prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   message("Reading Ameriflux data...")
@@ -179,14 +197,20 @@ prep_ameriflux <- function(site_info, ts_qc = "manuscript") {
   list(ac = ac, dt = dt, gs = gs, ts_provenance = ustar[["ts_provenance"]])
 }
 
-# Every per-site column this function is about to read, for the path this site
-# takes. `TS` is read wherever it is declared -- at a reconstructed site it is
-# the estimator's training target -- `SWC` only where the site keeps soil
-# water, and exactly one of `RH`/`VPD` is consulted.
-#
-# `netrad_column` is deliberately absent: `prep_ustar_df()` carries net
-# radiation forward only if it happens to be there, while `fix_soil_temp()`
-# raises its own error when a site that needs it does not have it.
+#' The AmeriFlux BASE columns a site declares
+#'
+#' Every per-site column this function is about to read, for the path this site
+#' takes. `TS` is read wherever it is declared -- at a reconstructed site it is
+#' the estimator's training target -- `SWC` only where the site keeps soil
+#' water, and exactly one of `RH`/`VPD` is consulted.
+#'
+#' `netrad_column` is deliberately absent: `prep_ustar_df()` carries net
+#' radiation forward only if it happens to be there, while `fix_soil_temp()`
+#' raises its own error when a site that needs it does not have it.
+#'
+#' @param site_info One row of the site declaration table.
+#' @return Character vector of unique BASE column names, with `+`-separated
+#'   sums split into their terms.
 declared_ameriflux_columns <- function(site_info) {
   fields <- c("NEE", "FC", "TA", "SW_IN", "USTAR", "TS",
               if (isTRUE(site_info$SWC_use)) "SWC",
@@ -197,10 +221,17 @@ declared_ameriflux_columns <- function(site_info) {
   unique(trimws(unlist(strsplit(declared, "+", fixed = TRUE))))
 }
 
-# AmeriFlux BASE column names encode sensor position and processing level,
-# and change between releases (US-Ho1/US-Ho2 lost `RH_PI_F_2_1_1`). Check the
-# declared columns up front, naming the site, field and column and what the
-# record offers instead -- otherwise the failure surfaces deep in REddyProc.
+#' Check that a site's declared columns are in its BASE record
+#'
+#' AmeriFlux BASE column names encode sensor position and processing level,
+#' and change between releases (US-Ho1/US-Ho2 lost `RH_PI_F_2_1_1`). Check the
+#' declared columns up front, naming the site, field and column and what the
+#' record offers instead -- otherwise the failure surfaces deep in REddyProc.
+#'
+#' @param a The site's AmeriFlux BASE table, from `read_ameriflux_base()`.
+#' @param site_info One row of the site declaration table.
+#' @return Called for its side effect (an error if any column is absent);
+#'   returns `NULL`, invisibly.
 check_declared_columns <- function(a, site_info) {
   name_site <- site_info[["site_ID"]]
   wanted <- declared_ameriflux_columns(site_info)
@@ -224,6 +255,18 @@ check_declared_columns <- function(a, site_info) {
   )
 }
 
+#' Build the table for u-star filtering from a BASE record
+#'
+#' @param a The site's AmeriFlux BASE table after `prep_ameriflux()`'s
+#'   per-site repairs, with `daytime`.
+#' @param site_info One row of the site declaration table.
+#' @param ts_qc Soil-temperature qualification strategy, `"manuscript"` or
+#'   `"sensor"` (see `RECIPE_AXES`).
+#' @return A list: `ac`, a half-hourly tibble of the timestamp columns plus
+#'   `NEE`, `TA`, `TS`, `SWC`, `SW_IN` (W m-2), `USTAR`, `RH` or `VPD`,
+#'   `daytime`, and `NETRAD` where the record has it; `convert_rh`, `TRUE` if
+#'   VPD must be derived from `RH`; and `ts_provenance`, stage A's provenance
+#'   row.
 prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   check_declared_columns(a, site_info)
@@ -325,15 +368,20 @@ prep_ustar_df <- function(a, site_info, ts_qc = "manuscript") {
 }
 
 
-# Sunrise and sunset for `dates`, in the frame AmeriFlux timestamps use.
-#
-# BASE timestamps are local standard time, parsed by `amf_read_base()` as
-# GMT: a local clock reading with a UTC label. `getSunlightTimes()`'s `tz`
-# also decides which solar day's events come back -- in UTC, sunrise and
-# sunset fall on different local days here -- so ask in the site's standard
-# time and relabel (not convert) to UTC, as the original did. `Etc/GMT` zones
-# are fixed-offset with an inverted sign, and exist only at whole hours
-# (every AmeriFlux site is UTC-4 to UTC-9), hence the check.
+#' Sunrise and sunset for `dates`, in the frame AmeriFlux timestamps use
+#'
+#' BASE timestamps are local standard time, parsed by `amf_read_base()` as
+#' GMT: a local clock reading with a UTC label. `getSunlightTimes()`'s `tz`
+#' also decides which solar day's events come back -- in UTC, sunrise and
+#' sunset fall on different local days here -- so ask in the site's standard
+#' time and relabel (not convert) to UTC, as the original did. `Etc/GMT` zones
+#' are fixed-offset with an inverted sign, and exist only at whole hours
+#' (every AmeriFlux site is UTC-4 to UTC-9), hence the check.
+#'
+#' @param site_info One row of the site declaration table.
+#' @param dates Date vector of the days to compute.
+#' @return Data frame from `suncalc::getSunlightTimes()`: `date`, `lat`, `lon`,
+#'   `sunrise`, `sunset`, the times relabelled to UTC.
 site_sunlight_times <- function(site_info, dates) {
   offset <- site_utc_offset(site_info)
   if (offset != round(offset)) {
@@ -357,14 +405,22 @@ site_sunlight_times <- function(site_info, dates) {
   sunrise_set
 }
 
-# The site's standard-time UTC offset in hours (no daylight saving).
+#' The site's standard-time UTC offset in hours (no daylight saving)
+#'
+#' @param site_info One row of the site declaration table.
+#' @return Numeric UTC offset in hours, negative west of Greenwich.
 site_utc_offset <- function(site_info) {
   zone <- lutz::tz_lookup_coords(lat = site_info[["LAT"]], lon = site_info[["LONG"]], method = "accurate")
   lutz::tz_offset(as.Date("2000-01-01"), zone)$utc_offset_h
 }
 
-# Fill the gaps in `x` with its value at the same time of day `days` later,
-# matched on `timestamp`; NA where there is no such row.
+#' Fill the gaps in `x` with its value at the same time of day `days` later
+#'
+#' @param x Numeric vector with gaps (NA).
+#' @param timestamp POSIXct timestamps of `x`; the later value is matched on
+#'   `timestamp`.
+#' @param days Number of days later to take the fill from.
+#' @return `x` with its gaps filled; NA where there is no such row.
 fill_from_later <- function(x, timestamp, days) {
   gap <- which(is.na(x))
   later <- match(timestamp[gap] + as.difftime(days, units = "days"), timestamp)

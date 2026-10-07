@@ -1,15 +1,23 @@
 # ERA5-Land layer-1 soil water: the file, a site's slice of it, its join onto
 # step 01's tables, and keeping the file current.
 
-# Soil water is a percent everywhere in the analysis, like the tower columns
-# and the `Hs` prior; ERA5-Land's `swvl1` is m3/m3, rescaled on read.
-# `data-raw/` keeps the provider's units.
+#' Scale factor from ERA5-Land soil water (m3/m3) to percent
+#'
+#' Soil water is a percent everywhere in the analysis, like the tower columns
+#' and the `Hs` prior; ERA5-Land's `swvl1` is m3/m3, rescaled on read.
+#' `data-raw/` keeps the provider's units.
 ERA5_SWC_TO_PERCENT <- 100
 
+#' Path to the ERA5-Land daily soil water file
 ERA5_SWC_CSV <- file.path(DIR_RAWDATA, "ERA5_daily_swc.csv")
 
-# The whole ERA5 table, every site. Parsed once per pipeline run and sliced per
-# site by `read_era5_swc(table = )`, rather than re-read for each of 117 sites.
+#' The whole ERA5 table, every site
+#'
+#' Parsed once per pipeline run and sliced per site by `read_era5_swc(table = )`,
+#' rather than re-read for each of 117 sites.
+#'
+#' @param path Path to the ERA5 soil water CSV.
+#' @return Tibble with `time` (Date), `site` (site ID) and `SWC` (m3/m3).
 load_era5_table <- function(path = ERA5_SWC_CSV) {
   readr::read_csv(
     path,
@@ -22,8 +30,15 @@ load_era5_table <- function(path = ERA5_SWC_CSV) {
   )
 }
 
-# `path` names the file in error messages; `table`, if given, is its already
-# parsed contents (`load_era5_table()`).
+#' Read one site's ERA5 soil water
+#'
+#' @param name_site Site ID.
+#' @param path Path to the ERA5 soil water CSV; names the file in error
+#'   messages.
+#' @param table If given, the file's already parsed contents
+#'   (`load_era5_table()`).
+#' @return Tibble of daily `YEAR`, `MONTH`, `DAY` and `SWC` (percent). Errors if
+#'   the site is absent, has duplicate dates, is all NA, or is not in m3/m3.
 read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
   if (is.null(table)) table <- load_era5_table(path)
   swc <- dplyr::filter(table, .data$site == name_site)
@@ -75,11 +90,21 @@ read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
     dplyr::select("YEAR", "MONTH", "DAY", "SWC")
 }
 
-# ERA5 soil water for one site, clipped to the days its flux record covers,
-# so extending the file for another site leaves this slice -- and everything
-# downstream of it -- unchanged. `table` is the parsed file, if the caller has
-# it. Missing reanalysis returns NULL rather than failing: only the direct
-# model needs it, and `resolve_swc_column()` complains there.
+#' One site's ERA5 soil water, clipped to its flux record
+#'
+#' ERA5 soil water for one site, clipped to the days its flux record covers,
+#' so extending the file for another site leaves this slice -- and everything
+#' downstream of it -- unchanged. Missing reanalysis returns NULL rather than
+#' failing: only the direct model needs it, and `resolve_swc_column()`
+#' complains there.
+#'
+#' @param prep Step 01's result for the site, from `prep_nee_ac()`; its `ac`
+#'   gives the days.
+#' @param name_site Site ID.
+#' @param path Path to the ERA5 soil water CSV.
+#' @param table The parsed file, if the caller has it.
+#' @return Tibble of daily `YEAR`, `MONTH`, `DAY` and `SWC` (percent) on the
+#'   record's days, or NULL if the site's ERA5 data could not be read.
 site_era5_swc <- function(prep, name_site, path = ERA5_SWC_CSV, table = NULL) {
   era5 <- tryCatch(
     read_era5_swc(name_site, path = path, table = table),
@@ -93,8 +118,14 @@ site_era5_swc <- function(prep, name_site, path = ERA5_SWC_CSV, table = NULL) {
   dplyr::semi_join(era5, days, by = c("YEAR", "MONTH", "DAY"))
 }
 
-# Join a site's ERA5 soil water onto step 01's tables as `SWC_era5`, in
-# percent, beside the measured column.
+#' Join a site's ERA5 soil water onto step 01's tables
+#'
+#' As `SWC_era5`, in percent, beside the measured column.
+#'
+#' @param prep Step 01's result for one site, from `prep_nee_ac()`.
+#' @param era5 The site's ERA5 soil water, from `site_era5_swc()`, or NULL.
+#' @return `prep`, with `SWC_era5` added to `ac` and `nightNEE` (all NA if
+#'   `era5` is NULL).
 attach_era5_swc <- function(prep, era5) {
   for (tbl in c("ac", "nightNEE")) {
     dat <- prep[[tbl]]
@@ -114,9 +145,18 @@ attach_era5_swc <- function(prep, era5) {
   prep
 }
 
-# One file for every site, extended by `scripts/download-era5-swc.py` only
-# when a site is missing from it or some site's flux record runs past its end
-# (`through`). The script is incremental and leaves an up-to-date file alone.
+#' Keep the ERA5 soil water file current
+#'
+#' One file for every site, extended by `scripts/download-era5-swc.py` only
+#' when a site is missing from it or some site's flux record runs past its end
+#' (`through`). The script is incremental and leaves an up-to-date file alone.
+#'
+#' @param through Date the file must reach (the latest flux record end), or NA
+#'   for no requirement.
+#' @param site_info_path Path to site_info.csv.
+#' @param path Path to the ERA5 soil water CSV.
+#' @return `path`, once the file covers every site and `through`. Errors if the
+#'   extraction script fails.
 ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path = ERA5_SWC_CSV) {
   sites <- get_site_info(path = site_info_path)[["site_ID"]]
   if (file.exists(path)) {
@@ -141,16 +181,25 @@ ensure_era5_coverage <- function(through, site_info_path = SITE_INFO_CSV, path =
   path
 }
 
-# The latest of the sites' record ends. An errored site contributes NULL
-# (`error = "null"`), and if every site errored there is no date to extend to.
+#' The latest of the sites' record ends
+#'
+#' An errored site contributes NULL (`error = "null"`), and if every site
+#' errored there is no date to extend to.
+#'
+#' @param ... Each site's record end (Date, from `site_record_end()`), or NULL.
+#' @return Date: the latest end, or NA if there is none.
 latest_record_end <- function(...) {
   ends <- do.call(c, list(...))
   if (!length(ends) || all(is.na(ends))) return(as.Date(NA))
   max(ends, na.rm = TRUE)
 }
 
-# Last day with measured NEE -- not the last row, since step 01 pads the
-# record to whole years.
+#' Last day with measured NEE
+#'
+#' Not the last row, since step 01 pads the record to whole years.
+#'
+#' @param prep Step 01's result for one site, from `prep_nee_ac()`.
+#' @return Date; NA if the site has no measured NEE.
 site_record_end <- function(prep) {
   ac <- prep[["ac"]]
   ac <- ac[!is.na(ac$NEE), ]

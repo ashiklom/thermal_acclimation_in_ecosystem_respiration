@@ -1,11 +1,18 @@
+#' The rlang `.data` pronoun
 .data <- rlang::.data
 
-# Concatenate per-product tables (each sorted by TIMESTAMP_START) into one
-# record, by the original workflow's rule (01_02a...EuroFlux.R:57-67): each
-# later product contributes only rows after the running record's end, so the
-# earlier, longer-history product wins wherever two overlap. Products are
-# ordered by their own first timestamp, not the caller's order, so a
-# mis-ordered `source` string cannot truncate the record.
+#' Splice per-product tables into one record
+#'
+#' Concatenate per-product tables (each sorted by TIMESTAMP_START) into one
+#' record, by the original workflow's rule (01_02a...EuroFlux.R:57-67): each
+#' later product contributes only rows after the running record's end, so the
+#' earlier, longer-history product wins wherever two overlap. Products are
+#' ordered by their own first timestamp, not the caller's order, so a
+#' mis-ordered `source` string cannot truncate the record.
+#'
+#' @param parts List of per-product half-hourly flux tables, each with a
+#'   character `TIMESTAMP_START`.
+#' @return One data frame: the spliced record.
 splice_products <- function(parts) {
   if (length(parts) == 0) stop("Nothing to splice.")
   parts <- parts[order(vapply(parts, function(d) d$TIMESTAMP_START[1], ""))]
@@ -18,7 +25,11 @@ splice_products <- function(parts) {
   combined
 }
 
-# Read every product in a site's provenance list and splice them.
+#' Read every product in a site's provenance list and splice them
+#'
+#' @param site_info One row of the site declaration table.
+#' @return Data frame of the site's spliced FLUXNET-format half-hourly record,
+#'   sentinels removed. Errors if none of its products is on disk.
 read_spliced_products <- function(site_info) {
   name_site <- site_info[["site_ID"]]
   wanted <- site_sources(site_info)
@@ -61,6 +72,15 @@ read_spliced_products <- function(site_info) {
 }
 
 
+#' Read and prepare one FLUXNET-format site
+#'
+#' @param site_info One row of the site declaration table.
+#' @param ts_qc Soil-temperature qualification strategy, `"manuscript"` or
+#'   `"sensor"` (see `RECIPE_AXES`).
+#' @return A list: `ac`, the half-hourly table with timestamp columns, stage A's
+#'   `TS` and `TS_QC`, and standardized `NEE`, `TA`, `NEE_QC`, `SWC`, `SW_IN`,
+#'   `GPP_DT`, `NEE_uStar_f` and `daytime`; `dt`, the time step (difftime); and
+#'   `ts_provenance`, stage A's provenance row.
 prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
   name_site <- site_info[["site_ID"]]
   a <- read_spliced_products(site_info)
@@ -101,16 +121,26 @@ prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
 }
 
 
-# Step 01 for one site.
-#
-# `site_info` is the site's row of site_info.csv, read once per site by the
-# pipeline so every stage sees the same declaration. Only the recipe's
-# `RECIPE_PREP_AXES` matter here, and `recipe` may be just those (which is
-# what the pipeline passes); this produces every candidate column and both
-# bounds definitions, so recipes with the same `recipe_prep_key()` share one
-# result. `era5` is a path, a site's table from `read_era5_swc()`, or NULL
-# to leave soil water off -- the pipeline passes NULL and attaches it with
-# `attach_era5_swc()`, so extending the ERA5 file does not re-run this.
+#' Step 01 for one site
+#'
+#' This produces every candidate column and both bounds definitions, so recipes
+#' with the same `recipe_prep_key()` share one result.
+#'
+#' @param site_info The site's row of site_info.csv, read once per site by the
+#'   pipeline so every stage sees the same declaration.
+#' @param recipe A recipe. Only the recipe's `RECIPE_PREP_AXES` matter here, and
+#'   `recipe` may be just those (which is what the pipeline passes).
+#' @param era5 A path, a site's table from `read_era5_swc()`, or NULL to leave
+#'   soil water off -- the pipeline passes NULL and attaches it with
+#'   `attach_era5_swc()`, so extending the ERA5 file does not re-run this.
+#' @return A list: `ac`, the half-hourly table for the qualifying years, with
+#'   `TS_measured`, `TS_linear` where it could be fitted, and `SWC_measured`;
+#'   `nightNEE`, the quality-filtered nighttime observations in the good growing
+#'   years; `feature_gs`, a one-row tibble of the growing season and
+#'   temperature bounds; `ts_bounds`, the temperature bounds per TS column and
+#'   definition; `ts_qc`, the soil temperature verdict; and `ts_provenance`,
+#'   stage A's provenance row. With `era5`, `ac` and `nightNEE` also carry
+#'   `SWC_era5`.
 prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_CSV) {
   name_site <- site_info[["site_ID"]]
 
