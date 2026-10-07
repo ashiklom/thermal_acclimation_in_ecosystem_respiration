@@ -20,7 +20,7 @@ compared row for row.
 | axis | strategies | stage | what it decides |
 |---|---|---|---|
 | `ts` | `site_info` · `screen_best` · `memory_fill` | fit | which soil-temperature column the model is fitted on |
-| `season` | `detect_or_override` · `force_detect` · `whole_year` | fit | the day-of-year span the 14-day windows tile |
+| `season` | `detect_or_override` · `force_detect` · `whole_year` | fit | the day-of-year span the moving windows are laid over |
 | `bounds` | `native` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of |
 | `swc` | `site_info` · `era5` | fit | which soil-water column the direct model uses |
 | `year_qc` | `site_info` | prep | how years are qualified |

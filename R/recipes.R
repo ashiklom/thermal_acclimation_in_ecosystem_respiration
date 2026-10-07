@@ -18,7 +18,7 @@ RECIPES_CSV <- file.path("data-core", "recipes.csv")
 RECIPE_AXES <- list(
   # Which soil-temperature column the model is fitted on.
   ts = c("site_info", "screen_best", "memory_fill"),
-  # The day-of-year span the 14-day windows tile. `detect_or_override` is the
+  # The day-of-year span the moving windows are laid over. `detect_or_override` is the
   # manuscript: the detector's bounds, replaced by the site_info.csv literal
   # wherever one is declared (24 sites). `force_detect` is the detector alone.
   season = c("detect_or_override", "force_detect", "whole_year"),

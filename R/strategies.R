@@ -97,7 +97,7 @@ fill_status <- function(fill) {
 
 # ------------------------------------------------------------- season axis
 
-#' The day-of-year span the 14-day windows tile
+#' The day-of-year span the moving windows are laid over
 #'
 #'   detect_or_override  the manuscript's season: `detect_growing_season()`'s
 #'                       bounds, each replaced by the site_info.csv literal

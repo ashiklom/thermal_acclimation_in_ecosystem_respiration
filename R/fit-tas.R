@@ -3,7 +3,16 @@
 #' Used internally by brms
 N_CORES <- 4
 
-#' Uniform window size: 2 weeks
+#' Window spacing, in days
+#'
+#' Windows start every `WINDOW_SIZE` days from the start of the span, but each
+#' one is `WINDOW_SIZE + 1` days long: `fit_tas_window()` selects rows with
+#' `dplyr::between()`, which includes both ends, so adjacent windows share their
+#' boundary day. The number of windows is the span's length divided by
+#' `WINDOW_SIZE`, rounded, and the last window is clipped to the span's end. If
+#' that rounds down, the days after the last window (up to 6) are in no window;
+#' if it rounds up, the last window is short. All of this is as in the original
+#' workflows (02_01a, 02_01b), and the manuscript's results depend on it.
 WINDOW_SIZE <- 14
 
 #' The models `fit_tas_site()` fits, by name
@@ -234,7 +243,9 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
 }
 
 
-#' Step 02 for one site and model: TAS from 14-day windows across years
+#' Step 02 for one site and model: TAS from moving windows across years
+#'
+#' See `WINDOW_SIZE` for how the windows are laid out.
 #'
 #' @param site_data The site's step 01 result (`prep_nee_ac()` with ERA5 soil
 #'   water attached): a list with `ac`, `nightNEE`, `feature_gs` and
@@ -377,7 +388,7 @@ fit_tas_site <- function(site_data, site_info, model = "total",
   # Minimum observations per window-year, by time step.
   nobs_threshold <- if (dt == 30) 100 else 60
 
-  # use non-overlapping windows and determine number of windows for growing season; decide to use overlapping windows
+  # Adjacent windows share their boundary day; see `WINDOW_SIZE`.
   nwindow <- max(round((wEnd - wStart + 1) / WINDOW_SIZE), 1)
 
   # Every choice behind this run's layout, so differences between runs can be

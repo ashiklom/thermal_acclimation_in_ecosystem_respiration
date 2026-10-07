@@ -2,7 +2,7 @@
 
 Almost everything in step 01 and step 02 is indexed by **growing year** rather
 than calendar year: the data-gap scan that qualifies a year, the control-year
-choice, the 14-day windows the model fits in, and the year factor in the
+choice, the moving windows the model fits in, and the year factor in the
 across-year regression that identifies thermal acclimation. At a
 northern-hemisphere site the two coincide, and the distinction never surfaces.
 
