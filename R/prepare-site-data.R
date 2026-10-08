@@ -258,9 +258,9 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   #
   # Everything above ran on stage A's column, and that ordering is
   # load-bearing (docs/soil-temperature.md). Estimates are added alongside it,
-  # so step 02 selects a column instead of recomputing one.
-  ac_final[["TS_measured"]] <- ac_final[["TS"]]
-  measured_final[["TS_measured"]] <- measured_final[["TS"]]
+  # so step 02 selects a column instead of recomputing one. It is still `TS`
+  # here because `apply_ts_linear()` reads it by that name; it leaves this
+  # section as `TS_measured`.
 
   # Bounds are keyed by TS column, so a column and its bounds are selected
   # together. The measured column's *native* row is the manuscript's number
@@ -275,7 +275,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
       tStart = unname(max(tStart, 0.0)),
       tEnd = unname(tEnd)
     ),
-    ts_bounds_rows(ac_final[["TS_measured"]], ac_final[["DOY"]], gStart, gEnd, "TS_measured")
+    ts_bounds_rows(ac_final[["TS"]], ac_final[["DOY"]], gStart, gEnd, "TS_measured")
   )
 
   # `TS_linear` is built at every site, not only the 35 that select it, so
@@ -308,11 +308,10 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     ts_bounds_tbl <- dplyr::bind_rows(ts_bounds_tbl, linear_rows)
   }
 
-  # Every filter above ran on `TS`, so it must leave step 01 unchanged.
-  stopifnot(
-    identical(ac_final[["TS"]], ac_final[["TS_measured"]]),
-    identical(measured_final[["TS"]], measured_final[["TS_measured"]])
-  )
+  # Renamed rather than copied: a bare `TS` would be a second name for the
+  # same column, and nothing downstream reads it.
+  ac_final <- dplyr::rename(ac_final, TS_measured = "TS")
+  measured_final <- dplyr::rename(measured_final, TS_measured = "TS")
 
   # ------------------------------------------------- SWC column variants
   #

@@ -7,7 +7,6 @@ use_project_root()
 fake_tables <- function() {
   tibble::tibble(
     YEAR = 2010L, MONTH = 6L, DAY = 1L, DOY = 152L,
-    TS = c(4, 5, 6),
     TS_measured = c(4, 5, 6),
     TS_linear = c(9, 10, 11),
     SWC = c(20, 21, 22),
@@ -22,12 +21,12 @@ test_that("materialise_ts_final leaves exactly one soil-temperature column", {
   dat <- fake_tables()
   expect_equal(materialise_ts_final(dat, "TS_measured")$TS_final, c(4, 5, 6))
   expect_equal(materialise_ts_final(dat, "TS_linear")$TS_final, c(9, 10, 11))
-  # The candidates are gone, `TS` included: with them on the table "no
-  # branching downstream" would be a convention, with them off it is a
-  # property. Everything that is not soil temperature is untouched.
+  # The candidates are gone: with them on the table "no branching downstream"
+  # would be a convention, with them off it is a property. Everything that is
+  # not soil temperature is untouched.
   out <- materialise_ts_final(dat, "TS_linear")
   expect_identical(ts_candidate_columns(out), "TS_final")
-  expect_identical(setdiff(names(dat), names(out)), c("TS", "TS_measured", "TS_linear"))
+  expect_identical(setdiff(names(dat), names(out)), c("TS_measured", "TS_linear"))
   expect_equal(out$SWC_era5, dat$SWC_era5)
 })
 

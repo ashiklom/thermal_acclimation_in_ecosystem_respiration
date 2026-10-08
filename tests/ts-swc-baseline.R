@@ -195,6 +195,15 @@ cached_step01 <- function(name_site) {
   value
 }
 
+# Step 01's tables as the original code saw them. Step 01 now hands over its
+# measured column as `TS_measured` only; the oracle, transcribed from code
+# that read `TS`, and the frozen `s1*_TS_*` digests both need it by that name.
+as_original_step01 <- function(sd_) {
+  sd_$ac$TS <- sd_$ac$TS_measured
+  sd_$nightNEE$TS <- sd_$nightNEE$TS_measured
+  sd_
+}
+
 # Does the pipeline's *selection* path reproduce the frozen oracle's
 # *substitution*? This is the check that the refactor is equivalent, and unlike
 # the digests above it is computed fresh on both sides in the same run.
@@ -206,8 +215,9 @@ cached_step01 <- function(name_site) {
 selection_matches_oracle <- function(sd_, site_info, name_site) {
   ts_col <- site_info[["ts_col"]]
   fg <- sd_$feature_gs
+  orig <- as_original_step01(sd_)
   ora <- original_ts_step02(
-    sd_$ac, sd_$nightNEE, name_site, fg$gStart, fg$gEnd, fg$tStart, fg$tEnd
+    orig$ac, orig$nightNEE, name_site, fg$gStart, fg$gEnd, fg$tStart, fg$tEnd
   )
   # The pipeline's side is `get_soil_temperature()` under the manuscript
   # recipe: one call, `TS_final` out. Its bounds are the selected column's
@@ -223,9 +233,8 @@ selection_matches_oracle <- function(sd_, site_info, name_site) {
     tEnd = same(soil$meta$tEnd, unname(ora$tEnd)),
     # And nothing else soil-temperature-shaped leaves stage B.
     one_column = identical(ts_candidate_columns(soil$ac), "TS_final"),
-    # Step 01 must hand over measured TS untouched, whatever variants it also
-    # produced; every filter it applied was computed on that column.
-    ts_is_measured = same(sd_$ac$TS, sd_$ac$TS_measured),
+    # Step 01 hands over its measured column under one name only.
+    no_bare_ts = !"TS" %in% c(names(sd_$ac), names(sd_$nightNEE)),
     # And the measured bounds must still equal the ones feature_gs reports, so
     # the default path is unchanged for the 82 sites that take it.
     measured_bounds = same(
@@ -292,6 +301,7 @@ for (name_site in sites) {
     next
   }
   si <- get_site_info(name_site)
+  orig <- as_original_step01(sd_)
 
   sel <- tryCatch(
     selection_matches_oracle(sd_, si, name_site),
@@ -308,8 +318,8 @@ for (name_site in sites) {
   # Step-01 digest: catches any change to what step 01 produces, independently
   # of the step-02 manipulation applied on top.
   step01 <- c(
-    digest_table(sd_$ac, "s1ac", c("TS", "TS_linear", "TA", "SWC", "NEE", "NEE_uStar_f")),
-    digest_table(sd_$nightNEE, "s1night", c("TS", "TS_linear", "TA", "SWC", "NEE"))
+    digest_table(orig$ac, "s1ac", c("TS", "TS_linear", "TA", "SWC", "NEE", "NEE_uStar_f")),
+    digest_table(orig$nightNEE, "s1night", c("TS", "TS_linear", "TA", "SWC", "NEE"))
   )
 
   for (direct in c(FALSE, TRUE)) {
@@ -327,7 +337,7 @@ for (name_site in sites) {
       if (nzchar(ssel$failed)) paste0(" [", ssel$failed, "]") else ""
     ))
 
-    swc <- original_swc_step02(sd_$ac, sd_$nightNEE, name_site, si$SWC_use, direct)
+    swc <- original_swc_step02(orig$ac, orig$nightNEE, name_site, si$SWC_use, direct)
     ts <- original_ts_step02(
       swc$ac, swc$nightNEE, name_site,
       sd_$feature_gs$gStart, sd_$feature_gs$gEnd,
