@@ -9,19 +9,20 @@ reader ─► stage A ─► QC · growing season · year gap scan ─► stage 
           (qualification-facing)                            (fit-facing)
 ```
 
-## Columns from site data prep
+## Outputs from site data prep
 
 `prep_nee_ac()` returns `ac` (the full half-hourly record) and `nightNEE` (the high-quality nighttime subset).
-Both data frames have _all_ of the following columns, and the fit (step 2) gets to choose which column it uses:
+Both data frames have _all_ of the following soil temperature columns, even if they are unused.
+The fit gets to choose which column it uses:
 
-| column | what it is |
-|---|---|
-| `TS_measured` | stage A's column: the sensor, repaired or reconstructed per site |
-| `TS_linear` | a `TS ~ TA` regression, built at **every** site; inert unless selected |
-| `TS_memfill` | the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `get_soil_temperature()` under a `memory_fill` recipe |
-| `TS` | equal to `TS_measured` on the way out of step 01 (asserted) |
-| `SWC_measured` | tower soil water, in **percent** |
-| `SWC_era5` | ERA5-Land layer-1 soil water, rescaled to percent on read |
+- `TS_measured`: stage A's column: the sensor, repaired or reconstructed per site
+- `TS_linear`: a `TS ~ TA` regression, built at **every** site (even if unused)
+- `TS_memfill`: the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `get_soil_temperature()` under a `memory_fill` recipe
+
+In addition, the prep includes the following options for soil water content (SWC), which are used by direct fits: 
+
+- `SWC_measured`: tower soil water measurements, in **percent**
+- `SWC_era5`: ERA5-Land layer-1 soil water (_not_ in percent originally; rescaled to percent on read)
 
 Beside the tables, `site_data` carries:
 
