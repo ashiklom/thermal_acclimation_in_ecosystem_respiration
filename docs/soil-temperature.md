@@ -1,8 +1,7 @@
 # Soil temperature and soil water: how the columns the model sees come to exist
 
-Soil temperature reaches the respiration model through **two stages**, and the
-manuscript's logic requires that they stay two. Both live in
-`R/soil-temperature.R`; the estimators they share are in `R/ts-estimators.R`.
+Soil temperature reaches the respiration model through **two stages**, which is required to preserve the original manuscript's logic.
+Both live in `R/soil-temperature.R`; the estimators they share are in `R/ts-estimators.R`.
 
 ```
 reader ─► stage A ─► QC · growing season · year gap scan ─► stage B ─► model
@@ -10,11 +9,10 @@ reader ─► stage A ─► QC · growing season · year gap scan ─► stage 
           (qualification-facing)                            (fit-facing)
 ```
 
-## The columns step 01 hands over
+## Columns from site data prep
 
-`prep_nee_ac()` returns `ac` (the full half-hourly record) and `nightNEE` (the
-high-quality nighttime subset). Both carry every candidate the site offers,
-and step 02 selects:
+`prep_nee_ac()` returns `ac` (the full half-hourly record) and `nightNEE` (the high-quality nighttime subset).
+Both data frames have _all_ of the following columns, and the fit (step 2) gets to choose which column it uses:
 
 | column | what it is |
 |---|---|
@@ -27,50 +25,60 @@ and step 02 selects:
 
 Beside the tables, `site_data` carries:
 
-- `ts_bounds`: for every TS column, the 2.5/97.5 percentiles of
-  growing-season soil temperature under both definitions (`climatology`,
-  `halfhourly`), with the manuscript's row for that column flagged `native`;
+- `ts_bounds`: for every TS column,
+  the 2.5/97.5 percentiles of growing-season soil temperature
+  under both definitions (`climatology`, `halfhourly`),
+  with the manuscript's row for that column flagged `native`;
 - `ts_qc`: the quality verdict on `TS_measured`;
 - `ts_provenance`: stage A's provenance row;
 - `feature_gs`: the growing season and year count.
 
-**Bounds travel with the column.** `tStart`/`tEnd` gate the window-skip
-test in `fit_tas_window()`, and they are percentiles of a particular
-column, so selecting a column and selecting its bounds are one act. The two
-definitions differ a lot:
-- the measured column's native bounds are percentiles of the *day-of-year
-  climatology*, from `detect_growing_season()`;
+**Bounds travel with the column.**
+`tStart`/`tEnd` gate the window-skip test in `fit_tas_window()`,
+and they are percentiles of a particular column,
+so selecting a column and selecting its bounds are one act.
+The two definitions differ a lot:
+- the measured column's native bounds are percentiles of the *day-of-year climatology*,
+  from `detect_growing_season()`;
 - the regressed column's are percentiles of the raw *half-hourly* values.
 
-Across 44 sites the half-hourly band is 16.7 °C wide against the
-climatology's 10.0 °C, before the column changes at all
-([`ts-rework.html`](ts-rework.html), F4). The `bounds` recipe axis applies one
-definition throughout.
+Across 44 sites the half-hourly band is 16.7 °C wide
+against the climatology's 10.0 °C,
+before the column changes at all
+([`ts-rework.html`](ts-rework.html), F4).
+The `bounds` recipe axis applies one definition throughout.
 
 ## Why two stages
 
-The manuscript qualified years — the QC filter, the growing-season detector,
-the gap scan — on one soil-temperature column, and then, at 35 sites, fitted a
-`TS ~ TA` regression **on the years that scan had qualified** and fitted the
-model on the regression instead. So the column that decides which years are
-trustworthy is not the column the model is fitted on, and it cannot be:
-stage B's regression needs stage A's qualification to exist first. A single
-"decide soil temperature once, before everything" step would change the
-regression's training set and the year selection at those 35 sites, and would
-not reproduce the manuscript.
+The manuscript qualified years —
+the QC filter, the growing-season detector, the gap scan —
+on one soil-temperature column,
+and then, at 35 sites,
+fitted a `TS ~ TA` regression **on the years that scan had qualified**
+and fitted the model on the regression instead.
+So the column that decides which years are trustworthy
+is not the column the model is fitted on,
+and it cannot be:
+stage B's regression needs stage A's qualification to exist first.
+A single "decide soil temperature once, before everything" step
+would change the regression's training set and the year selection at those 35 sites,
+and would not reproduce the manuscript.
 
-Making the two stages explicit — two named columns, two functions, one
-provenance trail — is the tidying. Downstream of stage B there is exactly one
-soil-temperature column and no branching on site, origin or strategy.
+Making the two stages explicit —
+two named columns, two functions, one provenance trail —
+is the tidying.
+Downstream of stage B there is exactly one soil-temperature column
+and no branching on site, origin or strategy.
 
 ## Stage A — `qualification_soil_temperature()`
 
-**In:** the record's columns under shared names (`fluxnet_ts_input()`,
-`ameriflux_ts_input()` — the readers' only job). **Out:** `TS`, `TS_QC`, and a
-one-row provenance table.
+**In:** the record's columns under shared names
+(`fluxnet_ts_input()`, `ameriflux_ts_input()` — the readers' only job).
+**Out:** `TS`, `TS_QC`, and a one-row provenance table.
 
-Which arm runs is **`ts_source` in `site_info.csv`** — one level per mechanism
-the manuscript applied, derived in `scripts/revise-site-info.R`:
+Which arm runs is **`ts_source` in `site_info.csv`** —
+one level per mechanism the manuscript applied,
+derived in `scripts/revise-site-info.R`:
 
 | `ts_source` | sites | what stage A does | write-back | truth? |
 |---|---|---|---|---|
@@ -85,107 +93,130 @@ the manuscript applied, derived in `scripts/revise-site-info.R`:
 | `lm_ta_cold` | 6 AmeriFlux | `lm_ta_pos`: `TS ~ TA` above freezing | replace | none |
 | `reconstructed` | 16 (`estimate_Ts`) | `fix_soil_temp()`: the estimator `estimate_ts_method` names, predictors gap-filled by DOY × time climatology | replace | none |
 
-`TS_SOURCES` in `R/constants.R` is that last column: whether *every* row of the
-column is a sensor reading. It is deliberately strict — FI-Sod and US-MBP are
-"none" because part of their column is derived — and it is what the refuse
-rule (below) reads, through `ts_measured_truth()`.
+`TS_SOURCES` in `R/constants.R` is that last column:
+whether *every* row of the column is a sensor reading.
+It is deliberately strict —
+FI-Sod and US-MBP are "none" because part of their column is derived —
+and it is what the refuse rule (below) reads,
+through `ts_measured_truth()`.
 
-The only site names left inside stage A are the manuscript's three
-training-target rules in the `reconstructed` arm: DE-Hte trains on the second
-depth, FR-Bil discards soil temperature before 2021, FR-Pue before 2016.
+The only site names left inside stage A
+are the manuscript's three training-target rules in the `reconstructed` arm:
+DE-Hte trains on the second depth,
+FR-Bil discards soil temperature before 2021,
+FR-Pue before 2016.
 
-Stage A's provenance row (`site_data$ts_provenance`; `ts_provenance.csv` in
-the run) records `ts_source`, `ts_truth`, `stage_a_estimator`,
+Stage A's provenance row
+(`site_data$ts_provenance`; `ts_provenance.csv` in the run)
+records `ts_source`, `ts_truth`, `stage_a_estimator`,
 `stage_a_family`, `stage_a_mode`, `stage_a_n_train`, and a note.
 
 ## Stage B — `get_soil_temperature()`
 
-**In:** `site_data`, the recipe, the per-site fill. **Out:** `ac` and `nightNEE`
-with **`TS_final` as their only soil-temperature column**, and a metadata row.
+**In:** `site_data`, the recipe, the per-site fill.
+**Out:** `ac` and `nightNEE`
+with **`TS_final` as their only soil-temperature column**,
+and a metadata row.
 
 It selects a candidate under the recipe's `ts` strategy (`choose_ts_col()`),
-attaches `TS_memfill` if that is what was chosen, looks up the bounds
-belonging to the selected column under the recipe's `bounds` strategy, and
-drops every other candidate — `TS`, `TS_measured`, `TS_linear`, `TS_memfill` —
-so that "no branching downstream" is a checkable property rather than a
-convention. The metadata row carries everything the settings table reports
-about soil temperature, and copies stage A's provenance fields in.
+attaches `TS_memfill` if that is what was chosen,
+looks up the bounds belonging to the selected column under the recipe's `bounds` strategy,
+and drops every other candidate —
+`TS`, `TS_measured`, `TS_linear`, `TS_memfill` —
+so that "no branching downstream" is a checkable property rather than a convention.
+The metadata row carries everything the settings table reports about soil temperature,
+and copies stage A's provenance fields in.
 
-**No second method where there is no measured truth.** Where `ts_source`
-leaves rows that are not a sensor reading, every variant alternative to
-`TS_measured` is a model fitted *to* it — `TS_linear` regresses it on air
-temperature, `TS_memfill` is cross-validated against it — and either returns
-a function of the same predictors wearing a skill score. So under `screen_best`
-and `memory_fill`, stage B keeps `TS_measured` at those 27 sites, records
-`ts_refused = TRUE`, and `fill_soil_temp()` declines before doing any work.
-The manuscript's `site_info` strategy is exempt: `ts_col` there is a
-declaration, and its two double-applications (FI-Sod, US-MBP) are the
-manuscript's own.
+**No second method where there is no measured truth.**
+Where `ts_source` leaves rows that are not a sensor reading,
+every variant alternative to `TS_measured` is a model fitted *to* it —
+`TS_linear` regresses it on air temperature,
+`TS_memfill` is cross-validated against it —
+and either returns a function of the same predictors wearing a skill score.
+So under `screen_best` and `memory_fill`,
+stage B keeps `TS_measured` at those 27 sites,
+records `ts_refused = TRUE`,
+and `fill_soil_temp()` declines before doing any work.
+The manuscript's `site_info` strategy is exempt:
+`ts_col` there is a declaration,
+and its two double-applications (FI-Sod, US-MBP) are the manuscript's own.
 
 ## The shared parts
 
-- **`ts_estimators()`** (`R/ts-estimators.R`): every model that produces a
-  soil-temperature estimate, one shape — `family`, `predictors`, `fit`,
-  `predict`. The manuscript's are `lm_ta`, `lm_ta_pos`, `lm_ta_recent`,
-  `lm_ta_netrad` and `rf_ta_netrad_manuscript` (workflow 01_01's
-  `randomForest`, 60 k rows, 70/30); the fill's are the `ranger` forests and
-  the memory-feature models. Stage A and the fill draw from the same list.
-- **`write_back_ts(ts, estimate, mode)`**: `replace`, `overlay` or
-  `fill_gaps`. No default; the mode is the point.
+- **`ts_estimators()`** (`R/ts-estimators.R`):
+  every model that produces a soil-temperature estimate,
+  one shape — `family`, `predictors`, `fit`, `predict`.
+  The manuscript's are `lm_ta`, `lm_ta_pos`, `lm_ta_recent`, `lm_ta_netrad`
+  and `rf_ta_netrad_manuscript`
+  (workflow 01_01's `randomForest`, 60 k rows, 70/30);
+  the fill's are the `ranger` forests and the memory-feature models.
+  Stage A and the fill draw from the same list.
+- **`write_back_ts(ts, estimate, mode)`**: `replace`, `overlay` or `fill_gaps`.
+  No default; the mode is the point.
 - **`ts_bounds_rows()`**: both bounds definitions for any candidate column.
 
 ## What is the manuscript and what is a variant
 
-Under the `original` recipe nothing in this design changes a number, and
-`pixi run ts-baseline` (below) holds it to that. Everything a variant does
-differently is a `switch()` branch in `R/strategies.R` or the refuse rule
-above.
+Under the `original` recipe nothing in this design changes a number,
+and `pixi run ts-baseline` (below) holds it to that.
+Everything a variant does differently
+is a `switch()` branch in `R/strategies.R`
+or the refuse rule above.
 
 ## Adding a site, or a mechanism
 
-A new site with a working sensor needs nothing: `ts_source = sensor` is the
-default `revise-site-info.R` assigns. A site that needs one of the existing
-mechanisms is one row in that script's `ts_source_sites` tribble. A new
-mechanism is one level in `TS_SOURCES`, one arm in
-`qualification_soil_temperature()`, and — if it fits a model — one entry in
-`ts_estimators()`.
+A new site with a working sensor needs nothing:
+`ts_source = sensor` is the default `revise-site-info.R` assigns.
+A site that needs one of the existing mechanisms
+is one row in that script's `ts_source_sites` tribble.
+A new mechanism is one level in `TS_SOURCES`,
+one arm in `qualification_soil_temperature()`,
+and — if it fits a model — one entry in `ts_estimators()`.
 
 ## The `ts_qc` prep axis
 
-`qualification_soil_temperature(input, site_info, ts_qc)`: under `manuscript`
-the arm is the declaration; under `sensor` every arm whose result is not
-measured at every row is replaced by the raw declared sensor, and the arms
-that are (`sensor_depth2`, `gapfill_pi`) still run. The provenance row records
-both the declaration (`ts_source`) and what ran (`stage_a_arm`, `ts_truth`),
-and **stage B and the fill read the latter** — so under `ts_qc = sensor`
-nothing is refused and the fill has a real truth at the 27 sites. A site
-whose raw sensor is too sparse to qualify a year fails step 01 and drops from
-that recipe. In `_targets.R` each prep key gets its own `site_data_<prep>_*`
-and `site_fill_<prep>_*` per site; the manuscript's is untouched. See
-docs/recipes.md.
+`qualification_soil_temperature(input, site_info, ts_qc)`:
+under `manuscript` the arm is the declaration;
+under `sensor` every arm whose result is not measured at every row
+is replaced by the raw declared sensor,
+and the arms that are (`sensor_depth2`, `gapfill_pi`) still run.
+The provenance row records both the declaration (`ts_source`)
+and what ran (`stage_a_arm`, `ts_truth`),
+and **stage B and the fill read the latter** —
+so under `ts_qc = sensor` nothing is refused
+and the fill has a real truth at the 27 sites.
+A site whose raw sensor is too sparse to qualify a year
+fails step 01 and drops from that recipe.
+In `_targets.R` each prep key gets its own `site_data_<prep>_*` and `site_fill_<prep>_*` per site;
+the manuscript's is untouched.
+See docs/recipes.md.
 
 ## Soil water
 
-Soil water is not a per-site column, because the choice depends on the model
-as well as the site (`default_swc_col()` in R/soil-water-columns.R):
+Soil water is not a per-site column,
+because the choice depends on the model as well as the site
+(`default_swc_col()` in R/soil-water-columns.R):
 
 | | total model | direct model |
 |---|---|---|
 | `SWC_use = YES` | `SWC_measured` | `SWC_measured` |
 | `SWC_use = NO` | none (soil water is not in the formula) | `SWC_era5` |
 
-Measured soil water is a requirement where it is used: nighttime rows
-without it are dropped. At DE-Tha that takes 66,874 rows down to 21,821. The
-ERA5 fallback is deliberately *not* filtered on, since it is a daily
-reanalysis with its own gaps. The asymmetry is inherited from the original.
-Many `SWC_use = NO` sites still report a soil-water column the analysis
-discards; CH-Dav has 326,351 non-missing values of it. So measured and
-reanalysis soil water can be compared through the `swc_col=` override of
-`fit_tas_site()`.
+Measured soil water is a requirement where it is used:
+nighttime rows without it are dropped.
+At DE-Tha that takes 66,874 rows down to 21,821.
+The ERA5 fallback is deliberately *not* filtered on,
+since it is a daily reanalysis with its own gaps.
+The asymmetry is inherited from the original.
+Many `SWC_use = NO` sites still report a soil-water column the analysis discards;
+CH-Dav has 326,351 non-missing values of it.
+So measured and reanalysis soil water can be compared
+through the `swc_col=` override of `fit_tas_site()`.
 
-ERA5 is joined on in its own target (`site_prep` → `site_data`), clipped to
-the site's own flux days, so that extending the ERA5 file re-runs only the
-join. See docs/data-provenance.md.
+ERA5 is joined on in its own target (`site_prep` → `site_data`),
+clipped to the site's own flux days,
+so that extending the ERA5 file re-runs only the join.
+See docs/data-provenance.md.
 
 ## Ordering, and why it is load-bearing
 
@@ -195,21 +226,25 @@ Every step-01 filter runs on **stage A's** column:
 - growing-season detection;
 - the TS ≥ 2 °C truncation at CH-Dav, US-Ha1 and US-GLE.
 
-Estimated columns are added afterwards and selected in step 02. Filtering on
-a regressed column would keep a different set of rows. The separation also
-makes three inherited collisions visible. None is obviously wrong, and all
-are worth putting to the authors:
+Estimated columns are added afterwards and selected in step 02.
+Filtering on a regressed column would keep a different set of rows.
+The separation also makes three inherited collisions visible.
+None is obviously wrong,
+and all are worth putting to the authors:
 
-- **US-GLE:** the 2 °C truncation raises `tStart` to 2 °C on the measured
-  column, while the substituted column's own lower bound is −2.26 °C.
-- **FI-Sod** rebuilds pre-2006 soil temperature in stage A, then, as a
-  `TS_linear` site, fits `TS ~ TA` on top of it.
-- **US-MBP** fills stage-A gaps from air temperature, then has the whole
-  column replaced by a differently fitted regression.
+- **US-GLE:** the 2 °C truncation raises `tStart` to 2 °C on the measured column,
+  while the substituted column's own lower bound is −2.26 °C.
+- **FI-Sod** rebuilds pre-2006 soil temperature in stage A,
+  then, as a `TS_linear` site,
+  fits `TS ~ TA` on top of it.
+- **US-MBP** fills stage-A gaps from air temperature,
+  then has the whole column replaced by a differently fitted regression.
 
-`ts_source ∈ {lm_ta_recent, lm_ta_cold}` and `ts_col = "TS_linear"` are
-disjoint by construction, and a test checks it. A site in both would be
-regressed twice, by two different fits.
+`ts_source ∈ {lm_ta_recent, lm_ta_cold}` and `ts_col = "TS_linear"`
+are disjoint by construction,
+and a test checks it.
+A site in both would be regressed twice,
+by two different fits.
 
 ## Verifying a change here
 
@@ -217,15 +252,19 @@ regressed twice, by two different fits.
 pixi run ts-baseline
 ```
 
-`tests/ts-swc-baseline.R` freezes step-01 digests and a verbatim
-transcription of the step-02 substitution, as it stood at `b077bb9`, at 20
-sites: one per stage-A arm, the random-forest reconstruction included. It
-checks that the current selection path still reproduces them. It deliberately
-calls nothing in `R/`. Step 01 is cached per site, keyed by a digest of `R/`.
-Sites whose data has changed since the baseline was written are listed, and
-their digests are skipped.
+`tests/ts-swc-baseline.R` freezes step-01 digests
+and a verbatim transcription of the step-02 substitution,
+as it stood at `b077bb9`,
+at 20 sites:
+one per stage-A arm, the random-forest reconstruction included.
+It checks that the current selection path still reproduces them.
+It deliberately calls nothing in `R/`.
+Step 01 is cached per site, keyed by a digest of `R/`.
+Sites whose data has changed since the baseline was written are listed,
+and their digests are skipped.
 
 ## Future work
 
-- **Declare the three training-target rules** (DE-Hte, FR-Bil, FR-Pue) as
-  site_info columns, and stage A stops testing site names altogether.
+- **Declare the three training-target rules** (DE-Hte, FR-Bil, FR-Pue)
+  as site_info columns,
+  and stage A stops testing site names altogether.
