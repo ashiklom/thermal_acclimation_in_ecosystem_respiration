@@ -2,9 +2,10 @@
 
 ## Why a site has more than one source
 
-No single published product covers the full record at most of these sites, so
-`site_info.csv`'s `source` column is an **ordered, `+`-separated provenance
-list**, oldest product first:
+No single published product covers the full record at most of these sites,
+so `site_info.csv`'s `source` column
+is an **ordered, `+`-separated provenance list**,
+oldest product first:
 
 ```
 DE-Tha   FLUXNET+ICOS
@@ -14,10 +15,11 @@ AU-Tum   TERN
 ```
 
 The original manuscript code did the same thing with underscore-joined strings
-(`FLUXNET2025_ICOS2025`), for the same reason.
+(`FLUXNET2025_ICOS2025`),
+for the same reason.
 
-The reason it matters is specific to ICOS. ICOS publishes **two different**
-ecosystem products:
+The reason it matters is specific to ICOS.
+ICOS publishes **two different** ecosystem products:
 
 | Product | What it is | Coverage |
 |---|---|---|
@@ -25,52 +27,62 @@ ecosystem products:
 | `FLUXNET` | FLUXNET-Archive product, served by `fluxnet-shuttle` (and by ICOS as `miscFluxnetArchiveProduct`) | The full merged record |
 | `WW2020` | Warm Winter 2020, release 2022-1 | 1989–2020, 73 stations, incl. non-ICOS |
 
-The L2 product is keyed to **labelling**, not to how long a tower has run. ICOS
-describes each release by its labelled-station count, and that count has grown
-29 → 61 → 73 → 80 across the 2021-1 to 2025-1 releases. A station labelled in
-2019 therefore has an L2 product that starts in 2019 however long it has been
-measuring. Fetching only that product truncated 21 of these 26 records — DE-Tha
-to 7 years against the 28 the manuscript used, NL-Loo to 4 against 16.
+The L2 product is keyed to **labelling**,
+not to how long a tower has run.
+ICOS describes each release by its labelled-station count,
+and that count has grown 29 → 61 → 73 → 80 across the 2021-1 to 2025-1 releases.
+A station labelled in 2019 therefore has an L2 product that starts in 2019
+however long it has been measuring.
+Fetching only that product truncated 21 of these 26 records —
+DE-Tha to 7 years against the 28 the manuscript used,
+NL-Loo to 4 against 16.
 
-The `FLUXNET` product is also the better input on its merits. Its
-`*_FLUXMET_HH_*.csv` carries every column the pipeline needs under the exact
-FLUXNET2015 names, including a real `NIGHT` flag and real `TS_F_MDS_1_QC`. An
-earlier version of `scripts/download-icos.py` rebuilt a FLUXNET-shaped table out
-of three separate ICOS L2 products, which meant computing `NIGHT` from a
-shortwave threshold (`SW_IN_F_MDS <= 20`) and fabricating QC flags from value
-presence — both of which then fed the QC filters in `prep_nee_ac()`. That
-normalisation is gone; the archives are now saved and read as shipped.
+The `FLUXNET` product is also the better input on its merits.
+Its `*_FLUXMET_HH_*.csv` carries every column the pipeline needs
+under the exact FLUXNET2015 names,
+including a real `NIGHT` flag and real `TS_F_MDS_1_QC`.
+An earlier version of `scripts/download-icos.py` rebuilt a FLUXNET-shaped table
+out of three separate ICOS L2 products,
+which meant computing `NIGHT` from a shortwave threshold (`SW_IN_F_MDS <= 20`)
+and fabricating QC flags from value presence —
+both of which then fed the QC filters in `prep_nee_ac()`.
+That normalisation is gone;
+the archives are now saved and read as shipped.
 
-`ICOS` is still spliced on top of `FLUXNET` because it reaches later at some
-sites: UK-AMo's shuttle product ends 2024 while its L2 product reaches 2026.
+`ICOS` is still spliced on top of `FLUXNET` because it reaches later at some sites:
+UK-AMo's shuttle product ends 2024 while its L2 product reaches 2026.
 
 ### Splice rule
 
-`read_spliced_products()` in `R/prepare-site-data.R` uses the original
-workflow's rule: sort the products by first timestamp, then append each later
-product **only from the first timestamp after the running record's end**. The
-earlier, longer-history product therefore wins wherever two overlap. Products
-are re-sorted by actual first timestamp rather than trusting the declared order,
+`read_spliced_products()` in `R/prepare-site-data.R` uses the original workflow's rule:
+sort the products by first timestamp,
+then append each later product
+**only from the first timestamp after the running record's end**.
+The earlier, longer-history product therefore wins wherever two overlap.
+Products are re-sorted by actual first timestamp
+rather than trusting the declared order,
 so a mis-ordered `source` string cannot silently truncate a record.
 
-The comparison is on the 12-digit timestamp *strings*, so the tables are read
-under the column contract `FLUXNET_COL_TYPES` in `R/constants.R`, which
-explains why.
+The comparison is on the 12-digit timestamp *strings*,
+so the tables are read under the column contract `FLUXNET_COL_TYPES` in `R/constants.R`,
+which explains why.
 
 ### FLUXNET2015, and why it is acquired by hand
 
-`FLUXNET2015` is the last static FLUXNET release (through 2014). It is the only
-product here with no programmatic interface: downloading requires an
-interactive login at fluxnet.org plus acceptance of the FLUXNET2015 Data
-Policy, which is granted per site-year (Tier 1 vs Tier 2). The FLUXNET Shuttle
-does have an API but federates AmeriFlux, ICOS and TERN only, none of which
-hold the pre-2015 record. `download_fluxnet2015()` in `R/download.R`
-therefore prints the procedure and the exact target directory rather than
-attempting a download; `check-data-updates.py` checks only that it is present,
+`FLUXNET2015` is the last static FLUXNET release (through 2014).
+It is the only product here with no programmatic interface:
+downloading requires an interactive login at fluxnet.org
+plus acceptance of the FLUXNET2015 Data Policy,
+which is granted per site-year (Tier 1 vs Tier 2).
+The FLUXNET Shuttle does have an API but federates AmeriFlux, ICOS and TERN only,
+none of which hold the pre-2015 record.
+`download_fluxnet2015()` in `R/download.R` therefore prints the procedure
+and the exact target directory rather than attempting a download;
+`check-data-updates.py` checks only that it is present,
 since a closed release cannot update.
 
-Unzip into `data-raw/FLUXNET2015/<site>/`, keeping the archive alongside the
-extracted tables.
+Unzip into `data-raw/FLUXNET2015/<site>/`,
+keeping the archive alongside the extracted tables.
 
 ### FI-Sod: the one record with a hole in the middle
 
@@ -82,32 +94,37 @@ FI-Sod needs all three of its products and still has a gap:
 | 2015–2022 | — | **no public product** |
 | 2023–2025 | ICOS ETC-Archive L2 (shuttle copy stops at 2024) | held |
 
-The gap is a publication gap, not necessarily a measurement one. FI-Sod was
-ICOS-labelled on **2023-05-23**, and ICOS publishes from just before labelling
-— every ICOS object for the station, current or deprecated, starts
-2022-12-31. FLUXNET2015 closed at 2014. FI-Sod is **absent from Warm Winter
-2020** (73 members, checked directly), so that route is closed too. Anything
-for 2015–2022 would have to come from the site PI at FMI or a national
-archive.
+The gap is a publication gap, not necessarily a measurement one.
+FI-Sod was ICOS-labelled on **2023-05-23**,
+and ICOS publishes from just before labelling —
+every ICOS object for the station, current or deprecated, starts 2022-12-31.
+FLUXNET2015 closed at 2014.
+FI-Sod is **absent from Warm Winter 2020**
+(73 members, checked directly),
+so that route is closed too.
+Anything for 2015–2022 would have to come from the site PI at FMI
+or a national archive.
 
-Even so, the site now reconciles well: gStart 124 and gEnd 270 match the
-manuscript exactly, and it yields 12 qualifying years against the
-manuscript's 10.
+Even so, the site now reconciles well:
+gStart 124 and gEnd 270 match the manuscript exactly,
+and it yields 12 qualifying years against the manuscript's 10.
 
 ### Known shortfall
 
-**IT-Noe** is absent from Warm Winter 2020 altogether, and both current products
-start in 2021/2022, so it reconstructs to roughly 5 of the 11 years the
-manuscript used. Its pre-2021 history would have to come from somewhere else
-(Drought-2018, or the European Fluxes Database). Everything else reconstructs to
-at least the original's year count.
+**IT-Noe** is absent from Warm Winter 2020 altogether,
+and both current products start in 2021/2022,
+so it reconstructs to roughly 5 of the 11 years the manuscript used.
+Its pre-2021 history would have to come from somewhere else
+(Drought-2018, or the European Fluxes Database).
+Everything else reconstructs to at least the original's year count.
 
 ### Non-flux inputs
 
-Five datasets outside the flux archives feed the pipeline or the downstream
-analysis. All have downloaders; all but MODIS are `targets` targets, because
-MODIS is an asynchronous submit/poll/download cycle rather than a blocking
-fetch (see below).
+Five datasets outside the flux archives feed the pipeline or the downstream analysis.
+All have downloaders;
+all but MODIS are `targets` targets,
+because MODIS is an asynchronous submit/poll/download cycle
+rather than a blocking fetch (see below).
 
 | input | target | source |
 |---|---|---|
@@ -117,28 +134,33 @@ fetch (see below).
 | MODIS EVI/NDVI/LAI/GPP | *none* | NASA AppEEARS — see below |
 | ERA5-Land layer-1 soil water | `era5_swc_file` | ARCO ERA5-Land zarr, CDS key — see below |
 
-ERA5-Land soil water (`data-raw/ERA5_daily_swc.csv`, every site in one file) is
-extended by `scripts/download-era5-swc.py`, incrementally: sites already in the
-file get the days after their last row, up to the store's last complete day;
-sites missing from it get the full range from 1990; and a run with nothing to
-add leaves the file untouched. The pipeline calls it through
-`ensure_era5_coverage()` only when some site's flux record runs past the file's
-end, and joins each site's slice on *clipped to that site's own flux days*
-(`site_era5_swc()`), so extending the file re-runs nothing at a site whose days
-gained no values.
+ERA5-Land soil water (`data-raw/ERA5_daily_swc.csv`, every site in one file)
+is extended by `scripts/download-era5-swc.py`, incrementally:
+sites already in the file get the days after their last row,
+up to the store's last complete day;
+sites missing from it get the full range from 1990;
+and a run with nothing to add leaves the file untouched.
+The pipeline calls it through `ensure_era5_coverage()`
+only when some site's flux record runs past the file's end,
+and joins each site's slice on *clipped to that site's own flux days*
+(`site_era5_swc()`),
+so extending the file re-runs nothing at a site whose days gained no values.
 
-Two details worth keeping. The BIF filename carries the date it was produced and
-arrives as `.xlsx`, so `03_01` discovers it by pattern rather than naming it.
-And the GSOC raster is
-saved as `GSOCmap1.5.0.tif` rather than under FAO's own name because `03_01`
-indexes the extraction by layer name (`terra::extract(...)$GSOCmap1.5.0`), which
-terra derives from the file.
+Two details worth keeping.
+The BIF filename carries the date it was produced and arrives as `.xlsx`,
+so `03_01` discovers it by pattern rather than naming it.
+And the GSOC raster is saved as `GSOCmap1.5.0.tif` rather than under FAO's own name
+because `03_01` indexes the extraction by layer name
+(`terra::extract(...)$GSOCmap1.5.0`),
+which terra derives from the file.
 
 The WorldClim baseline is the CRU-TS-downscaled **monthly series for 2000-2020**,
-not the 1970-2000 climatology that `wc2.1_2.5m_tmin.zip` holds. `04_01`'s glob
-accepts either, but its comment specifies 2000-2020, and substituting the
-climatology would shift every projected temperature change by the warming
-between the two baselines without any error being raised.
+not the 1970-2000 climatology that `wc2.1_2.5m_tmin.zip` holds.
+`04_01`'s glob accepts either,
+but its comment specifies 2000-2020,
+and substituting the climatology would shift every projected temperature change
+by the warming between the two baselines
+without any error being raised.
 
 ### MODIS, and why it has no `targets` target
 
@@ -150,17 +172,22 @@ data-raw/towers-MOD15A2H-061-results.csv    Fpar, LAI
 data-raw/towers-MYD17A2HGF-061-results.csv  GPP
 ```
 
-AppEEARS is not a file server: fetching these means an asynchronous
-submit/poll/download cycle rather than a single blocking request, which is why
-it isn't wired into `targets` like the other three inputs above. `03_01`
-emits `NA` for those five predictors when the tables are absent and says so.
+AppEEARS is not a file server:
+fetching these means an asynchronous submit/poll/download cycle
+rather than a single blocking request,
+which is why it isn't wired into `targets` like the other three inputs above.
+`03_01` emits `NA` for those five predictors when the tables are absent
+and says so.
 
-The knock-on is worth stating plainly: `03_02` calls `randomForest()` with the
-default `na.action = na.fail` and `LAI` is one of its five predictors, so the
-driver analysis cannot run until these are supplied.
+The knock-on is worth stating plainly:
+`03_02` calls `randomForest()` with the default `na.action = na.fail`
+and `LAI` is one of its five predictors,
+so the driver analysis cannot run until these are supplied.
 
-`scripts/download-appeears.py` fetches them. The task takes AppEEARS several
-days to process (the 2026-09 run took about four), so the script doesn't wait.
+`scripts/download-appeears.py` fetches them.
+The task takes AppEEARS several days to process
+(the 2026-09 run took about four),
+so the script doesn't wait.
 It has four subcommands:
 
 ```bash
@@ -170,16 +197,19 @@ pixi run download-appeears list       # one page of recent tasks
 pixi run download-appeears download   # fetch the three CSVs into data-raw/
 ```
 
-`status` and `download` take `--task-id` to target a specific task instead of
-the most recent one named `towers`. `submit` sends a *point* request for the
-coordinates in `data-core/site_info.csv` over 2000-2026 for the three products
-above. `download` refuses to run until the task is `done`. AppEEARS's own login endpoint
-(`/api/login`, username/password) is currently broken, so the script
-authenticates with the `appeears_token` bearer token already present in
-`_creds.toml` instead of trying to obtain one itself. That token is short-lived
-and has to be refreshed by hand from a logged-in AppEEARS browser session
-(Developer tools -> Application -> Session storage -> session -> token) if the
-script reports an authentication failure.
+`status` and `download` take `--task-id` to target a specific task
+instead of the most recent one named `towers`.
+`submit` sends a *point* request for the coordinates in `data-core/site_info.csv`
+over 2000-2026 for the three products above.
+`download` refuses to run until the task is `done`.
+AppEEARS's own login endpoint (`/api/login`, username/password) is currently broken,
+so the script authenticates with the `appeears_token` bearer token
+already present in `_creds.toml`
+instead of trying to obtain one itself.
+That token is short-lived and has to be refreshed by hand
+from a logged-in AppEEARS browser session
+(Developer tools -> Application -> Session storage -> session -> token)
+if the script reports an authentication failure.
 
 ## Checking by hand
 
@@ -187,10 +217,10 @@ script reports an authentication failure.
 pixi run check-updates
 ```
 
-That runs `scripts/check-data-updates.py`, which for every site and every
-product in its provenance list compares the archive on disk against what the
-provider publishes right now, and prints one line per product that needs
-attention:
+That runs `scripts/check-data-updates.py`,
+which for every site and every product in its provenance list
+compares the archive on disk against what the provider publishes right now,
+and prints one line per product that needs attention:
 
 ```
   UPDATE   DE-Tha   ICOS      ICOSETC_DE-Tha_..._2020-2025_v1.3_r1.zip -> ..._2020-2026_v1.4_r1.zip
@@ -198,37 +228,46 @@ attention:
   ?        IT-Noe   WW2020    not published / not queryable
 ```
 
-Statuses are `ok`, `UPDATE`, `MISSING` and `?`. Exit status is 0 only when
-everything is `ok`, so this works as a cron or CI check.
+Statuses are `ok`, `UPDATE`, `MISSING` and `?`.
+Exit status is 0 only when everything is `ok`,
+so this works as a cron or CI check.
 
 How each product is compared:
 
-- **ICOS** — queried live from the ICOS metadata service. Archive filenames
-  encode span, version and release
-  (`ICOSETC_DE-Tha_FLUXNET_FLUXMET_HH_2020-2025_v1.3_r1.zip`), so a string
-  comparison is a reliable change detector. New releases appear roughly
-  annually and also add newly-labelled stations — which is the case worth
-  watching, because a newly-labelled station means a *longer* L2 product.
-- **FLUXNET** — compared against a `fluxnet-shuttle` snapshot. The snapshot
-  goes stale, and a stale snapshot makes the check meaningless, so its age is
-  printed and flagged past 45 days. Refresh it in the same run:
+- **ICOS** — queried live from the ICOS metadata service.
+  Archive filenames encode span, version and release
+  (`ICOSETC_DE-Tha_FLUXNET_FLUXMET_HH_2020-2025_v1.3_r1.zip`),
+  so a string comparison is a reliable change detector.
+  New releases appear roughly annually
+  and also add newly-labelled stations —
+  which is the case worth watching,
+  because a newly-labelled station means a *longer* L2 product.
+- **FLUXNET** — compared against a `fluxnet-shuttle` snapshot.
+  The snapshot goes stale,
+  and a stale snapshot makes the check meaningless,
+  so its age is printed and flagged past 45 days.
+  Refresh it in the same run:
 
   ```bash
   pixi run check-updates -- --refresh-snapshot
   ```
-- **WW2020** — a closed 2022 release. Checked for membership and filename, but
-  an `UPDATE` here would mean the collection itself was revised.
-- **AmeriFlux BASE** — AmeriFlux publishes no BASE version string through any
-  public endpoint, only which years each site has published. The check compares
-  that year span and count (`years:2010-2025:16`), so it catches every added
-  year and misses a reprocessing that re-releases the same years.
+- **WW2020** — a closed 2022 release.
+  Checked for membership and filename,
+  but an `UPDATE` here would mean the collection itself was revised.
+- **AmeriFlux BASE** — AmeriFlux publishes no BASE version string through any public endpoint,
+  only which years each site has published.
+  The check compares that year span and count (`years:2010-2025:16`),
+  so it catches every added year
+  and misses a reprocessing that re-releases the same years.
 - **TERN** — the latest version from `terndata.flux`.
 
-What "on disk" means: each download records the provider's id for what it
-fetched in `data-raw/<PRODUCT>/<site>/.remote_id`. Data fetched before that
-existed falls back to its archive's filename. That is exact for ICOS, WW2020
-and FLUXNET, and never matches for AmeriFlux or TERN, so those are fetched
-again once.
+What "on disk" means:
+each download records the provider's id for what it fetched
+in `data-raw/<PRODUCT>/<site>/.remote_id`.
+Data fetched before that existed falls back to its archive's filename.
+That is exact for ICOS, WW2020 and FLUXNET,
+and never matches for AmeriFlux or TERN,
+so those are fetched again once.
 
 ### Acting on the result
 
@@ -242,14 +281,16 @@ pixi run bash scripts/download-fluxnet.sh --sites DE-Tha
 pixi run R -e 'targets::tar_source(); download_site(get_site_info("DE-Tha"), overwrite = TRUE)'
 ```
 
-`download_site()` walks the site's provenance list, calls the right downloader
-for each product, and fails loudly if a download reports success but leaves
-nothing the readers can find.
+`download_site()` walks the site's provenance list,
+calls the right downloader for each product,
+and fails loudly if a download reports success
+but leaves nothing the readers can find.
 
-If a station has just been labelled, or its span has grown, also re-check
-whether it still needs `WW2020` underneath — `scripts/audit-icos-coverage.R`
-prints span-by-span coverage against the manuscript's year counts and says
-`RECOVERED` or `short` per site.
+If a station has just been labelled, or its span has grown,
+also re-check whether it still needs `WW2020` underneath —
+`scripts/audit-icos-coverage.R` prints span-by-span coverage
+against the manuscript's year counts
+and says `RECOVERED` or `short` per site.
 
 ## Keeping it current automatically
 
@@ -258,55 +299,66 @@ scripts/scan-and-run.sh              # scan; run the pipeline only if anything c
 scripts/scan-and-run.sh --scan-only  # scan and report, run nothing
 ```
 
-This is what to put in cron, or in `scrontab` on YCRC (the header of the script
-has an entry to copy). Each run does three things:
+This is what to put in cron, or in `scrontab` on YCRC
+(the header of the script has an entry to copy).
+Each run does three things:
 
-1. `check-data-updates.py --catalog` asks every provider what it publishes, in
-   one request per provider (about 40 s, mostly the fluxnet-shuttle listing),
-   and writes `data-raw/remote_catalog.csv` **only if something changed**. A
-   provider that cannot be reached keeps its previous ids, so an outage never
-   looks like a release.
-2. `tar_outdated()`. If it comes back empty, which is every day nothing was
-   published, the script exits.
-3. Otherwise it submits `submit.sh`, or runs `pixi run targets` where there is
-   no `sbatch`. Inside the pipeline, `remote_catalog_file` feeds a per-site
-   `site_remote` slice that is compared by value, so only the sites whose rows
-   changed re-run `site_dl`.
+1. `check-data-updates.py --catalog` asks every provider what it publishes,
+   in one request per provider
+   (about 40 s, mostly the fluxnet-shuttle listing),
+   and writes `data-raw/remote_catalog.csv` **only if something changed**.
+   A provider that cannot be reached keeps its previous ids,
+   so an outage never looks like a release.
+2. `tar_outdated()`.
+   If it comes back empty, which is every day nothing was published,
+   the script exits.
+3. Otherwise it submits `submit.sh`,
+   or runs `pixi run targets` where there is no `sbatch`.
+   Inside the pipeline,
+   `remote_catalog_file` feeds a per-site `site_remote` slice that is compared by value,
+   so only the sites whose rows changed re-run `site_dl`.
 
    `download_site()` then:
    - moves the stale copy to `data-raw/_superseded/<PRODUCT>/<site>/<stamp>/`;
    - fetches the new release and records its id;
    - if the fetch fails, puts the old copy back and warns.
 
-   `site_dl` hashes the files, so everything downstream re-runs only where the
-   bytes changed.
+   `site_dl` hashes the files,
+   so everything downstream re-runs only where the bytes changed.
 
-The grid is `submit.sh`'s. Any `THERMAL_*` variable already set wins, which is
-how to try it small:
+The grid is `submit.sh`'s.
+Any `THERMAL_*` variable already set wins,
+which is how to try it small:
 
 ```bash
 THERMAL_SITES=dev THERMAL_RECIPES=original THERMAL_FIT=fast scripts/scan-and-run.sh
 ```
 
-The scan is deliberately outside the pipeline. An always-run scan target would
-make `tar_outdated()` report everything downstream of it on every run, so a
-day with nothing new could never be told apart from one with an update.
+The scan is deliberately outside the pipeline.
+An always-run scan target would make `tar_outdated()` report everything downstream of it
+on every run,
+so a day with nothing new could never be told apart from one with an update.
 
 Things an update does *not* do for you:
 
-- **Review the new years.** `year_removed`, `gStart`/`gEnd` and the gap
-  thresholds were set by hand against the manuscript's years.
-  `data-proc/analysis/new_siteyears.csv` (also in the run report) lists every
-  fitted site-year past the manuscript's last year at its site.
-- **Revise overlapping years.** The splice keeps the earlier product wherever
-  two overlap, so a new ICOS release contributes only the rows after the
-  FLUXNET record ends.
-- **Reproduce the manuscript.** `data-raw/` is updated in place, so after an
-  update the `original` recipe no longer runs on the manuscript's inputs. The
-  superseded archives are kept for that reason. `pixi run ts-baseline` skips
-  the digests of any site whose data changed since the baseline was written
-  and lists them; `reconcile` never asserted equality in the first place.
-- **Re-run `workflows/`.** The `03_*` and `04_*` scripts are not targets.
+- **Review the new years.**
+  `year_removed`, `gStart`/`gEnd` and the gap thresholds
+  were set by hand against the manuscript's years.
+  `data-proc/analysis/new_siteyears.csv` (also in the run report)
+  lists every fitted site-year past the manuscript's last year at its site.
+- **Revise overlapping years.**
+  The splice keeps the earlier product wherever two overlap,
+  so a new ICOS release contributes only the rows after the FLUXNET record ends.
+- **Reproduce the manuscript.**
+  `data-raw/` is updated in place,
+  so after an update the `original` recipe no longer runs on the manuscript's inputs.
+  The superseded archives are kept for that reason.
+  `pixi run ts-baseline` skips the digests of any site
+  whose data changed since the baseline was written
+  and lists them;
+  `reconcile` never asserted equality in the first place.
+- **Re-run `workflows/`.**
+  The `03_*` and `04_*` scripts are not targets.
 
 Other known limitations are collected in [docs/issues.md](issues.md).
 
@@ -337,17 +389,23 @@ get_site_info(site, path = site_info_file)  ->  site_info target, per site
         └─ threaded into download_site(), prep_nee_ac(), fit_tas_site()
 ```
 
-In `_targets.R` each site's `site_dl` target is `format = "file"` over the paths
-`download_site()` returns, so re-downloading a product changes the file
-fingerprint and invalidates that site's `site_data` and its model fits, and
-only that site's. `site_info.csv` is itself a file target (`site_info_file`),
-read once per site into a `site_info` target that every later stage takes as an
-argument, so editing a row invalidates exactly that site.
+In `_targets.R` each site's `site_dl` target is `format = "file"`
+over the paths `download_site()` returns,
+so re-downloading a product changes the file fingerprint
+and invalidates that site's `site_data` and its model fits,
+and only that site's.
+`site_info.csv` is itself a file target (`site_info_file`),
+read once per site into a `site_info` target
+that every later stage takes as an argument,
+so editing a row invalidates exactly that site.
 
-One read that cannot be a target: `pipeline_sites()` itself, because `tar_map()`
-needs the site names while the pipeline is being *constructed*, before any
-target runs. Adding or removing a site from `DEV_SITES` therefore changes the
-shape of the graph rather than invalidating a target in it.
+One read that cannot be a target:
+`pipeline_sites()` itself,
+because `tar_map()` needs the site names while the pipeline is being *constructed*,
+before any target runs.
+Adding or removing a site from `DEV_SITES`
+therefore changes the shape of the graph
+rather than invalidating a target in it.
 
 After a refresh, the check that the data is still sane is:
 
@@ -356,13 +414,14 @@ pixi run test        # unit tests, about a minute
 pixi run reconcile   # step-01 outputs vs the manuscript's, ~7 min for 8 sites
 ```
 
-`reconcile` reports a diff rather than asserting equality, since the provenance
-change is expected to move things; what it is for is making every difference
-visible and attributable.
+`reconcile` reports a diff rather than asserting equality,
+since the provenance change is expected to move things;
+what it is for is making every difference visible and attributable.
 
 ### If you are updating the provenance list itself
 
-`source` is generated, not hand-edited. Change `scripts/revise-site-info.R` and
-re-run it; it rebuilds `data-core/site_info.csv` from
-`data-core/site_info_orig.csv` and asserts its own invariants. Then re-run the
-two checks above.
+`source` is generated, not hand-edited.
+Change `scripts/revise-site-info.R` and re-run it;
+it rebuilds `data-core/site_info.csv` from `data-core/site_info_orig.csv`
+and asserts its own invariants.
+Then re-run the two checks above.

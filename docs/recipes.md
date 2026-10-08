@@ -1,19 +1,22 @@
 # Methodology recipes
 
-A **recipe** is a named set of choices, one *strategy* per *axis*, that a run
-of the pipeline is made under. `sites × recipes × models` is the grid
-`_targets.R` builds, so that the manuscript's logic and any number of
-alternatives to it are produced by the same code in the same run and can be
-compared row for row.
+A **recipe** is a named set of choices, one *strategy* per *axis*,
+that a run of the pipeline is made under.
+`sites × recipes × models` is the grid `_targets.R` builds,
+so that the manuscript's logic and any number of alternatives to it
+are produced by the same code in the same run
+and can be compared row for row.
 
 - Registry: `data-core/recipes.csv` — one row per recipe.
-- Machinery: `R/recipes.R` (validation, scoping), `R/strategies.R` (what each
-  choice resolves to).
+- Machinery: `R/recipes.R` (validation, scoping),
+  `R/strategies.R` (what each choice resolves to).
 - Report: `reports/variant-comparison.qmd`, a `tar_quarto` target.
-- Background: [`ts-rework.html`](ts-rework.html) (findings F1–F13) is the analysis these options
-  come from; [`ts-variants.html`](ts-variants.html) is the log of building them.
-- Soil temperature specifically — the two stages, `ts_source`, the estimator
-  registry and the refuse rule — is [docs/soil-temperature.md](soil-temperature.md).
+- Background: [`ts-rework.html`](ts-rework.html) (findings F1–F13)
+  is the analysis these options come from;
+  [`ts-variants.html`](ts-variants.html) is the log of building them.
+- Soil temperature specifically —
+  the two stages, `ts_source`, the estimator registry and the refuse rule —
+  is [docs/soil-temperature.md](soil-temperature.md).
 
 ## The axes
 
@@ -28,194 +31,243 @@ compared row for row.
 
 ### `ts`
 
-- `site_info` — the `ts_col` declaration in `site_info.csv`. The manuscript.
-- `screen_best` — `TS_measured` unless the quality verdict (`site_data$ts_qc`)
-  is `BAD`, in which case `TS_linear`, the regression the manuscript would
-  have used anyway. Isolates the effect of no longer discarding good sensors
+- `site_info` — the `ts_col` declaration in `site_info.csv`.
+  The manuscript.
+- `screen_best` — `TS_measured` unless the quality verdict (`site_data$ts_qc`) is `BAD`,
+  in which case `TS_linear`,
+  the regression the manuscript would have used anyway.
+  Isolates the effect of no longer discarding good sensors
   (F10: 27 of 50 hand-flagged sites pass every physical test).
-- `memory_fill` — as `screen_best`, but a `BAD` sensor is replaced by
-  `TS_memfill`, the blocked-CV-selected reconstruction from the per-site
-  `site_fill` target (F12: memory methods cut out-of-fold error 58%). If the
-  fill is unavailable the strategy falls back to `TS_linear` and records why
-  in `settings$ts_reason`.
+- `memory_fill` — as `screen_best`,
+  but a `BAD` sensor is replaced by `TS_memfill`,
+  the blocked-CV-selected reconstruction from the per-site `site_fill` target
+  (F12: memory methods cut out-of-fold error 58%).
+  If the fill is unavailable the strategy falls back to `TS_linear`
+  and records why in `settings$ts_reason`.
 
-**Where there is no measured truth, no second method is applied.** At the 27
-sites whose `ts_source` (site_info.csv) leaves rows of `TS_measured` that are
-not a sensor reading — the 16 `estimate_Ts` reconstructions, the seven
-wholesale `TS ~ TA` sites, GF-Guy, US-Cwt, and the partial cases FI-Sod and
-US-MBP — both `screen_best` and `memory_fill` keep step 01's column and record
-`ts_refused = TRUE` with the reason. The alternative is a model fitted *to* a
-reconstruction: `TS_linear` regresses it on air temperature, `TS_memfill` is
-cross-validated against it, and either returns a function of the same
-predictors wearing a skill score (DE-Hte's `lm_ta_netrad`: 1.5×10⁻¹⁴). The
-fill target declines at those sites for the same reason
-(`status = "no measured truth"`), so `fill_cv.csv` carries no rows for them.
-`site_info` is exempt — it is a declaration, and the manuscript's own two
-double-applications (FI-Sod, US-MBP) are the manuscript's. The prep-stage
-`ts_qc = sensor` strategy (below) is where a variant gets to act at these
-sites: qualify on the raw sensor, and there is a truth.
+**Where there is no measured truth, no second method is applied.**
+At the 27 sites whose `ts_source` (site_info.csv)
+leaves rows of `TS_measured` that are not a sensor reading —
+the 16 `estimate_Ts` reconstructions,
+the seven wholesale `TS ~ TA` sites,
+GF-Guy, US-Cwt,
+and the partial cases FI-Sod and US-MBP —
+both `screen_best` and `memory_fill` keep step 01's column
+and record `ts_refused = TRUE` with the reason.
+The alternative is a model fitted *to* a reconstruction:
+`TS_linear` regresses it on air temperature,
+`TS_memfill` is cross-validated against it,
+and either returns a function of the same predictors wearing a skill score
+(DE-Hte's `lm_ta_netrad`: 1.5×10⁻¹⁴).
+The fill target declines at those sites for the same reason
+(`status = "no measured truth"`),
+so `fill_cv.csv` carries no rows for them.
+`site_info` is exempt —
+it is a declaration,
+and the manuscript's own two double-applications (FI-Sod, US-MBP) are the manuscript's.
+The prep-stage `ts_qc = sensor` strategy (below)
+is where a variant gets to act at these sites:
+qualify on the raw sensor, and there is a truth.
 
-The verdict is computed by `ts_quality()` on the column step 01 leaves as
-`TS_measured` — *after* the site-specific column choices step 01 makes — because
-that is the column a run would otherwise fit on. The raw-record screen, which is
-the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
+The verdict is computed by `ts_quality()` on the column step 01 leaves as `TS_measured` —
+*after* the site-specific column choices step 01 makes —
+because that is the column a run would otherwise fit on.
+The raw-record screen,
+which is the one that generalises to an unseen site,
+is `scripts/ts-qc-screen.R`.
 
 ### `season`
 
-- `detect_or_override` — the manuscript's season, and the name says what the
-  old name `detect` understated. `detect_growing_season()` derives
-  `gStart`/`gEnd` from the day-of-year NEE climatology, raises `gStart` to the
-  first day whose mean soil temperature is non-negative, and then **overwrites
-  either bound with the literal in `site_info.csv` where one is declared**.
-  Twenty-four of the 117 rows declare at least one — including two of the
-  development sites, FI-Sod (`gEnd = 270`) and NL-Loo (`gStart = 120`) — so at
-  those sites the "detected" season is partly hand-set.
-- `force_detect` — the detector alone, overrides ignored. Step 01 carries the
-  unoverridden pair out of `detect_growing_season()` as
-  `gStart_detected`/`gEnd_detected`, and this strategy lays the windows out on
-  them. Identical to `detect_or_override` at the 93 sites with no override;
+- `detect_or_override` — the manuscript's season,
+  and the name says what the old name `detect` understated.
+  `detect_growing_season()` derives `gStart`/`gEnd` from the day-of-year NEE climatology,
+  raises `gStart` to the first day whose mean soil temperature is non-negative,
+  and then **overwrites either bound with the literal in `site_info.csv` where one is declared**.
+  Twenty-four of the 117 rows declare at least one —
+  including two of the development sites,
+  FI-Sod (`gEnd = 270`) and NL-Loo (`gStart = 120`) —
+  so at those sites the "detected" season is partly hand-set.
+- `force_detect` — the detector alone, overrides ignored.
+  Step 01 carries the unoverridden pair out of `detect_growing_season()`
+  as `gStart_detected`/`gEnd_detected`,
+  and this strategy lays the windows out on them.
+  Identical to `detect_or_override` at the 93 sites with no override;
   the difference at the other 24 is the hand-set part of the season.
-- `whole_year` — a full year of DOY, starting where the site's growing year
-  starts: 1–366 at an ordinary site, and 183–548 at one whose growing year is
-  wrapped (`growing_year_start` in site_info.csv), so that the span is in the
-  same coordinates as the data.
+- `whole_year` — a full year of DOY,
+  starting where the site's growing year starts:
+  1–366 at an ordinary site,
+  and 183–548 at one whose growing year is wrapped
+  (`growing_year_start` in site_info.csv),
+  so that the span is in the same coordinates as the data.
 
-Under every strategy **only the window layout changes**: the
-`detect_or_override` season still drives the year gap scan (in step 01) and the
-control-year choice, because both need a span to be defined over. See
-*Future work*.
+Under every strategy **only the window layout changes**:
+the `detect_or_override` season still drives the year gap scan (in step 01)
+and the control-year choice,
+because both need a span to be defined over.
+See *Future work*.
 
 ### `ts_qc`
 
-- `manuscript` — stage A as the manuscript had it: the sensor after its
-  per-site repairs, or a reconstruction where the site has none (`ts_source`
-  in `site_info.csv`; see [docs/soil-temperature.md](soil-temperature.md)).
-- `sensor` — the raw declared sensor wherever the manuscript's arm would leave
-  rows that are not a sensor reading. The arms whose result *is* measured at
-  every row (the second depth at CZ-Stn, the PI gap-fill at US-NR1/ICh/ICs)
-  still run. Qualification, the quality screen and the fill's truth are then
-  all measurements, which is what lets a `memory_fill` recipe act at the 27
-  sites the refuse rule otherwise holds. A site whose raw sensor is too
-  sparse to qualify a year fails its own step-01 target and drops from the
-  recipe — the honest result, not a fallback.
+- `manuscript` — stage A as the manuscript had it:
+  the sensor after its per-site repairs,
+  or a reconstruction where the site has none
+  (`ts_source` in `site_info.csv`; see [docs/soil-temperature.md](soil-temperature.md)).
+- `sensor` — the raw declared sensor
+  wherever the manuscript's arm would leave rows that are not a sensor reading.
+  The arms whose result *is* measured at every row
+  (the second depth at CZ-Stn, the PI gap-fill at US-NR1/ICh/ICs)
+  still run.
+  Qualification, the quality screen and the fill's truth are then all measurements,
+  which is what lets a `memory_fill` recipe act at the 27 sites
+  the refuse rule otherwise holds.
+  A site whose raw sensor is too sparse to qualify a year
+  fails its own step-01 target and drops from the recipe —
+  the honest result, not a fallback.
 
-This is a **prep** axis: a recipe with `ts_qc = sensor` has a different prep
-key from the manuscript's and gets its own step 01 and fill per site
-(`site_data_site_info_sensor_*`, `site_fill_site_info_sensor_*` in
-`_targets.R`), which only its fits read. The manuscript's
-(`site_data_site_info_manuscript_*`) — what every collector and the
-`workflows/` scripts consume — never moves. `memfill_sensor` is the registry's example; it
-is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
+This is a **prep** axis:
+a recipe with `ts_qc = sensor` has a different prep key from the manuscript's
+and gets its own step 01 and fill per site
+(`site_data_site_info_sensor_*`, `site_fill_site_info_sensor_*` in `_targets.R`),
+which only its fits read.
+The manuscript's (`site_data_site_info_manuscript_*`) —
+what every collector and the `workflows/` scripts consume —
+never moves.
+`memfill_sensor` is the registry's example;
+it is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
 
 ### `bounds`
 
-- `native` — each column's own definition as the manuscript had it: the
-  day-of-year climatology for the measured column, the raw half-hourly values
-  for the regressed one. F4 measured the resulting inconsistency: the
-  admissible band is 10.0 °C wide on measured data under one definition and
-  16.7 °C under the other, *before the column changes at all*.
-- `climatology` / `halfhourly` — one definition applied to whichever column is
-  selected. Step 01 produces both for every column (`ts_bounds_rows()`), so this
-  is a lookup, not a computation.
+- `native` — each column's own definition as the manuscript had it:
+  the day-of-year climatology for the measured column,
+  the raw half-hourly values for the regressed one.
+  F4 measured the resulting inconsistency:
+  the admissible band is 10.0 °C wide on measured data under one definition
+  and 16.7 °C under the other,
+  *before the column changes at all*.
+- `climatology` / `halfhourly` — one definition applied to whichever column is selected.
+  Step 01 produces both for every column (`ts_bounds_rows()`),
+  so this is a lookup, not a computation.
 
-Note the `climatology` row for `TS_measured` is *not* the `native` row. The
-native one comes from `detect_growing_season()`, computed on the record before
-disqualified years are dropped and floored at 0 °C (2 °C at three sites); the
-consistent one is computed on the step-01 output. Both are in `ts_bounds`,
-flagged by `native`.
+Note the `climatology` row for `TS_measured` is *not* the `native` row.
+The native one comes from `detect_growing_season()`,
+computed on the record before disqualified years are dropped
+and floored at 0 °C (2 °C at three sites);
+the consistent one is computed on the step-01 output.
+Both are in `ts_bounds`, flagged by `native`.
 
 ### `swc`
 
 - `site_info` — measured where `SWC_use = YES`, ERA5-Land otherwise.
 - `era5` — ERA5-Land for every site, so the soil-water driver is one product.
-  The total model has no soil water in its formula, so the choice is NA there.
+  The total model has no soil water in its formula,
+  so the choice is NA there.
 
 ### `year_qc`
 
-- `site_info` — the gap scan in `get_good_years()` plus the manual
-  `year_removed` list. The only strategy so far.
+- `site_info` — the gap scan in `get_good_years()` plus the manual `year_removed` list.
+  The only strategy so far.
 
 ## Prep versus fit
 
-Step 01 (`prep_nee_ac()`) costs 30–140 s a site and step 02 costs hundreds of
-Stan fits. Every axis whose choice can be deferred to step 02 is, so recipes
-that differ only in a *fit* choice share one step-01 result. Step 01 therefore
-produces every candidate soil-temperature column (`TS_measured`, `TS_linear`;
-`TS_memfill` comes from `site_fill`) and both bounds definitions for each, and a
-recipe *selects*. `RECIPE_PREP_AXES` names the axes that break this sharing:
-`_targets.R` maps step 01 and the fill over each site × distinct prep key among
-the recipes run (always including the manuscript's), and each recipe's fits
-read its own key's `site_data_<prep>_<site>` and `site_fill_<prep>_<site>`.
+Step 01 (`prep_nee_ac()`) costs 30–140 s a site
+and step 02 costs hundreds of Stan fits.
+Every axis whose choice can be deferred to step 02 is,
+so recipes that differ only in a *fit* choice share one step-01 result.
+Step 01 therefore produces every candidate soil-temperature column
+(`TS_measured`, `TS_linear`; `TS_memfill` comes from `site_fill`)
+and both bounds definitions for each,
+and a recipe *selects*.
+`RECIPE_PREP_AXES` names the axes that break this sharing:
+`_targets.R` maps step 01 and the fill over each site × distinct prep key
+among the recipes run (always including the manuscript's),
+and each recipe's fits read its own key's `site_data_<prep>_<site>` and `site_fill_<prep>_<site>`.
 
 ## Scoping a run
 
-`THERMAL_SITES`, `THERMAL_RECIPES`, `THERMAL_MODELS` and `THERMAL_FIT`; see the
-README. `THERMAL_FIT=fast` (`fit_settings("fast")`) shrinks the sampler to two
-chains and a few hundred iterations with no retry; its TAS values are
-smoke-test artefacts, which `settings$fit_profile` records and the reports
-flag.
+`THERMAL_SITES`, `THERMAL_RECIPES`, `THERMAL_MODELS` and `THERMAL_FIT`;
+see the README.
+`THERMAL_FIT=fast` (`fit_settings("fast")`) shrinks the sampler
+to two chains and a few hundred iterations with no retry;
+its TAS values are smoke-test artefacts,
+which `settings$fit_profile` records and the reports flag.
 
 ## Adding things
 
-- **A recipe**: one row in `data-core/recipes.csv`. `read_recipes()` validates
-  every row against `RECIPE_AXES` at pipeline definition.
+- **A recipe**: one row in `data-core/recipes.csv`.
+  `read_recipes()` validates every row against `RECIPE_AXES` at pipeline definition.
 - **A strategy**: one branch in the matching `choose_*()` in `R/strategies.R`
-  and one entry in `RECIPE_AXES`. If it needs a column step 01 does not produce
-  (ERA5-Land soil temperature, say), produce it in step 01 or as a per-site
-  target like `site_fill`, and attach it in `fit_tas_site()` the way
-  `TS_memfill` is attached.
-- **An axis**: a column in the CSV, an entry in `RECIPE_AXES`, a `choose_*()`
-  function, and a call to it in `fit_tas_site()` (or `prep_nee_ac()`, with
-  the axis added to `RECIPE_PREP_AXES`).
+  and one entry in `RECIPE_AXES`.
+  If it needs a column step 01 does not produce
+  (ERA5-Land soil temperature, say),
+  produce it in step 01 or as a per-site target like `site_fill`,
+  and attach it in `fit_tas_site()` the way `TS_memfill` is attached.
+- **An axis**: a column in the CSV,
+  an entry in `RECIPE_AXES`,
+  a `choose_*()` function,
+  and a call to it in `fit_tas_site()`
+  (or `prep_nee_ac()`, with the axis added to `RECIPE_PREP_AXES`).
 
 ## Future work, documented so it is not rediscovered
 
 ### A fully season-free variant: what the year-qualification rule needs
 
-`whole_year` deliberately changes only the window layout. Making the pipeline
-independent of season detection altogether requires replacing two more uses of
-`gStart`/`gEnd`:
+`whole_year` deliberately changes only the window layout.
+Making the pipeline independent of season detection altogether
+requires replacing two more uses of `gStart`/`gEnd`:
 
-1. **Year qualification** (`get_good_years()`). Gaps are counted within the
-   season and the thresholds scale with its length (`max(31, 0.225 × length)`
-   days for the largest gap, `max(1/3, …)` for the total). Applied to a whole
-   year this would reject almost every boreal year, where a nighttime-NEE gap
-   over winter is normal. A season-free rule has to define "the part of the year
-   this site is expected to have data in" without detecting a season — options
-   are a per-site data-density profile (qualify a year on the fraction of the
-   *site's typical* covered DOYs it covers), or qualifying per window rather
-   than per year and letting the fit-stage `nobs` guard do the rest.
-2. **Control year** (`fit_tas_site()`): the year whose growing-season mean TS
-   is closest to the long-term mean. Without a season, the natural replacement
-   is the year whose mean TS *over the fitted windows* is closest to the mean.
+1. **Year qualification** (`get_good_years()`).
+   Gaps are counted within the season
+   and the thresholds scale with its length
+   (`max(31, 0.225 × length)` days for the largest gap,
+   `max(1/3, …)` for the total).
+   Applied to a whole year this would reject almost every boreal year,
+   where a nighttime-NEE gap over winter is normal.
+   A season-free rule has to define
+   "the part of the year this site is expected to have data in"
+   without detecting a season —
+   options are a per-site data-density profile
+   (qualify a year on the fraction of the *site's typical* covered DOYs it covers),
+   or qualifying per window rather than per year
+   and letting the fit-stage `nobs` guard do the rest.
+2. **Control year** (`fit_tas_site()`):
+   the year whose growing-season mean TS is closest to the long-term mean.
+   Without a season,
+   the natural replacement is the year whose mean TS *over the fitted windows*
+   is closest to the mean.
 
-(1) is a `prep`-stage change — a new `year_qc` strategy, and so a new prep key
-with its own `site_data_<prep>_*` — and (2) a `fit`-stage one.
+(1) is a `prep`-stage change —
+a new `year_qc` strategy,
+and so a new prep key with its own `site_data_<prep>_*` —
+and (2) a `fit`-stage one.
 
 ### `year_qc = computed`
 
-Replace the manual `year_removed` list with a scored rule (gap statistics,
-u* coverage, residual anomalies), validated against the 20 sites that carry a
-hand list today. Also a prep-stage change.
+Replace the manual `year_removed` list with a scored rule
+(gap statistics, u* coverage, residual anomalies),
+validated against the 20 sites that carry a hand list today.
+Also a prep-stage change.
 
 ### `ts = era5`
 
-ERA5-Land `stl1`/`stl2` bias-corrected to the tower on the periods the screen
-passes. Needs a CDS download target alongside the existing ERA5 soil-water one,
-a `TS_era5` column attached like `TS_memfill`, and a row in the CV table.
-Memory features alone already reach 1.26 °C out of fold (F12), which is the
-number this has to beat.
+ERA5-Land `stl1`/`stl2` bias-corrected to the tower on the periods the screen passes.
+Needs a CDS download target alongside the existing ERA5 soil-water one,
+a `TS_era5` column attached like `TS_memfill`,
+and a row in the CV table.
+Memory features alone already reach 1.26 °C out of fold (F12),
+which is the number this has to beat.
 
 ### Data-driven column choice in step 01
 
-CZ-Stn's depth swap, DE-Hte's `TS_F_MDS_2`, FI-Sod's recalibration and GF-Guy's
-air-temperature substitution are still hand-coded in step 01. The raw-record
-screen recovers CZ-Stn's and GF-Guy's from the data (F9); turning it into a
-`ts_column` prep-stage axis would retire those branches.
+CZ-Stn's depth swap, DE-Hte's `TS_F_MDS_2`, FI-Sod's recalibration
+and GF-Guy's air-temperature substitution
+are still hand-coded in step 01.
+The raw-record screen recovers CZ-Stn's and GF-Guy's from the data (F9);
+turning it into a `ts_column` prep-stage axis would retire those branches.
 
 ### Stochastic imputation
 
-`TS_memfill` is a conditional mean and is slightly too smooth (within-cell
-spread ratio 0.90, across-year 0.87; F12). Drawing from the predictive
-distribution and fitting several imputations, or a measurement-error term in
-the brms formula, is the principled fix and is step 5 of [`ts-rework.html`](ts-rework.html).
+`TS_memfill` is a conditional mean and is slightly too smooth
+(within-cell spread ratio 0.90, across-year 0.87; F12).
+Drawing from the predictive distribution and fitting several imputations,
+or a measurement-error term in the brms formula,
+is the principled fix and is step 5 of [`ts-rework.html`](ts-rework.html).
