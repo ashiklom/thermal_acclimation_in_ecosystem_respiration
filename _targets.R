@@ -61,12 +61,16 @@ per_prep <- function(p) {
   tar_map(
     values = p,
     names = "prep",
-    # Step 01 in two parts, so that extending the ERA5 file re-runs only the
-    # cheap join, and only where the site's own days gained values.
-    # Prepare the site nighttime respiration according to the method.
-    # `era5 = NULL` here because we attach it later in a separate step.
+    # Prepare the site nighttime respiration according to the corresponding 
+    # recipe in `prep_fits$prep_axes`.
+    #
+    # `era5 = NULL` here because we attach it later in a separate step. ERA5 
+    # SWC is stored as one big CSV file with all sites, and we don't want to 
+    # reprocess every site every time that changes.
     tar_target(site_prep, {site_dl; prep_nee_ac(site_info, recipe = prep_axes, era5 = NULL)}, format = "qs"),
+    # Get the end date for ERA5 (used in `tar_combine` later)
     tar_target(site_end, site_record_end(site_prep)),
+    # Attach ERA5 SWC to the prepared data
     tar_target(
       site_data,
       attach_era5_swc(site_prep, site_era5_swc(site_prep, site_name, path = era5_swc_file, table = era5_swc_tbl)),
