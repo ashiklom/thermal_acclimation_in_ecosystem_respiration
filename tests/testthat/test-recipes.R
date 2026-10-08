@@ -22,12 +22,12 @@ test_that("the CSV's original row agrees with original_recipe()", {
 
 test_that("an unknown strategy or a bad id fails by name", {
   expect_error(
-    new_recipe("x", ts = "magic", season = "detect_or_override", bounds = "native",
+    new_recipe("x", ts = "magic", season = "detect_or_override", bounds = "manuscript",
                swc = "site_info", year_qc = "site_info", ts_qc = "manuscript"),
     "axis 'ts' is 'magic'"
   )
   expect_error(
-    new_recipe("Bad-Id", ts = "site_info", season = "detect_or_override", bounds = "native",
+    new_recipe("Bad-Id", ts = "site_info", season = "detect_or_override", bounds = "manuscript",
                swc = "site_info", year_qc = "site_info", ts_qc = "manuscript"),
     "recipe_id must be"
   )
@@ -110,7 +110,7 @@ fake_fill <- function(ok = TRUE) {
 
 test_that("choose_ts_col follows the recipe and the verdict", {
   si <- list(ts_col = "TS_linear")
-  r <- function(ts) new_recipe("r", ts = ts, season = "detect_or_override", bounds = "native",
+  r <- function(ts) new_recipe("r", ts = ts, season = "detect_or_override", bounds = "manuscript",
                                swc = "site_info", year_qc = "site_info", ts_qc = "manuscript")
 
   expect_identical(choose_ts_col(r("site_info"), fake_site_data("BAD"), si)$ts_col, "TS_linear")
@@ -155,7 +155,7 @@ test_that("choose_swc_col: era5 is direct-only, site_info defers to the declarat
   si_yes <- list(SWC_use = TRUE)
   si_no <- list(SWC_use = FALSE)
   r_orig <- get_recipe("original")
-  r_era5 <- new_recipe("e", ts = "site_info", season = "detect_or_override", bounds = "native",
+  r_era5 <- new_recipe("e", ts = "site_info", season = "detect_or_override", bounds = "manuscript",
                        swc = "era5", year_qc = "site_info", ts_qc = "manuscript")
   expect_true(is.na(choose_swc_col(r_era5, si_yes, direct = FALSE)$swc_col))
   expect_identical(choose_swc_col(r_era5, si_yes, direct = TRUE)$swc_col, "SWC_era5")
@@ -167,17 +167,19 @@ test_that("choose_swc_col: era5 is direct-only, site_info defers to the declarat
 
 # ---------------------------------------------------------- bounds table
 
-test_that("ts_bounds_for resolves native rows and named definitions", {
+test_that("ts_bounds_for resolves manuscript rows and named definitions", {
   tb <- tibble::tibble(
     ts_col = c("TS_measured", "TS_measured", "TS_measured", "TS_linear", "TS_linear"),
-    definition = c("climatology", "halfhourly", "climatology", "halfhourly", "climatology"),
-    native = c(TRUE, FALSE, FALSE, TRUE, FALSE),
+    definition = c("manuscript", "halfhourly", "climatology", "halfhourly", "climatology"),
+    is_manuscript = c(TRUE, FALSE, FALSE, TRUE, FALSE),
     tStart = c(5, 1, 4, 0, 3), tEnd = c(20, 25, 21, 26, 22)
   )
   expect_identical(ts_bounds_for(tb, "TS_measured"), list(tStart = 5, tEnd = 20))
   expect_identical(ts_bounds_for(tb, "TS_linear"), list(tStart = 0, tEnd = 26))
   expect_identical(ts_bounds_for(tb, "TS_measured", "halfhourly"), list(tStart = 1, tEnd = 25))
   expect_identical(ts_bounds_for(tb, "TS_linear", "climatology"), list(tStart = 3, tEnd = 22))
+  # The measured column's manuscript row is not a second `climatology` row.
+  expect_identical(ts_bounds_for(tb, "TS_measured", "climatology"), list(tStart = 4, tEnd = 21))
   expect_error(ts_bounds_for(tb, "TS_memfill"), "TS_memfill")
   expect_error(ts_bounds_for(tb, "TS_measured", "lunar"), "lunar")
 })
@@ -195,7 +197,7 @@ test_that("the climatology band is narrower than the half-hourly one on the same
   hh <- rows[rows$definition == "halfhourly", ]
   cl <- rows[rows$definition == "climatology", ]
   expect_lt(cl$tEnd - cl$tStart, hh$tEnd - hh$tStart)
-  expect_false(any(rows$native))
+  expect_false(any(rows$is_manuscript))
 })
 
 # ------------------------------------------------------------- verdict
@@ -274,11 +276,11 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
   expect_equal(st$tEnd, fill$ts_bounds$tEnd[fill$ts_bounds$definition == "halfhourly"])
   expect_gt(sum(r$outcome_siteyear$status == "not_fitted"), 0)
 
-  # `native` for the reconstructed column is the half-hourly definition.
-  r_native <- suppressWarnings(suppressMessages(
+  # `manuscript` for the reconstructed column is the half-hourly definition.
+  r_manuscript <- suppressWarnings(suppressMessages(
     fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("memfill"), fill = fill)
   ))
-  expect_equal(r_native$settings$tStart, st$tStart)
+  expect_equal(r_manuscript$settings$tStart, st$tStart)
 
   # No fill: fall back to the regression, and say so.
   r2 <- suppressWarnings(suppressMessages(

@@ -61,7 +61,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
   }
 
   # `TS_memfill` comes from its own per-site target (`fill_soil_temp()`),
-  # aligned with `site_data` row for row (asserted). Its native bounds are the
+  # aligned with `site_data` row for row (asserted). Its manuscript bounds are the
   # half-hourly ones, like `TS_linear`'s.
   fill_method <- NA_character_
   fill_cv_rmse <- NA_real_
@@ -79,7 +79,7 @@ get_soil_temperature <- function(site_data, site_info, recipe = NULL, fill = NUL
     ac[["TS_memfill"]] <- fill$ac_ts
     night[["TS_memfill"]] <- fill$night_ts
     fill_rows <- fill$ts_bounds
-    fill_rows$native <- fill_rows$definition == "halfhourly"
+    fill_rows$is_manuscript <- fill_rows$definition == "halfhourly"
     ts_bounds_all <- dplyr::bind_rows(ts_bounds_all, fill_rows)
     fill_method <- fill$method
     fill_cv_rmse <- fill$cv_rmse

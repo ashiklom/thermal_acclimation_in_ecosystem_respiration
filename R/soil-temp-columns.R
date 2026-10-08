@@ -152,22 +152,22 @@ ts_bounds_climatology <- function(ts, doy, gStart, gEnd) {
 
 #' Both definitions for one column, as `ts_bounds` rows
 #'
-#' `native` is set by the caller, since the measured column's native row is not
-#' one of these.
+#' `is_manuscript` is set by the caller, since the measured column's manuscript
+#' row is not one of these.
 #'
 #' @param ts Soil temperature, one value per half-hour.
 #' @param doy Day of year of each value of `ts`, possibly wrapped.
 #' @param gStart,gEnd Growing-season bounds, as (possibly wrapped) DOY, inclusive.
 #' @param ts_col Name of the soil-temperature column `ts` came from.
 #' @return A two-row tibble with `ts_col`, `definition` (`"halfhourly"`,
-#'   `"climatology"`), `native` (`FALSE`), `tStart` and `tEnd`.
+#'   `"climatology"`), `is_manuscript` (`FALSE`), `tStart` and `tEnd`.
 ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
   hh <- ts_bounds(ts, doy, gStart, gEnd)
   cl <- ts_bounds_climatology(ts, doy, gStart, gEnd)
   tibble::tibble(
     ts_col = ts_col,
     definition = c("halfhourly", "climatology"),
-    native = FALSE,
+    is_manuscript = FALSE,
     tStart = c(hh$tStart, cl$tStart),
     tEnd = c(hh$tEnd, cl$tEnd)
   )
@@ -175,17 +175,18 @@ ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
 
 #' The bounds for a TS column
 #'
-#' Its native (manuscript) row, or the row under `definition`.
+#' Its manuscript row (flagged `is_manuscript`), or the row under `definition`.
 #'
 #' @param ts_bounds A site's `ts_bounds` table: one row per soil-temperature
 #'   column and bounds definition.
 #' @param ts_col Name of the soil-temperature column.
-#' @param definition `"halfhourly"` or `"climatology"`, or `NULL` for the
-#'   native row.
+#' @param definition `"halfhourly"`, `"climatology"` or `"manuscript"` (the
+#'   measured column's manuscript row only), or `NULL` for whichever row is
+#'   flagged `is_manuscript`.
 #' @return A list of `tStart` and `tEnd`. Errors unless exactly one row
 #'   matches.
 ts_bounds_for <- function(ts_bounds, ts_col, definition = NULL) {
-  keep <- if (is.null(definition)) ts_bounds[["native"]] else ts_bounds[["definition"]] == definition
+  keep <- if (is.null(definition)) ts_bounds[["is_manuscript"]] else ts_bounds[["definition"]] == definition
   row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col & keep, ]
   if (nrow(row) != 1) {
     stop(

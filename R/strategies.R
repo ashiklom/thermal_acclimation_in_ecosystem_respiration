@@ -140,23 +140,24 @@ choose_window_season <- function(recipe, feature_gs) {
 #'
 #' Which population tStart/tEnd -- the window-skip gate -- are percentiles of.
 #'
-#'   native       each column's own definition, as the manuscript had it: the
-#'                day-of-year climatology for the measured column and the raw
-#'                half-hourly values for the regressed one. Finding F4.
+#'   manuscript   each column's own definition, as the manuscript had it: the
+#'                `manuscript` row (day-of-year climatology over the NEE uptake
+#'                days, floored; docs/recipes.md) for the measured column and
+#'                the raw half-hourly values for the regressed one. Finding F4.
 #'   climatology  the day-of-year-climatology definition for whichever column
 #'                is selected.
 #'   halfhourly   the half-hourly definition for whichever column is selected.
 #'
 #' @param recipe A recipe: one strategy per `RECIPE_AXES` axis.
 #' @param ts_bounds The site's bounds table: one row per soil-temperature
-#'   column and definition, with `tStart`, `tEnd` and `native`.
+#'   column and definition, with `tStart`, `tEnd` and `is_manuscript`.
 #' @param ts_col Name of the selected soil-temperature column.
 #' @return A list of `tStart` and `tEnd` (degrees C) and `reason`, a string for
 #'   provenance.
 choose_bounds <- function(recipe, ts_bounds, ts_col) {
   b <- switch(
     recipe$bounds,
-    native = ts_bounds_for(ts_bounds, ts_col),
+    manuscript = ts_bounds_for(ts_bounds, ts_col),
     climatology = ts_bounds_for(ts_bounds, ts_col, definition = "climatology"),
     halfhourly = ts_bounds_for(ts_bounds, ts_col, definition = "halfhourly"),
     stop("Unknown bounds strategy ", shQuote(recipe$bounds))

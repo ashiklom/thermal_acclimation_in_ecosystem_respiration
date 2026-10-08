@@ -24,7 +24,7 @@ and can be compared row for row.
 |---|---|---|---|
 | `ts` | `site_info` · `screen_best` · `memory_fill` | fit | which soil-temperature column the model is fitted on |
 | `season` | `detect_or_override` · `force_detect` · `whole_year` | fit | the day-of-year span the moving windows are laid over |
-| `bounds` | `native` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of |
+| `bounds` | `manuscript` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of |
 | `swc` | `site_info` · `era5` | fit | which soil-water column the direct model uses |
 | `year_qc` | `site_info` | prep | how years are qualified |
 | `ts_qc` | `manuscript` · `sensor` | prep | which soil-temperature column step 01 qualifies years on and screens |
@@ -137,9 +137,9 @@ it is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
 
 ### `bounds`
 
-- `native` — each column's own definition as the manuscript had it:
-  the day-of-year climatology for the measured column,
-  the raw half-hourly values for the regressed one.
+- `manuscript` — each column's own definition as the manuscript had it:
+  the `manuscript` row (below) for the measured column,
+  the raw half-hourly values for the regressed and reconstructed ones.
   F4 measured the resulting inconsistency:
   the admissible band is 10.0 °C wide on measured data under one definition
   and 16.7 °C under the other,
@@ -148,12 +148,31 @@ it is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
   Step 01 produces both for every column (`ts_bounds_rows()`),
   so this is a lookup, not a computation.
 
-Note the `climatology` row for `TS_measured` is *not* the `native` row.
-The native one comes from `detect_growing_season()`,
-computed on the record before disqualified years are dropped
-and floored at 0 °C (2 °C at three sites);
-the consistent one is computed on the step-01 output.
-Both are in `ts_bounds`, flagged by `native`.
+Each column's row for the `manuscript` strategy is flagged `is_manuscript` in `ts_bounds`.
+For `TS_linear` and `TS_memfill` that is their `halfhourly` row.
+For `TS_measured` it is a row of its own, `definition = "manuscript"`,
+which is *not* the `climatology` row,
+though both are 2.5/97.5 percentiles of day-of-year mean soil temperature.
+The `manuscript` row is the `tStart`/`tEnd` of `detect_growing_season()`, and differs in:
+
+- **Days.** It averages over the NEE-uptake days
+  (DOYs whose multi-year mean NEE is below the cut-off), not over `[gStart, gEnd]`.
+  The two sets are close but not equal:
+  the season is the 7th uptake day from each end widened by 4 days,
+  so isolated uptake days outside it are counted and weak-uptake days inside it are not;
+  and the uptake days ignore both the TS ≥ 0 tightening of `gStart`
+  and the `gStart`/`gEnd` overrides in `site_info.csv` (24 sites).
+- **Years.** It is computed on the whole record,
+  before disqualified years are dropped;
+  `climatology` is computed on the step-01 output.
+- **Floors.** `tStart` is floored at 0 °C,
+  and at 2 °C at `SITES_TS_MIN_2C` (CH-Dav, US-Ha1, US-GLE).
+  `climatology` is not floored.
+
+Because it depends on NEE, the detected season and site rules,
+it is not a function of the column,
+so `prepare_site_data()` writes it directly rather than through `ts_bounds_rows()`.
+It cannot be recomputed for any other column.
 
 ### `swc`
 

@@ -42,8 +42,8 @@ test_that("a TS column the pipeline did not produce fails by name", {
 test_that("ts_bounds_for returns the bounds belonging to the chosen column", {
   bounds <- tibble::tibble(
     ts_col = c("TS_measured", "TS_linear"),
-    definition = c("climatology", "halfhourly"),
-    native = TRUE,
+    definition = c("manuscript", "halfhourly"),
+    is_manuscript = TRUE,
     tStart = c(2.5, -1.25),
     tEnd = c(18.0, 21.5)
   )
@@ -54,7 +54,7 @@ test_that("ts_bounds_for returns the bounds belonging to the chosen column", {
 test_that("bounds for an unproduced column are an error, not a silent fallback", {
   # Falling back to the first row would pair a substituted TS column with the
   # measured column's bounds -- the exact mismatch this design exists to stop.
-  bounds <- tibble::tibble(ts_col = "TS_measured", definition = "climatology", native = TRUE,
+  bounds <- tibble::tibble(ts_col = "TS_measured", definition = "manuscript", is_manuscript = TRUE,
                            tStart = 2.5, tEnd = 18.0)
   expect_error(ts_bounds_for(bounds, "TS_linear"), "TS_linear")
   expect_error(ts_bounds_for(bounds, "TS_linear"), "found 0")

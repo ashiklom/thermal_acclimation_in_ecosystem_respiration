@@ -26,27 +26,18 @@ In addition, the prep includes the following options for soil water content (SWC
 
 Beside the tables, `site_data` carries:
 
-- `ts_bounds`: for every TS column,
-  the 2.5/97.5 percentiles of growing-season soil temperature
-  under both definitions (`climatology`, `halfhourly`),
-  with the manuscript's row for that column flagged `native`;
-- `ts_qc`: the quality verdict on `TS_measured`;
-- `ts_provenance`: stage A's provenance row;
+- `ts_bounds`: for every TS column, the 2.5/97.5 percentiles of growing-season soil temperature under both definitions (`climatology`, `halfhourly`), with the manuscript's row for that column flagged `is_manuscript`; for `TS_measured` that row is a third definition, `manuscript` (how it differs from `climatology`: [`recipes.md`](recipes.md#bounds))
+- `ts_qc`: the quality verdict on `TS_measured`
+- `ts_provenance`: stage A's provenance row
 - `feature_gs`: the growing season and year count.
 
 **Bounds travel with the column.**
-`tStart`/`tEnd` gate the window-skip test in `fit_tas_window()`,
-and they are percentiles of a particular column,
-so selecting a column and selecting its bounds are one act.
+`tStart`/`tEnd` gate the window-skip test in `fit_tas_window()`, and they are percentiles of a particular column, so selecting a column and selecting its bounds are one act.
 The two definitions differ a lot:
-- the measured column's native bounds are percentiles of the *day-of-year climatology*,
-  from `detect_growing_season()`;
+- the measured column's manuscript bounds are percentiles of the *day-of-year climatology*, from `detect_growing_season()`;
 - the regressed column's are percentiles of the raw *half-hourly* values.
 
-Across 44 sites the half-hourly band is 16.7 °C wide
-against the climatology's 10.0 °C,
-before the column changes at all
-([`ts-rework.html`](ts-rework.html), F4).
+Across 44 sites the half-hourly band is 16.7 °C wide against the climatology's 10.0 °C, before the column changes at all ([`ts-rework.html`](ts-rework.html), F4).
 The `bounds` recipe axis applies one definition throughout.
 
 ## Why two stages
@@ -123,7 +114,7 @@ It selects a candidate under the recipe's `ts` strategy (`choose_ts_col()`),
 attaches `TS_memfill` if that is what was chosen,
 looks up the bounds belonging to the selected column under the recipe's `bounds` strategy,
 and drops every other candidate —
-`TS`, `TS_measured`, `TS_linear`, `TS_memfill` —
+`TS_measured`, `TS_linear`, `TS_memfill` —
 so that "no branching downstream" is a checkable property rather than a convention.
 The metadata row carries everything the settings table reports about soil temperature,
 and copies stage A's provenance fields in.

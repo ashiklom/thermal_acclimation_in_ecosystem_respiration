@@ -221,7 +221,7 @@ selection_matches_oracle <- function(sd_, site_info, name_site) {
   )
   # The pipeline's side is `get_soil_temperature()` under the manuscript
   # recipe: one call, `TS_final` out. Its bounds are the selected column's
-  # native ones, which is what the oracle recomputes.
+  # manuscript ones, which is what the oracle recomputes.
   soil <- get_soil_temperature(sd_, site_info, recipe = original_recipe())
   stopifnot(identical(soil$meta$ts_col, ts_col))
 

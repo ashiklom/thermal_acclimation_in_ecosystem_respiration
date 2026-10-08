@@ -263,15 +263,17 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   # section as `TS_measured`.
 
   # Bounds are keyed by TS column, so a column and its bounds are selected
-  # together. The measured column's *native* row is the manuscript's number
-  # (the DOY-climatology percentiles from `detect_growing_season()`, floored
-  # at 0 C, or 2 C at SITES_TS_MIN_2C); it is not a pure function of the
-  # column, so it is written here rather than by `ts_bounds_rows()`.
+  # together. The measured column's manuscript row is the DOY-climatology
+  # percentiles from `detect_growing_season()`, floored at 0 C (2 C at
+  # SITES_TS_MIN_2C). It is not a pure function of the column, so it is written
+  # here rather than by `ts_bounds_rows()`, under its own definition,
+  # `manuscript`: how it differs from the generic `climatology` row is in
+  # docs/recipes.md (`bounds`).
   ts_bounds_tbl <- dplyr::bind_rows(
     tibble::tibble(
       ts_col = "TS_measured",
-      definition = "climatology",
-      native = TRUE,
+      definition = "manuscript",
+      is_manuscript = TRUE,
       tStart = unname(max(tStart, 0.0)),
       tEnd = unname(tEnd)
     ),
@@ -299,12 +301,12 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   if (!is.null(substituted)) {
     ac_final[["TS_linear"]] <- substituted$ac[["TS"]]
     measured_final[["TS_linear"]] <- substituted$nightNEE[["TS"]]
-    # The regressed column's native bounds are the half-hourly ones.
+    # The regressed column's manuscript bounds are the half-hourly ones.
     linear_rows <- ts_bounds_rows(ac_final[["TS_linear"]], ac_final[["DOY"]], gStart, gEnd, "TS_linear")
     stopifnot(isTRUE(all.equal(
       linear_rows$tStart[linear_rows$definition == "halfhourly"], substituted$tStart
     )))
-    linear_rows$native <- linear_rows$definition == "halfhourly"
+    linear_rows$is_manuscript <- linear_rows$definition == "halfhourly"
     ts_bounds_tbl <- dplyr::bind_rows(ts_bounds_tbl, linear_rows)
   }
 

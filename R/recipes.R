@@ -23,7 +23,7 @@ RECIPE_AXES <- list(
   # wherever one is declared (24 sites). `force_detect` is the detector alone.
   season = c("detect_or_override", "force_detect", "whole_year"),
   # Which population tStart/tEnd -- the window-skip gate -- are percentiles of.
-  bounds = c("native", "climatology", "halfhourly"),
+  bounds = c("manuscript", "climatology", "halfhourly"),
   # Which soil-water column the direct model uses.
   swc = c("site_info", "era5"),
   # How years are qualified. One strategy so far; see docs for `computed`.
@@ -45,7 +45,7 @@ RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 #'
 #' By analogy with `DEV_SITES`: chosen to exercise every strategy that has its
 #' own code path, not to be exhaustive.
-#'   original    site_info ts, native bounds, detected season -- the oracle
+#'   original    site_info ts, manuscript bounds, detected season -- the oracle
 #'   memfill_hh  memory_fill ts (needs the per-site fill), halfhourly bounds
 #'   noseason    whole_year season
 #' `memfill_sensor` is not in the sample: it is the first recipe with its own
@@ -114,7 +114,7 @@ validate_recipe <- function(r) {
 original_recipe <- function() {
   new_recipe(
     "original",
-    ts = "site_info", season = "detect_or_override", bounds = "native", swc = "site_info",
+    ts = "site_info", season = "detect_or_override", bounds = "manuscript", swc = "site_info",
     year_qc = "site_info", ts_qc = "manuscript"
   )
 }
