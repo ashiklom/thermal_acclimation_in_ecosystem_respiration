@@ -25,43 +25,52 @@ This allows the manuscript's specific logic --- and any number of alternatives -
 
 ### `ts` -- soil temperature column
 
-- `site_info` — the `ts_col` declaration in `site_info.csv`, as used in the manuscript.
-- `measured_or_lm` — `TS_measured` unless the quality verdict (`site_data$ts_qc`) is `BAD`, in which case `TS_linear`, the regression (`lm(TS ~ TA)`) the manuscript would have used anyway.
-  This isolates the effect of no longer discarding good sensors (F10: 27 of 50 hand-flagged sites pass every physical test).
-- `measured_or_best_fill` — as `measured_or_lm`, but a `BAD` sensor is replaced by `TS_memfill` (instead of `TS_linear`).
-  This is the blocked-CV-selected reconstruction from the per-site `site_fill` target (F12: memory methods cut out-of-fold error 58%).
-  If the fill is unavailable the strategy falls back to `TS_linear` and records why in `settings$ts_reason`.
+Step 01 produces a column called `TS_measured`.
+Despite the name, it is not always a sensor reading:
+at some sites, step 01 has already filled or replaced it with an estimate (_which_ estimate is set by `ts_source` in `site_info.csv`; see [docs/soil-temperature.md](soil-temperature.md)).
+Step 01 also runs a quality check on `TS_measured` (`ts_quality()`) and records a verdict, `GOOD` or `BAD`, in `site_data$ts_qc`.
 
-`site_info` uses the manuscript's original logic, even if it involves questionable "double-reconstruction".
-For example, FI-Sod and US-MBP each apply a soil-temperature reconstruction twice.
-Step 01 first rebuilds part of `TS_measured` from its `ts_source`:
-FI-Sod's pre-2006 record is replaced by chained depth-to-depth regressions (`recalibrated`),
-and US-MBP's gaps are filled with `(TA * 0.369) + 5.87` (`gapfill_ta`).
-Then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) _to the reconstructed `TS_measured`_ and overlays the predictions on it.
-So the regression is partly fitted to values _that were already estimates_ rather than sensor readings.
-The problem with this is that fitting a model to another model (often with the same predictors) introduces some biases.
-For example, at US-MBP, the gap-filled rows are already an exact linear function of TA, so regressing `TS ~ TA` again pulls the second fit toward the first.
+The `ts` axis picks which column the acclimation model is fitted on:
 
-By contrast, `measured_or_lm` and `measured_or_best_fill` are stricter and will refuse to apply a second method:
-If there is no measured truth, there is not a proper independent variable for the regression.
-This affects 27 sites:
-- 16 sites where `ts_source == "reconstructed"` (in `site_info.csv`)
-- 7 sites where `ts_source` is either `lm_ta_cold` or `lm_ta_recent` (in `site_info.csv`; see docs/soil-temperature.md for more details)
-- GF-Guy, where soil temperature is replaced with air temperature
-- US-Cwt, which uses a pre-fitted neighboring site's regression coefficients against air temperature
-- FI-Sod and US-MBP (as described above)
-For all of these sites, `measured_or_lm` and `measured_or_best_fill` fit on `TS_measured` with no modifications.
+- `site_info` — whatever `ts_col` says in `site_info.csv`. This is what the manuscript does.
+- `measured_or_lm` — if the verdict on `TS_measured` is `GOOD`, use `TS_measured`.
+  If the verdict is `BAD`, use `TS_linear`, a regression of soil temperature on air temperature (`lm(TS ~ TA)`).
+  The difference from the manuscript: good sensors are no longer thrown away (F10: 27 of 50 hand-flagged sites pass every physical test).
+- `measured_or_best_fill` — the same, but a `BAD` sensor is replaced by `TS_memfill` instead of `TS_linear`.
+  `TS_memfill` is whichever gap-filling method scored best in cross-validation at that site (the `site_fill` target; F12: these methods cut out-of-fold error by 58%).
+  If no fill is available, it falls back to `TS_linear` and says why in `settings$ts_reason`.
 
-keep step 01's column and record `ts_refused = TRUE` with the reason.
+#### The refuse rule: no estimate on top of an estimate
 
-The alternative is a model fitted *to* a reconstruction:
-`TS_linear` regresses it on air temperature, `TS_memfill` is cross-validated against it, and either returns a function of the same predictors wearing a skill score (DE-Hte's `lm_ta_netrad`: 1.5e-14).
-The fill target declines at those sites for the same reason (`status = "no measured truth"`), so `fill_cv.csv` carries no rows for them.
+`TS_linear` and `TS_memfill` are both models trained on `TS_measured`.
+That only makes sense if `TS_measured` is real sensor data.
+If `TS_measured` is _already_ an estimate, training a second model on it just teaches the second model to copy the first one, and its skill score looks good for the wrong reason.
+(In the extreme, DE-Hte's `lm_ta_netrad` fill reproduces its target almost exactly: CV error 1.5e-14.)
 
-The prep-stage `ts_qc = sensor` strategy (below) is where a variant gets to act at these sites: qualify on the raw sensor, and there is a truth.
+So `measured_or_lm` and `measured_or_best_fill` first check whether `TS_measured` contains any non-sensor values.
+If it does, they do not apply `TS_linear` or `TS_memfill`.
+Instead, they keep `TS_measured` as it is (and that is what gets used by later acclimation model fits), set `ts_refused = TRUE`, and give the reason.
+The `site_fill` target skips these sites (`status = "no measured truth"`), so they have no rows in `fill_cv.csv`.
 
-The verdict is computed by `ts_quality()` on the column step 01 leaves as `TS_measured` — *after* the site-specific column choices step 01 makes — because that is the column a run would otherwise fit on.
-The raw-record screen, which is the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
+The rule applies at 27 sites (every `ts_source` mapped to `"none"` in `TS_SOURCES`, `R/constants.R`):
+
+- 16 sites with `ts_source = reconstructed` (soil temperature estimated wholesale)
+- 7 sites with `ts_source = lm_ta_cold` or `lm_ta_recent` (wholesale `TS ~ TA` regressions)
+- GF-Guy, which uses air temperature in place of soil temperature
+- US-Cwt, which uses a regression borrowed from a neighbouring site
+- FI-Sod and US-MBP, where only part of the record is estimated (see below)
+
+`site_info` does _not_ apply this rule, because it reproduces the manuscript as written.
+At FI-Sod and US-MBP the manuscript does stack two estimates:
+
+1. Step 01 rebuilds part of `TS_measured`.
+   At FI-Sod, the pre-2006 record comes from chained depth-to-depth regressions (`recalibrated`).
+   At US-MBP, gaps are filled with `TA * 0.369 + 5.87` (`gapfill_ta`).
+2. Then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) to that partly-estimated `TS_measured`.
+   At US-MBP the filled rows are already an exact linear function of TA, so the second fit is pulled toward the first.
+
+To make `measured_or_lm` or `measured_or_best_fill` apply `TS_linear` or `TS_memfill` at these 27 sites, use `ts_qc = sensor` (below).
+It makes step 01 use the raw sensor, so `TS_measured` is real data again and the second method has something to train on.
 
 ### `season`
 
