@@ -23,52 +23,45 @@ This allows the manuscript's specific logic --- and any number of alternatives -
 | `year_qc` | `site_info` | prep | how years are qualified |
 | `ts_qc` | `manuscript` · `sensor` | prep | which soil-temperature column step 01 qualifies years on and screens |
 
-### `ts`
+### `ts` -- soil temperature column
 
-- `site_info` — the `ts_col` declaration in `site_info.csv`.
-  The manuscript.
-- `screen_best` — `TS_measured` unless the quality verdict (`site_data$ts_qc`) is `BAD`,
-  in which case `TS_linear`,
-  the regression the manuscript would have used anyway.
-  Isolates the effect of no longer discarding good sensors
-  (F10: 27 of 50 hand-flagged sites pass every physical test).
-- `memory_fill` — as `screen_best`,
-  but a `BAD` sensor is replaced by `TS_memfill`,
-  the blocked-CV-selected reconstruction from the per-site `site_fill` target
-  (F12: memory methods cut out-of-fold error 58%).
-  If the fill is unavailable the strategy falls back to `TS_linear`
-  and records why in `settings$ts_reason`.
+- `site_info` — the `ts_col` declaration in `site_info.csv`, as used in the manuscript.
+- `measured_or_lm` — `TS_measured` unless the quality verdict (`site_data$ts_qc`) is `BAD`, in which case `TS_linear`, the regression (`lm(TS ~ TA)`) the manuscript would have used anyway.
+  This isolates the effect of no longer discarding good sensors (F10: 27 of 50 hand-flagged sites pass every physical test).
+- `measured_or_best_fill` — as `measured_or_lm`, but a `BAD` sensor is replaced by `TS_memfill` (instead of `TS_linear`).
+  This is the blocked-CV-selected reconstruction from the per-site `site_fill` target (F12: memory methods cut out-of-fold error 58%).
+  If the fill is unavailable the strategy falls back to `TS_linear` and records why in `settings$ts_reason`.
 
-**Where there is no measured truth, no second method is applied.**
-At the 27 sites whose `ts_source` (site_info.csv)
-leaves rows of `TS_measured` that are not a sensor reading —
-the 16 `estimate_Ts` reconstructions,
-the seven wholesale `TS ~ TA` sites,
-GF-Guy, US-Cwt,
-and the partial cases FI-Sod and US-MBP —
-both `screen_best` and `memory_fill` keep step 01's column
-and record `ts_refused = TRUE` with the reason.
+`site_info` uses the manuscript's original logic, even if it involves questionable "double-reconstruction".
+For example, FI-Sod and US-MBP each apply a soil-temperature reconstruction twice.
+Step 01 first rebuilds part of `TS_measured` from its `ts_source`:
+FI-Sod's pre-2006 record is replaced by chained depth-to-depth regressions (`recalibrated`),
+and US-MBP's gaps are filled with `(TA * 0.369) + 5.87` (`gapfill_ta`).
+Then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) _to the reconstructed `TS_measured`_ and overlays the predictions on it.
+So the regression is partly fitted to values _that were already estimates_ rather than sensor readings.
+The problem with this is that fitting a model to another model (often with the same predictors) introduces some biases.
+For example, at US-MBP, the gap-filled rows are already an exact linear function of TA, so regressing `TS ~ TA` again pulls the second fit toward the first.
+
+By contrast, `measured_or_lm` and `measured_or_best_fill` are stricter and will refuse to apply a second method:
+If there is no measured truth, there is not a proper independent variable for the regression.
+This affects 27 sites:
+- 16 sites where `ts_source == "reconstructed"` (in `site_info.csv`)
+- 7 sites where `ts_source` is either `lm_ta_cold` or `lm_ta_recent` (in `site_info.csv`; see docs/soil-temperature.md for more details)
+- GF-Guy, where soil temperature is replaced with air temperature
+- US-Cwt, which uses a pre-fitted neighboring site's regression coefficients against air temperature
+- FI-Sod and US-MBP (as described above)
+For all of these sites, `measured_or_lm` and `measured_or_best_fill` fit on `TS_measured` with no modifications.
+
+keep step 01's column and record `ts_refused = TRUE` with the reason.
+
 The alternative is a model fitted *to* a reconstruction:
-`TS_linear` regresses it on air temperature,
-`TS_memfill` is cross-validated against it,
-and either returns a function of the same predictors wearing a skill score
-(DE-Hte's `lm_ta_netrad`: 1.5×10⁻¹⁴).
-The fill target declines at those sites for the same reason
-(`status = "no measured truth"`),
-so `fill_cv.csv` carries no rows for them.
-`site_info` is exempt —
-it is a declaration,
-and the manuscript's own two double-applications (FI-Sod, US-MBP) are the manuscript's.
-The prep-stage `ts_qc = sensor` strategy (below)
-is where a variant gets to act at these sites:
-qualify on the raw sensor, and there is a truth.
+`TS_linear` regresses it on air temperature, `TS_memfill` is cross-validated against it, and either returns a function of the same predictors wearing a skill score (DE-Hte's `lm_ta_netrad`: 1.5e-14).
+The fill target declines at those sites for the same reason (`status = "no measured truth"`), so `fill_cv.csv` carries no rows for them.
 
-The verdict is computed by `ts_quality()` on the column step 01 leaves as `TS_measured` —
-*after* the site-specific column choices step 01 makes —
-because that is the column a run would otherwise fit on.
-The raw-record screen,
-which is the one that generalises to an unseen site,
-is `scripts/ts-qc-screen.R`.
+The prep-stage `ts_qc = sensor` strategy (below) is where a variant gets to act at these sites: qualify on the raw sensor, and there is a truth.
+
+The verdict is computed by `ts_quality()` on the column step 01 leaves as `TS_measured` — *after* the site-specific column choices step 01 makes — because that is the column a run would otherwise fit on.
+The raw-record screen, which is the one that generalises to an unseen site, is `scripts/ts-qc-screen.R`.
 
 ### `season`
 
@@ -112,7 +105,7 @@ See *Future work*.
   (the second depth at CZ-Stn, the PI gap-fill at US-NR1/ICh/ICs)
   still run.
   Qualification, the quality screen and the fill's truth are then all measurements,
-  which is what lets a `memory_fill` recipe act at the 27 sites
+  which is what lets a `measured_or_best_fill` recipe act at the 27 sites
   the refuse rule otherwise holds.
   A site whose raw sensor is too sparse to qualify a year
   fails its own step-01 target and drops from the recipe —
