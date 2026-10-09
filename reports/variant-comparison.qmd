@@ -142,7 +142,7 @@ each strategy does are documented in `docs/recipes.md`; the registry is
 ```{r recipes}
 #| echo: false
 if (is.null(recipes)) skip_note("Recipe registry", "recipes_file target not built.") else
-  recipes |> select(recipe_id, ts, season, bounds, swc, year_qc, description)
+  recipes |> select(recipe_id, ts, season, ts_bounds_measured, ts_bounds_estimated, swc, year_qc, description)
 ```
 
 ## `original` against the manuscript oracle
@@ -278,7 +278,7 @@ if (is.null(settings)) skip_note("Provenance", "variant_settings.csv not written
     select(site_ID, recipe_id, ts_col, ts_reason, ts_verdict, ts_flags,
            any_of(c("ts_source", "ts_refused", "ts_measured_synthetic")),
            fill_method, fill_cv_rmse, any_of(c("fill_degenerate", "fill_truth_synthetic")),
-           bounds_strategy, tStart, tEnd,
+           any_of(c("bounds_definition", "bounds_strategy")), tStart, tEnd,
            window_gStart, window_gEnd, control_year, fit_profile) |>
     arrange(site_ID, recipe_id) |>
     knitr::kable(digits = 3) |> print()

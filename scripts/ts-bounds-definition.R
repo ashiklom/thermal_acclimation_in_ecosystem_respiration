@@ -44,8 +44,8 @@ one <- function(name_site) {
     return(tibble::tibble(site_ID = name_site, status = "step01 failed"))
   }
   fg <- sd_$feature_gs
-  b_meas <- tryCatch(ts_bounds_for(sd_$ts_bounds, "TS_measured"), error = function(e) NULL)
-  b_lin <- tryCatch(ts_bounds_for(sd_$ts_bounds, "TS_linear"), error = function(e) NULL)
+  b_meas <- tryCatch(ts_bounds_for(sd_$ts_bounds, "TS_measured", "climatology_uptake"), error = function(e) NULL)
+  b_lin <- tryCatch(ts_bounds_for(sd_$ts_bounds, "TS_linear", "halfhourly"), error = function(e) NULL)
   if (is.null(b_meas) || is.null(b_lin)) {
     return(tibble::tibble(site_ID = name_site, status = "missing a bounds row"))
   }

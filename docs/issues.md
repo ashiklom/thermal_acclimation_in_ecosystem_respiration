@@ -28,7 +28,7 @@ Each entry says where it lives.
   Also, the **TS quantiles are calculated inconsistently** across different sites:
   For sites that use measured soil temperature, quantiles are calculated from the DOY climatology over NEE-uptake days (DOYs whose multi-year mean NEE is below the growing-season cutoff), floored at 0 °C.
   But for sites that use soil temperature estimated via regression, quantiles are calculated from the raw half-hourly values within the growing season (`[gStart, gEnd]`).
-  The new code keeps this behaviour under `bounds = "manuscript"`, and adds `bounds = "climatology"` (DOY climatology over `[gStart, gEnd]`, not the NEE-uptake days) and `bounds = "halfhourly"` (half-hourly values over `[gStart, gEnd]`), which apply one definition to any soil temperature column (e.g., measured TS + half-hourly quantiles).
+  The new code makes this explicit with two recipe axes, `ts_bounds_measured` and `ts_bounds_estimated`: the manuscript is `climatology_uptake` / `halfhourly`, and either can instead be `climatology` (DOY climatology over `[gStart, gEnd]`, not the NEE-uptake days) or `halfhourly` (half-hourly values over `[gStart, gEnd]`), so one definition can be applied to any soil temperature column (e.g., measured TS + half-hourly quantiles).
   Finally, there are a few additional filters not mentioned in the manuscript (probably OK).
 
 - **Window size**

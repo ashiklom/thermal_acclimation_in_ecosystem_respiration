@@ -22,8 +22,14 @@ RECIPE_AXES <- list(
   # manuscript: the detector's bounds, replaced by the site_info.csv literal
   # wherever one is declared (24 sites). `force_detect` is the detector alone.
   season = c("detect_or_override", "force_detect", "whole_year"),
-  # Which population tStart/tEnd -- the window-skip gate -- are percentiles of.
-  bounds = c("manuscript", "climatology", "halfhourly"),
+  # Which population tStart/tEnd -- the window-skip gate -- are percentiles of,
+  # when the selected column is the measured one. `climatology_uptake` is the
+  # manuscript's: the detector's DOY climatology over the NEE-uptake days.
+  ts_bounds_measured = c("climatology_uptake", "climatology", "halfhourly"),
+  # The same, when the selected column is an estimate (`TS_linear`,
+  # `TS_memfill`). `climatology_uptake` is not offered: it comes out of season
+  # detection on the measured column and cannot be computed for any other.
+  ts_bounds_estimated = c("climatology", "halfhourly"),
   # Which soil-water column the direct model uses.
   swc = c("site_info", "era5"),
   # How years are qualified. One strategy so far; see docs for `computed`.
@@ -45,7 +51,8 @@ RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 #'
 #' By analogy with `DEV_SITES`: chosen to exercise every strategy that has its
 #' own code path, not to be exhaustive.
-#'   original    site_info ts, manuscript bounds, detected season -- the oracle
+#'   original    site_info ts, manuscript bounds (climatology_uptake/halfhourly),
+#'               detected season -- the oracle
 #'   memfill_hh  measured_or_best_fill ts (needs the per-site fill), halfhourly bounds
 #'   noseason    whole_year season
 #' `memfill_sensor` is not in the sample: it is the first recipe with its own
@@ -66,14 +73,19 @@ DEV_RECIPES <- c("original", "memfill_hh", "noseason")
 #'   names.
 #' @param ts Strategy for the `ts` axis; one of `RECIPE_AXES$ts`.
 #' @param season Strategy for the `season` axis; one of `RECIPE_AXES$season`.
-#' @param bounds Strategy for the `bounds` axis; one of `RECIPE_AXES$bounds`.
+#' @param ts_bounds_measured Strategy for the `ts_bounds_measured` axis; one of
+#'   `RECIPE_AXES$ts_bounds_measured`.
+#' @param ts_bounds_estimated Strategy for the `ts_bounds_estimated` axis; one of
+#'   `RECIPE_AXES$ts_bounds_estimated`.
 #' @param swc Strategy for the `swc` axis; one of `RECIPE_AXES$swc`.
 #' @param year_qc Strategy for the `year_qc` axis; one of `RECIPE_AXES$year_qc`.
 #' @param ts_qc Strategy for the `ts_qc` axis; one of `RECIPE_AXES$ts_qc`.
 #' @return The recipe: a named list of `recipe_id` and one strategy per axis.
-new_recipe <- function(recipe_id, ts, season, bounds, swc, year_qc, ts_qc) {
+new_recipe <- function(recipe_id, ts, season, ts_bounds_measured, ts_bounds_estimated,
+                       swc, year_qc, ts_qc) {
   r <- list(
-    recipe_id = recipe_id, ts = ts, season = season, bounds = bounds,
+    recipe_id = recipe_id, ts = ts, season = season,
+    ts_bounds_measured = ts_bounds_measured, ts_bounds_estimated = ts_bounds_estimated,
     swc = swc, year_qc = year_qc, ts_qc = ts_qc
   )
   validate_recipe(r)
@@ -114,8 +126,9 @@ validate_recipe <- function(r) {
 original_recipe <- function() {
   new_recipe(
     "original",
-    ts = "site_info", season = "detect_or_override", bounds = "manuscript", swc = "site_info",
-    year_qc = "site_info", ts_qc = "manuscript"
+    ts = "site_info", season = "detect_or_override",
+    ts_bounds_measured = "climatology_uptake", ts_bounds_estimated = "halfhourly",
+    swc = "site_info", year_qc = "site_info", ts_qc = "manuscript"
   )
 }
 
@@ -165,7 +178,8 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
          nrow(row), " matches). Available: ", paste(dat$recipe_id, collapse = ", "), ".")
   }
   r <- new_recipe(
-    row$recipe_id, ts = row$ts, season = row$season, bounds = row$bounds,
+    row$recipe_id, ts = row$ts, season = row$season,
+    ts_bounds_measured = row$ts_bounds_measured, ts_bounds_estimated = row$ts_bounds_estimated,
     swc = row$swc, year_qc = row$year_qc, ts_qc = row$ts_qc
   )
   # The CSV's `original` row must agree with the code's definition, or the

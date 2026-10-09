@@ -152,46 +152,42 @@ ts_bounds_climatology <- function(ts, doy, gStart, gEnd) {
 
 #' Both definitions for one column, as `ts_bounds` rows
 #'
-#' `is_manuscript` is set by the caller, since the measured column's manuscript
-#' row is not one of these.
+#' The measured column's third row, `climatology_uptake`, is not one of these:
+#' it is written by `prep_nee_ac()` from season detection.
 #'
 #' @param ts Soil temperature, one value per half-hour.
 #' @param doy Day of year of each value of `ts`, possibly wrapped.
 #' @param gStart,gEnd Growing-season bounds, as (possibly wrapped) DOY, inclusive.
 #' @param ts_col Name of the soil-temperature column `ts` came from.
 #' @return A two-row tibble with `ts_col`, `definition` (`"halfhourly"`,
-#'   `"climatology"`), `is_manuscript` (`FALSE`), `tStart` and `tEnd`.
+#'   `"climatology"`), `tStart` and `tEnd`.
 ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
   hh <- ts_bounds(ts, doy, gStart, gEnd)
   cl <- ts_bounds_climatology(ts, doy, gStart, gEnd)
   tibble::tibble(
     ts_col = ts_col,
     definition = c("halfhourly", "climatology"),
-    is_manuscript = FALSE,
     tStart = c(hh$tStart, cl$tStart),
     tEnd = c(hh$tEnd, cl$tEnd)
   )
 }
 
-#' The bounds for a TS column
-#'
-#' Its manuscript row (flagged `is_manuscript`), or the row under `definition`.
+#' The bounds for a TS column under one definition
 #'
 #' @param ts_bounds A site's `ts_bounds` table: one row per soil-temperature
 #'   column and bounds definition.
 #' @param ts_col Name of the soil-temperature column.
-#' @param definition `"halfhourly"`, `"climatology"` or `"manuscript"` (the
-#'   measured column's manuscript row only), or `NULL` for whichever row is
-#'   flagged `is_manuscript`.
+#' @param definition `"halfhourly"`, `"climatology"` or `"climatology_uptake"`
+#'   (the measured column only).
 #' @return A list of `tStart` and `tEnd`. Errors unless exactly one row
 #'   matches.
-ts_bounds_for <- function(ts_bounds, ts_col, definition = NULL) {
-  keep <- if (is.null(definition)) ts_bounds[["is_manuscript"]] else ts_bounds[["definition"]] == definition
+ts_bounds_for <- function(ts_bounds, ts_col, definition) {
+  keep <- ts_bounds[["definition"]] == definition
   row <- ts_bounds[ts_bounds[["ts_col"]] == ts_col & keep, ]
   if (nrow(row) != 1) {
     stop(
       "Expected exactly one bounds row for ", shQuote(ts_col),
-      if (!is.null(definition)) paste0(" under the ", shQuote(definition), " definition"),
+      " under the ", shQuote(definition), " definition",
       ", found ", nrow(row), ". Available: ",
       paste(unique(ts_bounds[["ts_col"]]), collapse = ", "), "."
     )

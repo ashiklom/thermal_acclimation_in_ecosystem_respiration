@@ -220,8 +220,8 @@ selection_matches_oracle <- function(sd_, site_info, name_site) {
     orig$ac, orig$nightNEE, name_site, fg$gStart, fg$gEnd, fg$tStart, fg$tEnd
   )
   # The pipeline's side is `get_soil_temperature()` under the manuscript
-  # recipe: one call, `TS_final` out. Its bounds are the selected column's
-  # manuscript ones, which is what the oracle recomputes.
+  # recipe: one call, `TS_final` out. Its bounds are the manuscript's for the
+  # selected column, which is what the oracle recomputes.
   soil <- get_soil_temperature(sd_, site_info, recipe = original_recipe())
   stopifnot(identical(soil$meta$ts_col, ts_col))
 
@@ -238,7 +238,7 @@ selection_matches_oracle <- function(sd_, site_info, name_site) {
     # And the measured bounds must still equal the ones feature_gs reports, so
     # the default path is unchanged for the 82 sites that take it.
     measured_bounds = same(
-      ts_bounds_for(sd_$ts_bounds, "TS_measured"),
+      ts_bounds_for(sd_$ts_bounds, "TS_measured", "climatology_uptake"),
       list(tStart = fg$tStart, tEnd = fg$tEnd)
     )
   )

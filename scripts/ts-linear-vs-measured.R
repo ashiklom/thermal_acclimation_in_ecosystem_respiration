@@ -71,12 +71,12 @@ site_metrics <- function(name_site) {
   # *selected* column -- so selecting a column moves both the window means and
   # the bounds they are tested against. See scripts/ts-bounds-definition.R for
   # why most of that movement is not the column at all.
-  bnd <- function(col) {
-    r <- tryCatch(ts_bounds_for(sd_$ts_bounds, col), error = function(e) NULL)
+  bnd <- function(col, definition) {
+    r <- tryCatch(ts_bounds_for(sd_$ts_bounds, col, definition), error = function(e) NULL)
     if (is.null(r)) list(tStart = NA_real_, tEnd = NA_real_) else r
   }
-  bm <- bnd("TS_measured")
-  bl <- bnd("TS_linear")
+  bm <- bnd("TS_measured", "climatology_uptake")
+  bl <- bnd("TS_linear", "halfhourly")
   win <- window_cells(gs, gStart, gEnd, "TS_measured") |>
     dplyr::select("iwindow", "growing_year", m_mean = "cell_mean") |>
     dplyr::inner_join(

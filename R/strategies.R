@@ -141,30 +141,30 @@ choose_window_season <- function(recipe, feature_gs) {
 #' Choose the soil-temperature bounds under a recipe
 #'
 #' Which population tStart/tEnd -- the window-skip gate -- are percentiles of.
+#' The recipe names one definition for the measured column
+#' (`ts_bounds_measured`) and one for an estimate (`ts_bounds_estimated`):
 #'
-#'   manuscript   each column's own definition, as the manuscript had it: the
-#'                `manuscript` row (day-of-year climatology over the NEE uptake
-#'                days, floored; docs/recipes.md) for the measured column and
-#'                the raw half-hourly values for the regressed one. Finding F4.
-#'   climatology  the day-of-year-climatology definition for whichever column
-#'                is selected.
-#'   halfhourly   the half-hourly definition for whichever column is selected.
+#'   climatology_uptake  day-of-year climatology over the NEE-uptake days,
+#'                       floored (docs/recipes.md); measured column only.
+#'   climatology         day-of-year climatology over [gStart, gEnd].
+#'   halfhourly          raw half-hourly values over [gStart, gEnd].
+#'
+#' The manuscript is `climatology_uptake` for the measured column and
+#' `halfhourly` for the regressed one, so its gate changes definition with the
+#' column. Finding F4.
 #'
 #' @param recipe A recipe: one strategy per `RECIPE_AXES` axis.
 #' @param ts_bounds The site's bounds table: one row per soil-temperature
-#'   column and definition, with `tStart`, `tEnd` and `is_manuscript`.
+#'   column and definition, with `tStart` and `tEnd`.
 #' @param ts_col Name of the selected soil-temperature column.
-#' @return A list of `tStart` and `tEnd` (degrees C) and `reason`, a string for
-#'   provenance.
+#' @return A list of `tStart` and `tEnd` (degrees C), `definition`, and
+#'   `reason`, a string for provenance.
 choose_bounds <- function(recipe, ts_bounds, ts_col) {
-  b <- switch(
-    recipe$bounds,
-    manuscript = ts_bounds_for(ts_bounds, ts_col),
-    climatology = ts_bounds_for(ts_bounds, ts_col, definition = "climatology"),
-    halfhourly = ts_bounds_for(ts_bounds, ts_col, definition = "halfhourly"),
-    stop("Unknown bounds strategy ", shQuote(recipe$bounds))
-  )
-  b$reason <- paste0(recipe$bounds, " definition for ", ts_col)
+  axis <- if (identical(ts_col, "TS_measured")) "ts_bounds_measured" else "ts_bounds_estimated"
+  definition <- recipe[[axis]]
+  b <- ts_bounds_for(ts_bounds, ts_col, definition)
+  b$definition <- definition
+  b$reason <- paste0(axis, " = ", definition, " for ", ts_col)
   b
 }
 

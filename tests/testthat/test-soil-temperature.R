@@ -20,8 +20,7 @@ fake_site_data <- function(verdict = "GOOD", ts_source = "sensor") {
     feature_gs = tibble::tibble(site_ID = "X-Tst", gStart = 120, gEnd = 280),
     ts_bounds = tibble::tibble(
       ts_col = c("TS_measured", "TS_measured", "TS_measured", "TS_linear", "TS_linear"),
-      definition = c("manuscript", "halfhourly", "climatology", "halfhourly", "climatology"),
-      is_manuscript = c(TRUE, FALSE, FALSE, TRUE, FALSE),
+      definition = c("climatology_uptake", "halfhourly", "climatology", "halfhourly", "climatology"),
       tStart = c(5, 1, 2, 0, 3), tEnd = c(20, 25, 19, 26, 22)
     ),
     ts_qc = tibble::tibble(site_ID = "X-Tst", verdict = verdict, flags = ""),
@@ -45,7 +44,7 @@ fake_fill <- function(n_ac = 3, n_night = 2) {
     ac_ts = c(40, 50, 60)[seq_len(n_ac)], night_ts = c(40, 50)[seq_len(n_night)],
     ts_bounds = tibble::tibble(
       ts_col = "TS_memfill", definition = c("halfhourly", "climatology"),
-      is_manuscript = FALSE, tStart = c(-2, -1), tEnd = c(30, 29)
+      tStart = c(-2, -1), tEnd = c(30, 29)
     )
   )
 }
@@ -64,8 +63,8 @@ test_that("exactly one soil-temperature column leaves, on both tables", {
 test_that("the bounds belong to the column that was selected", {
   meas <- get_soil_temperature(fake_site_data(), fake_site_info("TS_measured"), original_recipe())
   lin <- get_soil_temperature(fake_site_data(), fake_site_info("TS_linear"), original_recipe())
-  # `original` is `manuscript` bounds: the measured column's manuscript row and
-  # the regressed column's half-hourly row -- the manuscript's asymmetry.
+  # `original` takes the measured column's uptake-day row and the regressed
+  # column's half-hourly row -- the manuscript's asymmetry.
   expect_equal(c(meas$meta$tStart, meas$meta$tEnd), c(5, 20))
   expect_equal(c(lin$meta$tStart, lin$meta$tEnd), c(0, 26))
   expect_equal(lin$ac$TS_final, c(9, 10, 11))
@@ -87,7 +86,7 @@ test_that("the metadata row says what TS_final is and why", {
   expect_identical(m$ts_verdict, "GOOD")
   expect_false(m$ts_measured_synthetic)
   expect_true(is.na(m$fill_method))
-  expect_identical(m$bounds_strategy, "manuscript")
+  expect_identical(m$bounds_definition, "halfhourly")
 })
 
 test_that("the fill is attached only when selected, and its rows must align", {
