@@ -57,20 +57,6 @@ BRM_PRIORS_DIRECT <- BRM_PRIORS_TOTAL +
 
 ################################################################################
 
-#' One growing year's result in one window, filled in as the loop goes
-#'
-#' `status` records why a year produced no fit, which a row of NAs cannot.
-#'
-#' @return A named list of NA scalars: `status`, `nobsv`, `extend_days`, the
-#'   model parameters (`alpha`, `beta`, `C0`, `k2`, `Hs`), `TS` and `ERref`.
-empty_year_result <- function() {
-  list(
-    status = NA_character_, nobsv = NA_integer_, extend_days = NA_integer_,
-    alpha = NA_real_, beta = NA_real_, C0 = NA_real_, k2 = NA_real_, Hs = NA_real_,
-    TS = NA_real_, ERref = NA_real_
-  )
-}
-
 #' Whether a year's subset needs a wider window
 #'
 #' Whether a year's subset is too small, or too narrow in soil temperature to
@@ -682,7 +668,13 @@ fit_tas_window <- function(
       }
     }
 
-    year_result <- empty_year_result()
+    # Filled in as the loop goes; `status` records why a year produced no fit,
+    # which a row of NAs cannot.
+    year_result <- list(
+      status = NA_character_, nobsv = NA_integer_, extend_days = NA_integer_,
+      alpha = NA_real_, beta = NA_real_, C0 = NA_real_, k2 = NA_real_, Hs = NA_real_,
+      TS = NA_real_, ERref = NA_real_
+    )
 
     year_result$nobsv <- nrow(data_subset)
     year_result$extend_days <- as.integer(extend_days)
