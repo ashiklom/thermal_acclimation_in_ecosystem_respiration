@@ -1,27 +1,21 @@
-# Known issues
+# Known issues and questions
 
-These are known and deliberately left alone,
-either because they are inherited from the manuscript's code
-or because fixing them would change results and needs its own decision.
+These are known and deliberately left alone, either because they are inherited from the manuscript's code or because fixing them would change results and needs its own decision.
 Each entry says where it lives.
 
 ## Pipeline
 
 - **`DOY_gpp` at wrapped sites.**
-  At the two sites whose growing year crosses New Year (AU-Tum, ZA-Kru),
-  the previous day's daytime NEE is looked up as `DOY - 1`.
-  That drops, or mis-joins, the 1 January mornings:
-  0.13 % of AU-Tum's record, in the direct model only.
-  Inherited from the original workflows.
-  See docs/growing-year.md, "One known residual".
+  At the two sites whose growing year crosses New Year (AU-Tum, ZA-Kru), the previous day's daytime NEE is looked up as `DOY - 1`.
+  That drops, or mis-joins, the 1 January mornings: 0.13 % of AU-Tum's record, in the direct model only.
+  Inherited from the original workflows. See docs/growing-year.md, "One known residual".
+
 - **AmeriFlux reprocessings go undetected.**
-  AmeriFlux publishes no BASE version string,
-  so the update scan compares published year spans.
+  AmeriFlux publishes no BASE version string, so the update scan compares published year spans.
   A reprocessing that re-releases the same years is not noticed.
   See docs/data-provenance.md.
 - **Revised overlapping years are ignored.**
-  The splice keeps the earlier product wherever two overlap,
-  so a new release changes a record only after the earlier product's end.
+  The splice keeps the earlier product wherever two overlap, so a new release changes a record only after the earlier product's end.
 - **New site-years skip manual QC.**
   `year_removed`, `gStart`/`gEnd` and the gap thresholds were set by hand
   against the manuscript's years.
