@@ -26,19 +26,23 @@ In addition, the prep includes the following options for soil water content (SWC
 
 Beside the tables, `site_data` carries:
 
-- `ts_bounds`: for every TS column, the 2.5/97.5 percentiles of growing-season soil temperature under both definitions (`climatology`, `halfhourly`), with the manuscript's row for that column flagged `is_manuscript`; for `TS_measured` that row is a third definition, `manuscript` (how it differs from `climatology`: [`recipes.md`](recipes.md#bounds))
+- `ts_bounds`: the 2.5/97.5 percentiles of growing-season soil temperature, one row per TS column and definition:
+    - `climatology` --- calculated from the growing season climatology (i.e., calculate the average for each DOY over all years; then, take the quantiles of that)
+    - `halfhourly` --- the quantiles of the raw half-hourly values within the growing season bounds
+    - `climatology_uptake` (`TS_measured` only) --- the manuscript's: like `climatology`, but over the NEE-uptake days and with some quirks (see [`recipes.md`](recipes.md#ts_bounds_measured--ts_bounds_estimated))
+    - `TS_memfill`'s rows come with the column, from the `site_fill` target, and are added by `get_soil_temperature()`.
 - `ts_qc`: the quality verdict on `TS_measured`
 - `ts_provenance`: stage A's provenance row
-- `feature_gs`: the growing season and year count.
+- `feature_gs`: the growing season, year count, and `TS_measured`'s `climatology_uptake` bounds.
 
 **Bounds travel with the column.**
 `tStart`/`tEnd` gate the window-skip test in `fit_tas_window()`, and they are percentiles of a particular column, so selecting a column and selecting its bounds are one act.
-The two definitions differ a lot:
-- the measured column's manuscript bounds are percentiles of the *day-of-year climatology*, from `detect_growing_season()`;
-- the regressed column's are percentiles of the raw *half-hourly* values.
+The manuscript used different definitions for different columns, and they differ a lot:
+- the measured column's bounds are percentiles of the *day-of-year climatology* over the NEE-uptake days, from `detect_growing_season()` (`climatology_uptake`);
+- the regressed column's are percentiles of the raw *half-hourly* values (`halfhourly`).
 
 Across 44 sites the half-hourly band is 16.7 °C wide against the climatology's 10.0 °C, before the column changes at all ([`ts-rework.html`](ts-rework.html), F4).
-The `bounds` recipe axis applies one definition throughout.
+A recipe names the definition for each kind of column, `ts_bounds_measured` and `ts_bounds_estimated`; setting them equal applies one definition throughout.
 
 ## Why two stages
 
@@ -112,7 +116,7 @@ and a metadata row.
 
 It selects a candidate under the recipe's `ts` strategy (`choose_ts_col()`),
 attaches `TS_memfill` if that is what was chosen,
-looks up the bounds belonging to the selected column under the recipe's `bounds` strategy,
+looks up the bounds belonging to the selected column under the recipe's `ts_bounds_measured` or `ts_bounds_estimated` strategy,
 and drops every other candidate —
 `TS_measured`, `TS_linear`, `TS_memfill` —
 so that "no branching downstream" is a checkable property rather than a convention.
