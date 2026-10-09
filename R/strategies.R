@@ -8,14 +8,16 @@
 
 #' Which soil-temperature column the model is fitted on
 #'
-#'   site_info    the declaration in site_info.csv (`ts_col`): the manuscript.
-#'   screen_best  measured soil temperature unless the quality verdict is BAD,
-#'                in which case the TS ~ TA regression the manuscript would
-#'                have used anyway. Isolates "stop discarding good sensors".
-#'   memory_fill  as screen_best, but a BAD sensor is replaced by the
-#'                blocked-CV-selected reconstruction instead of TS ~ TA.
-#'                Needs the per-site `fill` target; falls back to TS_linear,
-#'                and says so, when it is missing.
+#'   site_info              the declaration in site_info.csv (`ts_col`): the
+#'                          manuscript.
+#'   measured_or_lm         measured soil temperature unless the quality
+#'                          verdict is BAD, in which case the TS ~ TA
+#'                          regression the manuscript would have used anyway.
+#'                          Isolates "stop discarding good sensors".
+#'   measured_or_best_fill  as measured_or_lm, but a BAD sensor is replaced by
+#'                          the blocked-CV-selected reconstruction instead of
+#'                          TS ~ TA. Needs the per-site `fill` target; falls
+#'                          back to TS_linear, and says so, when it is missing.
 #'
 #' @param recipe A recipe: one strategy per `RECIPE_AXES` axis.
 #' @param site_data The site's step-01 result, from `prep_nee_ac()`.
@@ -31,12 +33,12 @@ choose_ts_col <- function(recipe, site_data, site_info, fill = NULL) {
       ts_col = site_info[["ts_col"]],
       reason = "declared in site_info.csv"
     ),
-    screen_best = if (identical(verdict, "BAD")) {
+    measured_or_lm = if (identical(verdict, "BAD")) {
       list(ts_col = "TS_linear", reason = paste("screen verdict BAD:", ts_flags(site_data)))
     } else {
       list(ts_col = "TS_measured", reason = paste("screen verdict", verdict))
     },
-    memory_fill = if (identical(verdict, "BAD")) {
+    measured_or_best_fill = if (identical(verdict, "BAD")) {
       if (fill_available(fill)) {
         list(ts_col = "TS_memfill",
              reason = paste0("screen verdict BAD: ", ts_flags(site_data),

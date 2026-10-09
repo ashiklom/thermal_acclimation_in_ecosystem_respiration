@@ -243,7 +243,7 @@ get_priors <- function(model_data, direct = FALSE, fs = fit_settings("full")) {
 #'   which windows and years survive, and why. Deterministic, seconds.
 #' @param recipe The methodology, resolved through R/strategies.R; NULL is the
 #'   manuscript's.
-#' @param fill The site's `fill_soil_temp()` result (memory_fill recipes).
+#' @param fill The site's `fill_soil_temp()` result (measured_or_best_fill recipes).
 #' @param fit_profile Sampler profile; see `fit_settings()`.
 #' @return A list of `outcome` (one-row tibble with `TAS`, `TASp`, `RMSE` and
 #'   `R2`; `NULL` when `fit = FALSE`), `outcome_siteyear` (one row per window

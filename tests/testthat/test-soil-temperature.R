@@ -139,10 +139,10 @@ test_that("a variant keeps step 01's column where ts_source leaves no truth", {
   expect_identical(scr$meta$ts_col, "TS_measured")
   expect_true(scr$meta$ts_refused)
   expect_match(scr$meta$ts_reason, "reconstructed")
-  expect_match(scr$meta$ts_reason, "screen_best strategy wanted TS_linear")
+  expect_match(scr$meta$ts_reason, "measured_or_lm strategy wanted TS_linear")
   expect_equal(scr$ac$TS_final, c(4, 5, 6))
 
-  # memory_fill: the fill is not attached even though one is supplied.
+  # measured_or_best_fill: the fill is not attached even though one is supplied.
   mf <- get_soil_temperature(bad, synthetic, get_recipe("memfill"), fill = fake_fill())
   expect_identical(mf$meta$ts_col, "TS_measured")
   expect_true(mf$meta$ts_refused)

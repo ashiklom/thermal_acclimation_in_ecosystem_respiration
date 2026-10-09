@@ -17,7 +17,7 @@ RECIPES_CSV <- file.path("data-core", "recipes.csv")
 #' right.
 RECIPE_AXES <- list(
   # Which soil-temperature column the model is fitted on.
-  ts = c("site_info", "screen_best", "memory_fill"),
+  ts = c("site_info", "measured_or_lm", "measured_or_best_fill"),
   # The day-of-year span the moving windows are laid over. `detect_or_override` is the
   # manuscript: the detector's bounds, replaced by the site_info.csv literal
   # wherever one is declared (24 sites). `force_detect` is the detector alone.
@@ -46,7 +46,7 @@ RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
 #' By analogy with `DEV_SITES`: chosen to exercise every strategy that has its
 #' own code path, not to be exhaustive.
 #'   original    site_info ts, manuscript bounds, detected season -- the oracle
-#'   memfill_hh  memory_fill ts (needs the per-site fill), halfhourly bounds
+#'   memfill_hh  measured_or_best_fill ts (needs the per-site fill), halfhourly bounds
 #'   noseason    whole_year season
 #' `memfill_sensor` is not in the sample: it is the first recipe with its own
 #' step 01, so it doubles a run's step-01 cost. THERMAL_RECIPES names it.

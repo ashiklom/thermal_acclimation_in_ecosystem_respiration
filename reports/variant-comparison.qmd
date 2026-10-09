@@ -363,7 +363,7 @@ if (is.null(ns) || !nrow(ns)) {
 ## The soil-temperature reconstruction each site would use
 
 Blocked cross-validation (leave-one-year-out) of every candidate method at each
-site. The winner is the method a `memory_fill` recipe attaches as `TS_memfill`
+site. The winner is the method a `measured_or_best_fill` recipe attaches as `TS_memfill`
 wherever the quality screen fails the measured column. `lm_ta_pos` is the
 pipeline's pre-existing `TS ~ TA` default, scored on the same folds.
 
@@ -401,7 +401,7 @@ if (!is.null(fill_cv) && nrow(fill_cv)) {
 
 ## Soil-temperature quality screen
 
-The verdict the `screen_best` and `memory_fill` strategies branch on, per site,
+The verdict the `measured_or_lm` and `measured_or_best_fill` strategies branch on, per site,
 with the diagnostics behind it. `amp_ratio` is the diurnal amplitude of soil
 temperature over that of air (buried soil damps; near 1 is not soil);
 `lag_unwrapped` is the phase lag in hours (soil lags air; zero is not soil).

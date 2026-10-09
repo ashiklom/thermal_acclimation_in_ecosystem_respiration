@@ -116,18 +116,18 @@ test_that("choose_ts_col follows the recipe and the verdict", {
   expect_identical(choose_ts_col(r("site_info"), fake_site_data("BAD"), si)$ts_col, "TS_linear")
   expect_identical(choose_ts_col(r("site_info"), fake_site_data("GOOD"), si)$ts_col, "TS_linear")
 
-  expect_identical(choose_ts_col(r("screen_best"), fake_site_data("GOOD"), si)$ts_col, "TS_measured")
-  expect_identical(choose_ts_col(r("screen_best"), fake_site_data("BAD", "airlike"), si)$ts_col, "TS_linear")
-  expect_match(choose_ts_col(r("screen_best"), fake_site_data("BAD", "airlike"), si)$reason, "airlike")
+  expect_identical(choose_ts_col(r("measured_or_lm"), fake_site_data("GOOD"), si)$ts_col, "TS_measured")
+  expect_identical(choose_ts_col(r("measured_or_lm"), fake_site_data("BAD", "airlike"), si)$ts_col, "TS_linear")
+  expect_match(choose_ts_col(r("measured_or_lm"), fake_site_data("BAD", "airlike"), si)$reason, "airlike")
 
-  expect_identical(choose_ts_col(r("memory_fill"), fake_site_data("GOOD"), si, fake_fill())$ts_col, "TS_measured")
-  expect_identical(choose_ts_col(r("memory_fill"), fake_site_data("BAD"), si, fake_fill())$ts_col, "TS_memfill")
+  expect_identical(choose_ts_col(r("measured_or_best_fill"), fake_site_data("GOOD"), si, fake_fill())$ts_col, "TS_measured")
+  expect_identical(choose_ts_col(r("measured_or_best_fill"), fake_site_data("BAD"), si, fake_fill())$ts_col, "TS_memfill")
   # no usable fill: fall back, and say so
-  fb <- choose_ts_col(r("memory_fill"), fake_site_data("BAD"), si, fake_fill(ok = FALSE))
+  fb <- choose_ts_col(r("measured_or_best_fill"), fake_site_data("BAD"), si, fake_fill(ok = FALSE))
   expect_identical(fb$ts_col, "TS_linear")
   expect_match(fb$reason, "fell back")
   expect_match(fb$reason, "too few rows")
-  fb2 <- choose_ts_col(r("memory_fill"), fake_site_data("BAD"), si, NULL)
+  fb2 <- choose_ts_col(r("measured_or_best_fill"), fake_site_data("BAD"), si, NULL)
   expect_identical(fb2$ts_col, "TS_linear")
 })
 
@@ -233,7 +233,7 @@ test_that("the stuck-value test exempts the zero curtain", {
 # ------------------------------------------- the TS_memfill path, end to end
 #
 # None of the six development sites earns a BAD verdict, so in a dev run the
-# `memory_fill` recipes select the measured column at every site and the code
+# `measured_or_best_fill` recipes select the measured column at every site and the code
 # that attaches `TS_memfill` never executes. It is exercised here instead,
 # with the verdict forced, on the structure-only path -- which is everything
 # except the Stan call, and the Stan call is column-agnostic.
@@ -244,7 +244,7 @@ test_that("the stuck-value test exempts the zero curtain", {
 for (reader_ in names(READER_SITES)) {
   name_site_ <- READER_SITES[[reader_]]
 
-test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is BAD, and falls back without a fill",
+test_that(sprintf("[%s/%s] measured_or_best_fill attaches TS_memfill when the verdict is BAD, and falls back without a fill",
                   reader_, name_site_), {
   skip_if(!site_raw_available(name_site_), paste(name_site_, "not downloaded"))
   si <- get_site_info(name_site_)
@@ -289,7 +289,7 @@ test_that(sprintf("[%s/%s] memory_fill attaches TS_memfill when the verdict is B
   expect_identical(r2$settings$ts_col, "TS_linear")
   expect_match(r2$settings$ts_reason, "fell back")
 
-  # screen_best with a BAD verdict is the regression too.
+  # measured_or_lm with a BAD verdict is the regression too.
   r3 <- suppressWarnings(suppressMessages(
     fit_tas_site(bad, si, fit = FALSE, recipe = get_recipe("screened"))
   ))

@@ -76,7 +76,7 @@ per_prep <- function(p) {
       attach_era5_swc(site_prep, site_era5_swc(site_prep, site_name, path = era5_swc_file, table = era5_swc_tbl)),
       format = "qs"
     ),
-    # The soil-temperature reconstruction the `memory_fill` recipes read.
+    # The soil-temperature reconstruction the `measured_or_best_fill` recipes read.
     tar_target(site_fill, fill_soil_temp(site_data, site_info), format = "qs"),
     if (nrow(prep_fits)) {
       tar_map(

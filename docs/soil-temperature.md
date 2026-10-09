@@ -16,8 +16,8 @@ Both data frames have _all_ of the following soil temperature columns, even if t
 The fit gets to choose which column it uses:
 
 - `TS_measured`: stage A's column: the sensor, repaired or reconstructed per site
-- `TS_linear`: a `TS ~ TA` regression, built at **every** site (even if unused)
-- `TS_memfill`: the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `get_soil_temperature()` under a `memory_fill` recipe
+- `TS_linear`: a `TS ~ TA` linear regression, built at **every** site (even if unused)
+- `TS_memfill`: the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `get_soil_temperature()` under a `measured_or_best_fill` recipe
 
 In addition, the prep includes the following options for soil water content (SWC), which are used by direct fits: 
 
@@ -125,7 +125,7 @@ every variant alternative to `TS_measured` is a model fitted *to* it —
 `TS_linear` regresses it on air temperature,
 `TS_memfill` is cross-validated against it —
 and either returns a function of the same predictors wearing a skill score.
-So under `screen_best` and `memory_fill`,
+So under `measured_or_lm` and `measured_or_best_fill`,
 stage B keeps `TS_measured` at those 27 sites,
 records `ts_refused = TRUE`,
 and `fill_soil_temp()` declines before doing any work.

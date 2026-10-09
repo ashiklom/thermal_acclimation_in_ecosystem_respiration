@@ -347,7 +347,7 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     dt_minutes = as.numeric(dt, units = "mins")
   )
 
-  # The verdict the `screen_best`/`memory_fill` strategies branch on.
+  # The verdict the `measured_or_lm`/`measured_or_best_fill` strategies branch on.
   ts_qc <- ts_quality(ac_final, dt_hours = as.numeric(dt, units = "hours")) |>
     dplyr::mutate(site_ID = name_site, .before = 1)
 
