@@ -17,7 +17,8 @@ This allows the manuscript's specific logic --- and any number of alternatives -
 |---|---|---|---|
 | `ts` | `site_info` · `measured_or_lm` · `measured_or_best_fill` | fit | which soil-temperature column the model is fitted on |
 | `season` | `detect_or_override` · `force_detect` · `whole_year` | fit | the day-of-year span the moving windows are laid over |
-| `bounds` | `manuscript` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of |
+| `ts_bounds_measured` | `climatology_uptake` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of, when `TS_measured` is selected |
+| `ts_bounds_estimated` | `climatology` · `halfhourly` | fit | the same, when an estimate (`TS_linear`, `TS_memfill`) is selected |
 | `swc` | `site_info` · `era5` | fit | which soil-water column the direct model uses |
 | `year_qc` | `site_info` | prep | how years are qualified |
 | `ts_qc` | `manuscript` · `sensor` | prep | which soil-temperature column step 01 qualifies years on and screens |
