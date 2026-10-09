@@ -91,7 +91,8 @@ growing_year_of <- function(doy, year) {
 #' @return A list: `gStart` and `gEnd`, the season bounds as (possibly wrapped)
 #'   DOY after the site_info.csv overrides; `tStart` and `tEnd`, the 2.5/97.5
 #'   percentiles of DOY-mean soil temperature over the qualifying DOYs;
-#'   `gStart_detected` and `gEnd_detected`, the bounds before the overrides.
+#'   `gStart_detected` and `gEnd_detected`, the bounds before the overrides;
+#'   and `uptake_doy`, the qualifying DOYs themselves (the NEE-uptake days).
 detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
                                   nee_threshold) {
   nee_threshold <- match.arg(nee_threshold, c("capped", "uncapped", "zero"))
@@ -144,7 +145,8 @@ detect_growing_season <- function(ac, site_info, nee_col = "NEE", ts_col = "TS",
 
   list(
     gStart = gStart, gEnd = gEnd, tStart = tStart, tEnd = tEnd,
-    gStart_detected = gStart_detected, gEnd_detected = gEnd_detected
+    gStart_detected = gStart_detected, gEnd_detected = gEnd_detected,
+    uptake_doy = tmp$DOY
   )
 }
 

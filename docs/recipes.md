@@ -18,7 +18,7 @@ This allows the manuscript's specific logic --- and any number of alternatives -
 | `ts` | `site_info` · `measured_or_lm` · `measured_or_best_fill` | fit | which soil-temperature column the model is fitted on |
 | `season` | `detect_or_override` · `force_detect` · `whole_year` | fit | the day-of-year span the moving windows are laid over |
 | `ts_bounds_measured` | `climatology_uptake` · `climatology` · `halfhourly` | fit | which population `tStart`/`tEnd` (the window-skip gate) are percentiles of, when `TS_measured` is selected |
-| `ts_bounds_estimated` | `climatology` · `halfhourly` | fit | the same, when an estimate (`TS_linear`, `TS_memfill`) is selected |
+| `ts_bounds_estimated` | `climatology_uptake` · `climatology` · `halfhourly` | fit | the same, when an estimate (`TS_linear`, `TS_memfill`) is selected |
 | `swc` | `site_info` · `era5` | fit | which soil-water column the direct model uses |
 | `year_qc` | `site_info` | prep | how years are qualified |
 | `ts_qc` | `manuscript` · `sensor` | prep | which soil-temperature column step 01 qualifies years on and screens |
@@ -129,25 +129,24 @@ never moves.
 `memfill_sensor` is the registry's example;
 it is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
 
-### `bounds`
+### `ts_bounds_measured` / `ts_bounds_estimated`
 
-- `manuscript` — each column's own definition as the manuscript had it:
-  the `manuscript` row (below) for the measured column,
-  the raw half-hourly values for the regressed and reconstructed ones.
-  F4 measured the resulting inconsistency:
-  the admissible band is 10.0 °C wide on measured data under one definition
-  and 16.7 °C under the other,
-  *before the column changes at all*.
-- `climatology` / `halfhourly` — one definition applied to whichever column is selected.
-  Step 01 produces both for every column (`ts_bounds_rows()`),
-  so this is a lookup, not a computation.
+The bounds are percentiles of the selected column, so a recipe names one definition for each kind of column:
+`ts_bounds_measured` when the selected column is `TS_measured`, and `ts_bounds_estimated` when it is `TS_linear` or `TS_memfill`.
 
-Each column's row for the `manuscript` strategy is flagged `is_manuscript` in `ts_bounds`.
-For `TS_linear` and `TS_memfill` that is their `halfhourly` row.
-For `TS_measured` it is a row of its own, `definition = "manuscript"`,
-which is *not* the `climatology` row,
-though both are 2.5/97.5 percentiles of day-of-year mean soil temperature.
-The `manuscript` row is the `tStart`/`tEnd` of `detect_growing_season()`, and differs in:
+- `climatology_uptake` — the manuscript's definition for measured soil temperature (below).
+- `climatology` — 2.5/97.5 percentiles of the day-of-year climatology over `[gStart, gEnd]`.
+- `halfhourly` — 2.5/97.5 percentiles of the raw half-hourly values over `[gStart, gEnd]`.
+
+The manuscript is `climatology_uptake` / `halfhourly`, so its gate changes definition along with the column.
+F4 measured the resulting inconsistency: the admissible band is 10.0 °C wide on measured data under one definition and 16.7 °C under the other, *before the column changes at all*.
+Setting both axes to the same definition removes it.
+`uptake_all` does so with the manuscript's measured-column definition, so the measured-column sites are exactly as under `original` and only the `TS_linear` sites move;
+`memfill_hh` does so with `halfhourly`, which moves every site.
+
+Every column carries a row per definition in `ts_bounds` (`ts_bounds_rows()`), so this is a lookup, not a computation.
+The `climatology_uptake` row is *not* the `climatology` row, though both are 2.5/97.5 percentiles of day-of-year mean soil temperature.
+For `TS_measured` it is the `tStart`/`tEnd` of `detect_growing_season()`, and differs in:
 
 - **Days.** It averages over the NEE-uptake days
   (DOYs whose multi-year mean NEE is below the cut-off), not over `[gStart, gEnd]`.
@@ -163,10 +162,16 @@ The `manuscript` row is the `tStart`/`tEnd` of `detect_growing_season()`, and di
   and at 2 °C at `SITES_TS_MIN_2C` (CH-Dav, US-Ha1, US-GLE).
   `climatology` is not floored.
 
-Because it depends on NEE, the detected season and site rules,
-it is not a function of the column,
-so `prepare_site_data()` writes it directly rather than through `ts_bounds_rows()`.
-It cannot be recomputed for any other column.
+Because it is computed on the whole record inside season detection,
+`prep_nee_ac()` writes the measured row directly rather than through `ts_bounds_rows()`.
+
+An estimate's `climatology_uptake` row (`ts_bounds_climatology_uptake()`) uses the same uptake days
+(`detect_growing_season()` returns them as `uptake_doy`, and `site_data` carries them)
+and the same floors.
+It differs from the measured row in **years** only:
+an estimate exists only for the years step 01 kept,
+so its climatology averages over those rather than the whole record.
+On the same data the two definitions agree exactly (pinned in `test-recipes.R`).
 
 ### `swc`
 

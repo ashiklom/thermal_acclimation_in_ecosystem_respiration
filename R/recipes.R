@@ -27,9 +27,9 @@ RECIPE_AXES <- list(
   # manuscript's: the detector's DOY climatology over the NEE-uptake days.
   ts_bounds_measured = c("climatology_uptake", "climatology", "halfhourly"),
   # The same, when the selected column is an estimate (`TS_linear`,
-  # `TS_memfill`). `climatology_uptake` is not offered: it comes out of season
-  # detection on the measured column and cannot be computed for any other.
-  ts_bounds_estimated = c("climatology", "halfhourly"),
+  # `TS_memfill`). An estimate's `climatology_uptake` uses the measured
+  # column's uptake days but only the years step 01 kept.
+  ts_bounds_estimated = c("climatology_uptake", "climatology", "halfhourly"),
   # Which soil-water column the direct model uses.
   swc = c("site_info", "era5"),
   # How years are qualified. One strategy so far; see docs for `computed`.

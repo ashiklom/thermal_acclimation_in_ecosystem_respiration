@@ -21,9 +21,8 @@ test_that("the CSV's original row agrees with original_recipe()", {
 })
 
 test_that("an unknown strategy or a bad id fails by name", {
-  # The uptake-day climatology exists only for the measured column.
   bad_bounds <- get_recipe("original")
-  bad_bounds$ts_bounds_estimated <- "climatology_uptake"
+  bad_bounds$ts_bounds_estimated <- "uptake"
   expect_error(validate_recipe(bad_bounds), "ts_bounds_estimated")
 
   expect_error(
@@ -188,6 +187,7 @@ test_that("ts_bounds_for resolves a column under a named definition", {
   expect_identical(ts_bounds_for(tb, "TS_linear", "climatology"), list(tStart = 3, tEnd = 22))
   # The uptake-day row is not a second `climatology` row.
   expect_identical(ts_bounds_for(tb, "TS_measured", "climatology"), list(tStart = 4, tEnd = 21))
+  # An estimate has an uptake-day row only if it was built with the uptake days.
   expect_error(ts_bounds_for(tb, "TS_linear", "climatology_uptake"), "found 0")
   expect_error(ts_bounds_for(tb, "TS_memfill", "halfhourly"), "TS_memfill")
   expect_error(ts_bounds_for(tb, "TS_measured", "lunar"), "lunar")
@@ -222,6 +222,28 @@ test_that("the climatology band is narrower than the half-hourly one on the same
   hh <- rows[rows$definition == "halfhourly", ]
   cl <- rows[rows$definition == "climatology", ]
   expect_lt(cl$tEnd - cl$tStart, hh$tEnd - hh$tStart)
+  expect_setequal(rows$definition, c("halfhourly", "climatology"))
+})
+
+test_that("an estimate's uptake-day bounds use the detector's days and floor", {
+  set.seed(2)
+  doy <- rep(rep(1:365, each = 48), 3)
+  ts <- 8 - 12 * cos(2 * pi * doy / 365) + rnorm(length(doy), 0, 1)
+  nee <- 2 * cos(2 * pi * doy / 365) + rnorm(length(doy), 0, 0.5)
+  ac <- data.frame(DOY = doy, NEE = nee, TS = ts)
+  si <- list(site_ID = "X-Tst", gStart = NA, gEnd = NA)
+  gs <- detect_growing_season(ac, si, nee_threshold = "uncapped")
+  expect_true(all(gs$uptake_doy >= 1 & gs$uptake_doy <= 365))
+  # On the same data, it is the detector's own tStart/tEnd: the measured
+  # column's row differs only in the years it sees.
+  up <- ts_bounds_climatology_uptake(ts, doy, gs$uptake_doy, floor = -Inf)
+  expect_equal(up$tStart, unname(gs$tStart))
+  expect_equal(up$tEnd, unname(gs$tEnd))
+  expect_identical(ts_bounds_climatology_uptake(ts - 100, doy, gs$uptake_doy, floor = 0)$tStart, 0)
+  expect_identical(ts_bounds_floor("CH-Dav"), TS_MIN_VALID)
+  expect_identical(ts_bounds_floor("US-Kon"), 0)
+  rows <- ts_bounds_rows(ts, doy, gs$gStart, gs$gEnd, "TS_linear", uptake_doy = gs$uptake_doy)
+  expect_setequal(rows$definition, c("halfhourly", "climatology", "climatology_uptake"))
 })
 
 # ------------------------------------------------------------- verdict
@@ -281,7 +303,7 @@ test_that(sprintf("[%s/%s] measured_or_best_fill attaches TS_memfill when the ve
   expect_length(fill$ac_ts, nrow(sd_$ac))
   expect_length(fill$night_ts, nrow(sd_$nightNEE))
   expect_false(fill$truth_synthetic)   # both sites' soil temperature is measured
-  expect_setequal(fill$ts_bounds$definition, c("halfhourly", "climatology"))
+  expect_setequal(fill$ts_bounds$definition, c("halfhourly", "climatology", "climatology_uptake"))
 
   bad <- sd_
   bad$ts_qc$verdict <- "BAD"

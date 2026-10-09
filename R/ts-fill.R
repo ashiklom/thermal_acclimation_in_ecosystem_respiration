@@ -338,7 +338,7 @@ ts_reconstruction_metrics <- function(gs, truth, pred, gStart, gEnd, min_obs_day
 #' the strategy falls back, recording why.
 #'
 #' @param site_data The site's prepared data (`prep_nee_ac()`): `ac`, `nightNEE`,
-#'   `feature_gs` and `ts_provenance`.
+#'   `feature_gs`, `uptake_doy` and `ts_provenance`.
 #' @param site_info One row of the site declaration table.
 #' @param blocking Name of the cross-validation blocking scheme (`ts_fill_blocks()`).
 #' @param max_train Cap on training rows per fit.
@@ -415,7 +415,10 @@ fill_soil_temp <- function(site_data, site_info, blocking = "year",
   night_ts <- dplyr::left_join(night[, key], lookup, by = key)$TS_memfill
   if (length(night_ts) != nrow(night)) return(fail("nightNEE alignment produced duplicate rows"))
 
-  bounds <- ts_bounds_rows(ac_ts, ac$DOY, gStart, gEnd, "TS_memfill")
+  bounds <- ts_bounds_rows(
+    ac_ts, ac$DOY, gStart, gEnd, "TS_memfill",
+    uptake_doy = site_data[["uptake_doy"]], floor = ts_bounds_floor(name_site)
+  )
 
   # A zero out-of-fold RMSE means the "measured" column is a function of the
   # predictors; returned, but labelled `degenerate` in `settings`.

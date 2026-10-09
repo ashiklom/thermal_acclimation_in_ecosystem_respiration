@@ -150,25 +150,67 @@ ts_bounds_climatology <- function(ts, doy, gStart, gEnd) {
   )
 }
 
-#' Both definitions for one column, as `ts_bounds` rows
+#' The uptake-day-climatology definition of the bounds, for an estimate
 #'
-#' The measured column's third row, `climatology_uptake`, is not one of these:
-#' it is written by `prep_nee_ac()` from season detection.
+#' The manuscript's definition for the measured column, applied to another one:
+#' average each DOY, keep the NEE-uptake days from `detect_growing_season()`,
+#' take the 2.5/97.5 percentiles of those means, floor `tStart`. The measured
+#' column's own row comes from the detector, on the whole record; this one sees
+#' only the years step 01 kept, since that is all an estimate exists for.
+#'
+#' @param ts Soil temperature, one value per half-hour.
+#' @param doy Day of year of each value of `ts`, possibly wrapped.
+#' @param uptake_doy The NEE-uptake days, as `detect_growing_season()` returns
+#'   them.
+#' @param floor Lower limit on `tStart` (degrees C), from `ts_bounds_floor()`.
+#' @return A list of `tStart` and `tEnd`.
+ts_bounds_climatology_uptake <- function(ts, doy, uptake_doy, floor) {
+  keep <- doy %in% uptake_doy & !is.na(ts)
+  clim <- tapply(ts[keep], doy[keep], mean)
+  list(
+    tStart = max(unname(quantile(clim, 0.025, na.rm = TRUE)), floor),
+    tEnd = unname(quantile(clim, 0.975, na.rm = TRUE))
+  )
+}
+
+#' The floor on a site's uptake-day `tStart`
+#'
+#' @param name_site Site ID.
+#' @return `TS_MIN_VALID` at `SITES_TS_MIN_2C`, 0 elsewhere.
+ts_bounds_floor <- function(name_site) {
+  if (name_site %in% SITES_TS_MIN_2C) TS_MIN_VALID else 0.0
+}
+
+#' Every definition for one column, as `ts_bounds` rows
+#'
+#' The measured column's `climatology_uptake` row is not written here: it is
+#' the detector's, written by `prep_nee_ac()`. Pass `uptake_doy` for an
+#' estimate to get one.
 #'
 #' @param ts Soil temperature, one value per half-hour.
 #' @param doy Day of year of each value of `ts`, possibly wrapped.
 #' @param gStart,gEnd Growing-season bounds, as (possibly wrapped) DOY, inclusive.
 #' @param ts_col Name of the soil-temperature column `ts` came from.
-#' @return A two-row tibble with `ts_col`, `definition` (`"halfhourly"`,
-#'   `"climatology"`), `tStart` and `tEnd`.
-ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
+#' @param uptake_doy The NEE-uptake days, or `NULL` for no `climatology_uptake`
+#'   row.
+#' @param floor Lower limit on the `climatology_uptake` `tStart`.
+#' @return A tibble with `ts_col`, `definition` (`"halfhourly"`,
+#'   `"climatology"`, and `"climatology_uptake"` given `uptake_doy`), `tStart`
+#'   and `tEnd`.
+ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col, uptake_doy = NULL, floor = 0.0) {
   hh <- ts_bounds(ts, doy, gStart, gEnd)
   cl <- ts_bounds_climatology(ts, doy, gStart, gEnd)
-  tibble::tibble(
+  rows <- tibble::tibble(
     ts_col = ts_col,
     definition = c("halfhourly", "climatology"),
     tStart = c(hh$tStart, cl$tStart),
     tEnd = c(hh$tEnd, cl$tEnd)
+  )
+  if (is.null(uptake_doy)) return(rows)
+  up <- ts_bounds_climatology_uptake(ts, doy, uptake_doy, floor)
+  dplyr::bind_rows(
+    rows,
+    tibble::tibble(ts_col = ts_col, definition = "climatology_uptake", tStart = up$tStart, tEnd = up$tEnd)
   )
 }
 
@@ -177,8 +219,7 @@ ts_bounds_rows <- function(ts, doy, gStart, gEnd, ts_col) {
 #' @param ts_bounds A site's `ts_bounds` table: one row per soil-temperature
 #'   column and bounds definition.
 #' @param ts_col Name of the soil-temperature column.
-#' @param definition `"halfhourly"`, `"climatology"` or `"climatology_uptake"`
-#'   (the measured column only).
+#' @param definition `"halfhourly"`, `"climatology"` or `"climatology_uptake"`.
 #' @return A list of `tStart` and `tEnd`. Errors unless exactly one row
 #'   matches.
 ts_bounds_for <- function(ts_bounds, ts_col, definition) {

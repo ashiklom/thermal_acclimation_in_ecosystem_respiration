@@ -138,8 +138,9 @@ prep_fluxnet_family <- function(site_info, ts_qc = "manuscript") {
 #'   `nightNEE`, the quality-filtered nighttime observations in the good growing
 #'   years; `feature_gs`, a one-row tibble of the growing season and
 #'   temperature bounds; `ts_bounds`, the temperature bounds per TS column and
-#'   definition; `ts_qc`, the soil temperature verdict; and `ts_provenance`,
-#'   stage A's provenance row. With `era5`, `ac` and `nightNEE` also carry
+#'   definition; `uptake_doy`, the NEE-uptake days the season was detected
+#'   from; `ts_qc`, the soil temperature verdict; and `ts_provenance`, stage
+#'   A's provenance row. With `era5`, `ac` and `nightNEE` also carry
 #'   `SWC_era5`.
 prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_CSV) {
   name_site <- site_info[["site_ID"]]
@@ -266,9 +267,10 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   # together. The measured column also gets the manuscript's row: the
   # DOY-climatology percentiles over the NEE-uptake days from
   # `detect_growing_season()`, floored at 0 C (2 C at SITES_TS_MIN_2C). It is
-  # not a pure function of the column, so it is written here rather than by
-  # `ts_bounds_rows()`, under its own definition, `climatology_uptake`: how it
-  # differs from the generic `climatology` row is in docs/recipes.md.
+  # computed on the whole record, before years are disqualified, so it is
+  # written here rather than by `ts_bounds_rows()`, under its own definition,
+  # `climatology_uptake`: how it differs from the generic `climatology` row,
+  # and from an estimate's `climatology_uptake` row, is in docs/recipes.md.
   ts_bounds_tbl <- dplyr::bind_rows(
     tibble::tibble(
       ts_col = "TS_measured",
@@ -300,7 +302,10 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
   if (!is.null(substituted)) {
     ac_final[["TS_linear"]] <- substituted$ac[["TS"]]
     measured_final[["TS_linear"]] <- substituted$nightNEE[["TS"]]
-    linear_rows <- ts_bounds_rows(ac_final[["TS_linear"]], ac_final[["DOY"]], gStart, gEnd, "TS_linear")
+    linear_rows <- ts_bounds_rows(
+      ac_final[["TS_linear"]], ac_final[["DOY"]], gStart, gEnd, "TS_linear",
+      uptake_doy = gs$uptake_doy, floor = ts_bounds_floor(name_site)
+    )
     stopifnot(isTRUE(all.equal(
       linear_rows$tStart[linear_rows$definition == "halfhourly"], substituted$tStart
     )))
@@ -353,6 +358,8 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
     nightNEE = measured_final,
     feature_gs = feature_gs,
     ts_bounds = ts_bounds_tbl,
+    # For an estimate's `climatology_uptake` bounds: `fill_soil_temp()` reads it.
+    uptake_doy = gs$uptake_doy,
     ts_qc = ts_qc,
     # What stage A did to make `TS_measured`: one row, from the reader.
     ts_provenance = prepared[["ts_provenance"]]

@@ -29,8 +29,9 @@ Beside the tables, `site_data` carries:
 - `ts_bounds`: the 2.5/97.5 percentiles of growing-season soil temperature, one row per TS column and definition:
     - `climatology` --- calculated from the growing season climatology (i.e., calculate the average for each DOY over all years; then, take the quantiles of that)
     - `halfhourly` --- the quantiles of the raw half-hourly values within the growing season bounds
-    - `climatology_uptake` (`TS_measured` only) --- the manuscript's: like `climatology`, but over the NEE-uptake days and with some quirks (see [`recipes.md`](recipes.md#ts_bounds_measured--ts_bounds_estimated))
+    - `climatology_uptake` --- the manuscript's for `TS_measured`: like `climatology`, but over the NEE-uptake days and with some quirks (see [`recipes.md`](recipes.md#ts_bounds_measured--ts_bounds_estimated)); an estimate's version sees only the years step 01 kept
     - `TS_memfill`'s rows come with the column, from the `site_fill` target, and are added by `get_soil_temperature()`.
+- `uptake_doy`: the NEE-uptake days the season was detected from, for the estimates' `climatology_uptake` rows
 - `ts_qc`: the quality verdict on `TS_measured`
 - `ts_provenance`: stage A's provenance row
 - `feature_gs`: the growing season, year count, and `TS_measured`'s `climatology_uptake` bounds.

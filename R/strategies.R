@@ -145,7 +145,7 @@ choose_window_season <- function(recipe, feature_gs) {
 #' (`ts_bounds_measured`) and one for an estimate (`ts_bounds_estimated`):
 #'
 #'   climatology_uptake  day-of-year climatology over the NEE-uptake days,
-#'                       floored (docs/recipes.md); measured column only.
+#'                       floored (docs/recipes.md).
 #'   climatology         day-of-year climatology over [gStart, gEnd].
 #'   halfhourly          raw half-hourly values over [gStart, gEnd].
 #'

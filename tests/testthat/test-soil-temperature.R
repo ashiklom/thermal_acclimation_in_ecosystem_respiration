@@ -75,6 +75,21 @@ test_that("the bounds belong to the column that was selected", {
   expect_equal(hh$ac$TS_final, c(4, 5, 6))
 })
 
+test_that("uptake_all takes the uptake-day row for an estimate as well", {
+  sd_ <- fake_site_data()
+  sd_$ts_bounds <- dplyr::bind_rows(
+    sd_$ts_bounds,
+    tibble::tibble(ts_col = "TS_linear", definition = "climatology_uptake", tStart = 7, tEnd = 18)
+  )
+  r <- get_recipe("uptake_all")
+  meas <- get_soil_temperature(sd_, fake_site_info("TS_measured"), r)
+  lin <- get_soil_temperature(sd_, fake_site_info("TS_linear"), r)
+  # The measured column is exactly as under `original`; only the estimate moves.
+  expect_equal(c(meas$meta$tStart, meas$meta$tEnd), c(5, 20))
+  expect_equal(c(lin$meta$tStart, lin$meta$tEnd), c(7, 18))
+  expect_identical(lin$meta$bounds_definition, "climatology_uptake")
+})
+
 test_that("the metadata row says what TS_final is and why", {
   soil <- get_soil_temperature(fake_site_data(), fake_site_info("TS_linear"), original_recipe())
   m <- soil$meta
