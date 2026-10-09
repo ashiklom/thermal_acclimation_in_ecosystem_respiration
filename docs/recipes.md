@@ -1,22 +1,15 @@
 # Methodology recipes
 
-A **recipe** is a named set of choices, one *strategy* per *axis*,
-that a run of the pipeline is made under.
-`sites × recipes × models` is the grid `_targets.R` builds,
-so that the manuscript's logic and any number of alternatives to it
-are produced by the same code in the same run
-and can be compared row for row.
+A **recipe** is a named set of choices, one *strategy* per *axis*, that a run of the pipeline is made under.
+The `_targets.R` pipeline runs (or at least attempts) the complete factorial combination of `sites x recipes x models`.
+This allows the manuscript's specific logic --- and any number of alternatives --- to be produced by the same code and cleanly compared.
 
 - Registry: `data-core/recipes.csv` — one row per recipe.
-- Machinery: `R/recipes.R` (validation, scoping),
-  `R/strategies.R` (what each choice resolves to).
+- Machinery: `R/recipes.R` (validation, scoping), `R/strategies.R` (what each choice resolves to).
 - Report: `reports/variant-comparison.qmd`, a `tar_quarto` target.
-- Background: [`ts-rework.html`](ts-rework.html) (findings F1–F13)
-  is the analysis these options come from;
+- Background: [`ts-rework.html`](ts-rework.html) (findings F1–F13) is the analysis these options come from;
   [`ts-variants.html`](ts-variants.html) is the log of building them.
-- Soil temperature specifically —
-  the two stages, `ts_source`, the estimator registry and the refuse rule —
-  is [docs/soil-temperature.md](soil-temperature.md).
+- Soil temperature specifically --- the two stages, `ts_source`, the estimator registry and the refuse rule --- is documented in [docs/soil-temperature.md](soil-temperature.md).
 
 ## The axes
 
