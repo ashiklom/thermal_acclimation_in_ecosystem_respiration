@@ -205,30 +205,21 @@ A new mechanism is one level in `TS_SOURCES`, one arm in `qualification_soil_tem
 
 ## The `ts_qc` prep axis
 
-`qualification_soil_temperature(input, site_info, ts_qc)`:
-under `manuscript` the arm is the declaration;
-under `sensor` every arm whose result is not measured at every row
-is replaced by the raw declared sensor,
-and the arms that are (`sensor_depth2` at CZ-Stn, `gapfill_pi` at US-NR1/ICh/ICs) still run.
-Qualification, the quality screen and the fill's truth are then all measurements.
-The provenance row records both the declaration (`ts_source`)
-and what ran (`stage_a_arm`, `ts_truth`),
-and **stage B and the fill read the latter** —
-so under `ts_qc = sensor` nothing is refused
-and the fill has a real truth at the 27 sites.
-A site whose raw sensor is too sparse to qualify a year
-fails its own step-01 target and drops from that recipe —
-the honest result, not a fallback.
+As implemented in `R/soil-temperature.R :: qualification_soil_temperature(input, site_info, ts_qc)`.
 
-Because `ts_qc` is a prep axis,
-a recipe with `ts_qc = sensor` has a different prep key from the manuscript's
-and gets its own step 01 and fill per site
-(`site_data_site_info_sensor_*`, `site_fill_site_info_sensor_*` in `_targets.R`),
-which only its fits read.
-The manuscript's (`site_data_site_info_manuscript_*`) —
-what every collector and the `workflows/` scripts consume —
-never moves.
-See [`recipes.md`](recipes.md#ts_qc).
+This determines exactly how `TS_measured` is selected and pre-processed before being to the next steps:
+selecting qualified years, detecting the growing season, and the `TS_linear` or `TS_memfill` procedures.
+It can be either `manuscript` or `sensor`.
+When set to `manuscript`, it is determined by `ts_source` in `site_info.csv`.
+When set to `sensor`, skip any reconstruction steps and use only true measurements (note that `sensor_depth2` or `gapfill_pi` are used as measurements, not reconstructions; see `R/constants.R :: TS_SOURCES` for the mapping).
+
+The provenance row records both the declaration (`ts_source`) and what ran (`stage_a_arm`, `ts_truth`);
+stage B and the fill read the latter (see [the refuse rule](#the-refuse-rule-no-estimate-on-top-of-an-estimate)).
+A site whose raw sensor is too sparse to qualify a year fails its own step-01 target rather than falling back.
+
+As a prep axis, `ts_qc = sensor` gets its own step 01 and fill per site ([`recipes.md`](recipes.md#prep-versus-fit)): `site_data_site_info_sensor_*` and `site_fill_site_info_sensor_*`.
+The manuscript's `site_data_site_info_manuscript_*`, which every collector and the `workflows/` scripts consume, is unaffected.
+See also [`recipes.md`](recipes.md#ts_qc).
 
 ## Soil water
 
