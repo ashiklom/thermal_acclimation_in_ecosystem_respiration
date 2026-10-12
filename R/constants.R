@@ -173,6 +173,11 @@ TS_SOURCES <- c(
   sitespecific_US_BZo = "none"
 )
 
+#' Stage-A input columns a `reconstructed` site may train its estimator on
+#'
+#' `ts_train_col` in site_info.csv; blank means `TS_sensor`.
+TS_TRAIN_COLS <- c("TS_sensor", "TS_depth2", "TS_pi")
+
 #' The site's declared `ts_source`
 #'
 #' @param site_info One row of the site declaration table.

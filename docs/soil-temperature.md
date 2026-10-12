@@ -138,16 +138,10 @@ The `sitespecific_<site_ID>` levels are one-off fixes, not mechanisms another si
 `TS_SOURCES` in `R/constants.R` is that last column: whether *every* row of the column is a sensor reading.
 It is deliberately strict — FI-Sod and US-MBP are "none" because part of their column is derived — and it is what the refuse rule (below) reads, through `ts_measured_truth()`.
 
-The only site names left inside stage A
-are the manuscript's three training-target rules in the `reconstructed` arm:
-DE-Hte trains on the second depth,
-FR-Bil discards soil temperature before 2021,
-FR-Pue before 2016.
+Thanks to these columns, Stage A no longer branches on `site_ID`.
+The one-off fixes are `sitespecific_` arms, and site-specific variations to `reconstructed` sites are declared in `site_info.csv` as `ts_train_col` and `ts_train_start_year` ([`site_info.md`](site_info.md#soil-temperature)).
 
-Stage A's provenance row
-(`site_data$ts_provenance`; `ts_provenance.csv` in the run)
-records `ts_source`, `ts_truth`, `stage_a_estimator`,
-`stage_a_family`, `stage_a_mode`, `stage_a_n_train`, and a note.
+Stage A's provenance row (`site_data$ts_provenance`; `ts_provenance.csv` in the run) records `ts_source`, `ts_truth`, `stage_a_estimator`, `stage_a_family`, `stage_a_mode`, `stage_a_n_train`, and a note.
 
 ## Stage B — `get_soil_temperature()`
 
@@ -335,9 +329,3 @@ It deliberately calls nothing in `R/`.
 Step 01 is cached per site, keyed by a digest of `R/`.
 Sites whose data has changed since the baseline was written are listed,
 and their digests are skipped.
-
-## Future work
-
-- **Declare the three training-target rules** (DE-Hte, FR-Bil, FR-Pue)
-  as site_info columns,
-  and stage A stops testing site names altogether.

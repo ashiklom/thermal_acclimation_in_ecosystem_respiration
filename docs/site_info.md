@@ -1,11 +1,11 @@
 # `site_info.csv`: the site declaration table
 
-`data-core/site_info.csv` has one row per site (117 sites) and 28 columns.
-`get_site_info()` (`R/utils.R`) reads it with a fixed column specification, recodes the `YES`/`NO` columns to logical, and stops if any site's `ts_source` is missing or unknown.
+`data-core/site_info.csv` has one row per site (117 sites) and 30 columns.
+`get_site_info()` (`R/utils.R`) reads it with a fixed column specification, recodes the `YES`/`NO` columns to logical, and stops if any site's `ts_source` is missing or unknown, or if a site that is not `reconstructed` declares a training target.
 In the pipeline it is a file target (`site_info_file`), read once per site into a `site_info` target, so editing a row only invalidates the sites it touches ([`data-provenance.md`](data-provenance.md#how-this-reaches-the-pipeline)).
 
 Several columns are not entered by hand.
-`scripts/revise-site-info.R` rebuilds the file from `data-core/site_info_orig.csv`, and derives `source`, `estimate_ts_method`, `ts_col`, `ts_linear_domain`, `growing_year_start` and `ts_source`, and redeclares `RH`/`VPD` at some sites.
+`scripts/revise-site-info.R` rebuilds the file from `data-core/site_info_orig.csv`, and derives `source`, `estimate_ts_method`, `ts_col`, `ts_linear_domain`, `growing_year_start`, `ts_source`, `ts_train_col` and `ts_train_start_year`, and redeclares `RH`/`VPD` at some sites.
 Edit those columns there, not in the CSV.
 
 **Never used** by the pipeline: `ELEV`, `MAP` and `comment`.
@@ -67,6 +67,8 @@ See [`soil-temperature.md`](soil-temperature.md) for the two stages these feed.
 |---|---|---|
 | `ts_source` | how stage A builds `TS_measured`: one of the levels in `TS_SOURCES` (`R/constants.R`); required; derived | `ts_source()`; `qualification_soil_temperature()` picks its arm from it; the truth check behind the refuse rule. See [the stage A table](soil-temperature.md#stage-a--qualification_soil_temperature) |
 | `estimate_ts_method` | the estimator for `reconstructed` sites: `NETRAD`, `linear regression`, or blank for "TA only"; derived | `ts_estimate_method()`, in `fix_soil_temp()` (stage A) |
+| `ts_train_col` | the stage-A input column a `reconstructed` site's estimator is trained on: one of `TS_TRAIN_COLS` (`R/constants.R`), or blank for `TS_sensor`; `TS_depth2` at DE-Hte only; derived | `fix_soil_temp()` (stage A) |
+| `ts_train_start_year` | first year of the training target at a `reconstructed` site; earlier years are not trained on, though they are still reconstructed; 2021 at FR-Bil, 2016 at FR-Pue; blank means every year; derived | `fix_soil_temp()` (stage A) |
 | `ts_col` | the manuscript's fit column, `TS_measured` or `TS_linear` (35 sites); derived | the `ts = site_info` strategy in `choose_ts_col()` (stage B, [`recipes.md`](recipes.md#ts----soil-temperature-column)). In step 01, a `TS_linear` site stops if its `TS ~ TA` fit fails, where elsewhere the failure is only reported |
 | `ts_linear_domain` | rows the `TS ~ TA` regression behind `TS_linear` is fitted on: `night` (the nighttime table; US-Tw1 only), or blank for `ac` (half-hourly, above freezing); independent of `ts_col`, since `TS_linear` is built at every site; derived | `ts_linear_domain_for()` (`R/soil-temp-columns.R`), in step 01 |
 

@@ -426,17 +426,19 @@ fix_soil_temp <- function(input, site_info) {
   )
   if ("NETRAD" %in% names(input)) data$NETRAD <- input$NETRAD
 
-  # The manuscript's training-target rules: what the estimator is fitted on.
-  if (name_site == "DE-Hte") {
-    # too few data in TS_F_MDS_1, so use TS_F_MDS_2
-    need_input(input, "TS_depth2", site_info, "DE-Hte's training target")
-    data$TS <- input$TS_depth2
-  } else if (name_site == "FR-Bil") {
-    # abnormal Soil temperature data before 2021
-    data$TS[data$YEAR < 2021] <- NA
-  } else if (name_site == "FR-Pue") {
-    data$TS[data$YEAR < 2016] <- NA
+  # The training target: what the estimator is fitted on, as `ts_train_col`
+  # and `ts_train_start_year` in site_info.csv declare (scripts/revise-site-info.R).
+  train_col <- site_info[["ts_train_col"]] %||% NA_character_
+  train_start <- site_info[["ts_train_start_year"]] %||% NA_integer_
+  if (!is.na(train_col)) {
+    need_input(input, train_col, site_info, "the declared training target")
+    data$TS <- input[[train_col]]
   }
+  if (!is.na(train_start)) data$TS[data$YEAR < train_start] <- NA
+  train_note <- c(
+    if (!is.na(train_col)) paste("trained on", train_col),
+    if (!is.na(train_start)) paste("trained on", train_start, "onward")
+  )
   if (all(is.na(data$TS))) {
     stop(
       name_site, " needs reconstructed soil temperature, but has no measured soil ",
@@ -484,7 +486,7 @@ fix_soil_temp <- function(input, site_info) {
     provenance = ts_provenance_row(
       site_info, estimator = estimator_name, family = est$family, mode = "replace",
       n_train = sum(stats::complete.cases(data[, c("TS", est$predictors), drop = FALSE])),
-      note = if (name_site == "DE-Hte") "trained on the second depth" else NA_character_
+      note = if (length(train_note)) paste(train_note, collapse = "; ") else NA_character_
     )
   )
 }

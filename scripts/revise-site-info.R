@@ -64,6 +64,21 @@ ts_source_sites <- tribble(
 
 ts_regression_sites <- c("DE-Hte", "FR-FBn")
 
+# What a `reconstructed` site's estimator is trained on, where it is not the
+# whole shallow sensor record. These were `name_site ==` branches in
+# `fix_soil_temp()`. `ts_train_col` is a stage-A input column (blank means
+# `TS_sensor`); `ts_train_start_year` blanks the training target before that
+# year. Both shape the training data only: the reconstruction still replaces
+# the whole column.
+ts_training_targets <- tribble(
+  ~site_ID, ~ts_train_col, ~ts_train_start_year,
+  # too few data in TS_F_MDS_1, so use TS_F_MDS_2
+  "DE-Hte", "TS_depth2",   NA_integer_,
+  # abnormal soil temperature data before 2021
+  "FR-Bil", NA_character_, 2021L,
+  "FR-Pue", NA_character_, 2016L
+)
+
 # Sites whose growing year does not start on 1 January, and the day of year it
 # starts on instead. `wrap_growing_doy()` shifts everything earlier in the
 # calendar year past DOY 366 so that a season straddling New Year is one
@@ -168,7 +183,8 @@ sites_v2 <- sites |>
     !is.na(.data$ts_source) ~ .data$ts_source,
     TRUE ~ "sensor"
   )) |>
-  select(-"estimate_Ts")
+  select(-"estimate_Ts") |>
+  left_join(ts_training_targets, by = "site_ID")
 
 # A site cannot be both reconstructed and one of the hand-coded arms: the
 # readers apply exactly one, and the declaration has to say which.
@@ -178,6 +194,18 @@ if (length(missing_source) > 0) {
   stop(
     "ts_source_sites names sites that are not in site_info: ",
     paste(missing_source, collapse = ", ")
+  )
+}
+
+# Only the `reconstructed` arm trains an estimator on the sensor record.
+not_reconstructed <- setdiff(
+  ts_training_targets$site_ID,
+  sites_v2$site_ID[sites_v2$ts_source == "reconstructed"]
+)
+if (length(not_reconstructed) > 0) {
+  stop(
+    "ts_training_targets names sites that are not reconstructed: ",
+    paste(not_reconstructed, collapse = ", ")
   )
 }
 

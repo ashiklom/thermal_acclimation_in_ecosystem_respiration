@@ -41,7 +41,7 @@ drop_sentinels <- function(dat) {
 #'
 #' Reads site_info.csv with a fixed column specification, recodes the
 #' `YES`/`NO` columns to logical, and checks that every site declares a known
-#' `ts_source`.
+#' `ts_source` and that only `reconstructed` sites declare a training target.
 #'
 #' @param site_ID Site ID to return, or `NULL` for every site.
 #' @param path Path to site_info.csv. A parameter so the pipeline can hand in
@@ -78,7 +78,9 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
     ts_col = "c",
     ts_linear_domain = "c",
     growing_year_start = "i",
-    ts_source = "c"
+    ts_source = "c",
+    ts_train_col = "c",
+    ts_train_start_year = "i"
   )
 
   dat <- readr::read_csv(path, col_types = site_info_cols)
@@ -100,6 +102,25 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
       path, ": ts_source is missing or unknown at ", paste(bad_source, collapse = ", "),
       ". Levels: ", paste(names(TS_SOURCES), collapse = ", "),
       ". Re-run scripts/revise-site-info.R."
+    )
+  }
+
+  # The training-target columns are read only by the `reconstructed` arm; set
+  # anywhere else they would be silently ignored.
+  bad_train_col <- dat_clean$site_ID[!is.na(dat_clean$ts_train_col) &
+                                       !dat_clean$ts_train_col %in% TS_TRAIN_COLS]
+  if (length(bad_train_col)) {
+    stop(
+      path, ": ts_train_col is unknown at ", paste(bad_train_col, collapse = ", "),
+      ". Columns: ", paste(TS_TRAIN_COLS, collapse = ", "), "."
+    )
+  }
+  stray_train <- dat_clean$site_ID[dat_clean$ts_source != "reconstructed" &
+                                     (!is.na(dat_clean$ts_train_col) | !is.na(dat_clean$ts_train_start_year))]
+  if (length(stray_train)) {
+    stop(
+      path, ": ts_train_col or ts_train_start_year is set at ", paste(stray_train, collapse = ", "),
+      ", which are not reconstructed. Re-run scripts/revise-site-info.R."
     )
   }
 

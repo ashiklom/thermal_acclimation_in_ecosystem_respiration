@@ -363,9 +363,33 @@ test_that("reconstructed routes on estimate_ts_method, gap-fills predictors, and
   ta_only <- run_arm("reconstructed", input)
   expect_identical(ta_only$provenance$stage_a_estimator, "lm_ta_pos")
 
-  # DE-Hte trains on the second depth and the provenance says so
-  hte <- run_arm("reconstructed", input, site_ID = "DE-Hte", estimate_ts_method = "linear regression")
-  expect_match(hte$provenance$stage_a_note, "second depth")
+  expect_true(is.na(ta_only$provenance$stage_a_note))
+})
+
+test_that("reconstructed trains on the declared column and years, and says so", {
+  input <- stage_a_input()
+  reg <- ts_estimators()
+  fit_on <- function(ts, keep = TRUE) {
+    train <- tibble::tibble(TS = ts, TA = input$TA, YEAR = input$YEAR)
+    train$TS[!keep] <- NA
+    reg$lm_ta_pos$predict(reg$lm_ta_pos$fit(train), train)
+  }
+
+  # DE-Hte's rule: the second depth instead of the sensor
+  d2 <- run_arm("reconstructed", input, ts_train_col = "TS_depth2")
+  expect_equal(d2$TS, fit_on(input$TS_depth2))
+  expect_identical(d2$provenance$stage_a_note, "trained on TS_depth2")
+
+  # FR-Bil's and FR-Pue's rule: the sensor's earlier years are not trained on
+  late <- run_arm("reconstructed", input, ts_train_start_year = 2023L)
+  expect_equal(late$TS, fit_on(input$TS_sensor, input$YEAR >= 2023))
+  expect_false(isTRUE(all.equal(late$TS, fit_on(input$TS_sensor))))
+  expect_lt(late$provenance$stage_a_n_train, run_arm("reconstructed", input)$provenance$stage_a_n_train)
+  expect_identical(late$provenance$stage_a_note, "trained on 2023 onward")
+
+  # a declared column the record lacks is refused by name
+  expect_error(run_arm("reconstructed", input[, setdiff(names(input), "TS_depth2")], ts_train_col = "TS_depth2"),
+               "TS_depth2")
 })
 
 test_that("the PI gap-fill is skipped, and says so, when the release has no PI column", {

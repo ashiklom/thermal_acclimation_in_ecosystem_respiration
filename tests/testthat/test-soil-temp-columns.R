@@ -90,6 +90,19 @@ test_that("an unknown or missing ts_source is refused by name", {
   expect_error(ts_source(si), "DE-Tha")
 })
 
+test_that("a training target is refused where it would be ignored or is unknown", {
+  csv <- readr::read_csv(SITE_INFO_CSV, col_types = readr::cols(.default = "c"))
+  path <- withr::local_tempfile(fileext = ".csv")
+  stray <- csv
+  stray$ts_train_start_year[stray$site_ID == "DE-Tha"] <- "2010"
+  readr::write_csv(stray, path, na = "")
+  expect_error(get_site_info(path = path), "DE-Tha.*not reconstructed")
+  unknown <- csv
+  unknown$ts_train_col[unknown$site_ID == "DE-Hte"] <- "TS_deep"
+  readr::write_csv(unknown, path, na = "")
+  expect_error(get_site_info(path = path), "unknown at DE-Hte")
+})
+
 test_that("a sitespecific_ level is refused anywhere but its own site", {
   expect_identical(ts_source(get_site_info("FI-Sod")), "sitespecific_FI_Sod")
   si <- get_site_info("DE-Tha")
@@ -416,6 +429,18 @@ test_that("the reconstruction runs at exactly the manuscript's estimate_Ts sites
     c("US-Ha1", "US-Los", "US-Ho1", "US-Ho2", "US-PFa", "US-SRG", "CA-Man", "US-Ced",
       "FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")
   )
+  # The training-target rules `fix_soil_temp()` used to carry as `name_site ==`
+  # branches, site for site.
+  train <- si[!is.na(si$ts_train_col) | !is.na(si$ts_train_start_year), ]
+  expect_identical(
+    setNames(train$ts_train_col, train$site_ID)[c("DE-Hte", "FR-Bil", "FR-Pue")],
+    c("DE-Hte" = "TS_depth2", "FR-Bil" = NA, "FR-Pue" = NA)
+  )
+  expect_identical(
+    setNames(train$ts_train_start_year, train$site_ID)[c("DE-Hte", "FR-Bil", "FR-Pue")],
+    c("DE-Hte" = NA, "FR-Bil" = 2021L, "FR-Pue" = 2016L)
+  )
+  expect_setequal(train$site_ID, c("DE-Hte", "FR-Bil", "FR-Pue"))
   # Every AmeriFlux one declares the per-site columns the estimator reads;
   # without them `fix_soil_temp()` would select nothing and fail on `TA`.
   est <- si[si$ts_source == "reconstructed", ]
