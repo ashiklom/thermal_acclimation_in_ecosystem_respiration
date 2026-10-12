@@ -223,29 +223,20 @@ See also [`recipes.md`](recipes.md#ts_qc).
 
 ## Soil water
 
-Soil water is not a per-site column,
-because the choice depends on the model as well as the site
-(`default_swc_col()` in R/soil-water-columns.R):
+Soil water is not a per-site column, because the choice depends on the model as well as the site (`default_swc_col()` in R/soil-water-columns.R):
 
 | | total model | direct model |
 |---|---|---|
 | `SWC_use = YES` | `SWC_measured` | `SWC_measured` |
 | `SWC_use = NO` | none (soil water is not in the formula) | `SWC_era5` |
 
-Measured soil water is a requirement where it is used:
-nighttime rows without it are dropped.
+Measured soil water is a requirement where it is used: nighttime rows without it are dropped.
 At DE-Tha that takes 66,874 rows down to 21,821.
-The ERA5 fallback is deliberately *not* filtered on,
-since it is a daily reanalysis with its own gaps.
-The asymmetry is inherited from the original.
 Many `SWC_use = NO` sites still report a soil-water column the analysis discards;
-CH-Dav has 326,351 non-missing values of it.
-So measured and reanalysis soil water can be compared
-through the `swc_col=` override of `fit_tas_site()`.
+for example, CH-Dav has 326,351 non-missing values of it.
+So measured and reanalysis soil water can be compared through the `swc_col=` override of `fit_tas_site()`.
 
-ERA5 is joined on in its own target (`site_prep` → `site_data`),
-clipped to the site's own flux days,
-so that extending the ERA5 file re-runs only the join.
+ERA5 is joined on in its own target (`site_prep` → `site_data`), clipped to the site's own flux days, so that extending the ERA5 file re-runs only the join rather than the entire site prep (which can include expensive fits).
 See docs/data-provenance.md.
 
 ## Ordering, and why it is load-bearing
