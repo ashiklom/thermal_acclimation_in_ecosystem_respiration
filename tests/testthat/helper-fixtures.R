@@ -164,7 +164,7 @@ synthetic_ameriflux <- function(site_info, n = 96) {
   a
 }
 
-# A plausible soil/air temperature pair for the `estimate_Ts` reconstruction,
+# A plausible soil/air temperature pair for the `reconstructed` stage-A arm,
 # written over whatever `synthetic_ameriflux()` put in the site's declared
 # columns. A ramp in every column would make `TS ~ TA` an exact identity and
 # `TA + NETRAD` rank-deficient, so a reconstruction of it proves nothing: this

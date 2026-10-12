@@ -59,7 +59,6 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
     Climate_class = "c",
     MAP = "d",
     source = "c",
-    estimate_Ts = "c",
     year_removed = "c",
     NEE = "c",
     FC = "c",
@@ -86,11 +85,6 @@ get_site_info <- function(site_ID = NULL, path = SITE_INFO_CSV) {
 
   dat_clean <- dat |>
     dplyr::mutate(
-      estimate_Ts = dplyr::recode_values(
-        .data$estimate_Ts,
-        "YES" ~ TRUE,
-        "NO" ~ FALSE
-      ),
       SWC_use = dplyr::recode_values(
         .data$SWC_use,
         "YES" ~ TRUE,

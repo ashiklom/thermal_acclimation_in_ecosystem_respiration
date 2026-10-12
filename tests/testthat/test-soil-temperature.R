@@ -35,7 +35,7 @@ fake_provenance <- function(ts_source = "sensor") {
   )
 }
 fake_site_info <- function(ts_col = "TS_measured", ts_source = "sensor") {
-  list(site_ID = "X-Tst", ts_col = ts_col, estimate_Ts = FALSE, ts_source = ts_source)
+  list(site_ID = "X-Tst", ts_col = ts_col, ts_source = ts_source)
 }
 fake_fill <- function(n_ac = 3, n_night = 2) {
   list(
@@ -259,7 +259,7 @@ stage_a_input <- function(n = 480, seed = 3) {
 }
 stage_a_site <- function(ts_source, ..., site_ID = "X-Tst") {
   base <- list(site_ID = site_ID, source = "FLUXNET", ts_source = ts_source,
-               estimate_Ts = ts_source == "reconstructed", estimate_ts_method = NA_character_,
+               estimate_ts_method = NA_character_,
                netrad_column = NA_character_, TS = "TS_1", TA = "TA_1")
   # `...` overrides rather than appends: a duplicated name would make `[[`
   # return the default and the override silently unused.

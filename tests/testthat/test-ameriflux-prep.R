@@ -135,7 +135,7 @@ test_that("prep_ustar_df returns the table and the RH-conversion decision", {
   }
 })
 
-# ------------------------------------------------ the estimate_Ts sites
+# ------------------------------------------------ the reconstructed sites
 #
 # Eight AmeriFlux sites have no usable measured soil temperature and
 # reconstruct the whole column from air temperature, five of them with net
@@ -145,7 +145,7 @@ test_that("prep_ustar_df returns the table and the RH-conversion decision", {
 # the reader's soil-temperature block selected the per-site soil and air
 # temperature columns without renaming them to `TS`/`TA`, which the gap fill
 # read as "nothing missing" and the fit read as "object 'TA' not found".
-estimate_ts_sites <- (\(si) si$site_ID[si$estimate_Ts &
+estimate_ts_sites <- (\(si) si$site_ID[si$ts_source == "reconstructed" &
   grepl("AmeriFlux_BASE", si$source, fixed = TRUE)])(get_site_info())
 
 test_that("both AmeriFlux estimator branches are represented", {
@@ -180,7 +180,7 @@ test_that("the reader attaches the reconstruction as TS, one row per input row",
   # stage A gap-fills predictors through day-of-year joins internally, where a
   # duplicated key would change the row count without changing the columns.
   si <- get_site_info("US-Ha1")
-  expect_true(si$estimate_Ts)
+  expect_identical(si$ts_source, "reconstructed")
   withr::local_seed(4)
   a <- with_synthetic_soil_signal(synthetic_ameriflux(si, n = 48 * 30), si)
   out <- suppressWarnings(suppressMessages(prep_ustar_df(a, si)))[["ac"]]

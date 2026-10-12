@@ -39,9 +39,10 @@ redeclared_humidity <- tribble(
 
 # What each site's `TS_measured` column actually is -- see `TS_SOURCES` in
 # R/constants.R for the levels and what each means for whether the column can
-# serve as a truth. Every site not named here is `sensor`; every `estimate_Ts`
-# site is `reconstructed` (its estimator is `estimate_ts_method`). Stage A in
-# R/soil-temperature.R dispatches on this column.
+# serve as a truth. Every site not named here is `sensor`; every site
+# site_info_orig.csv marks `estimate_Ts = YES` is `reconstructed` (its estimator
+# is `estimate_ts_method`). Stage A in R/soil-temperature.R dispatches on this
+# column, which is why `estimate_Ts` itself is dropped from the output.
 ts_source_sites <- tribble(
   ~site_ID, ~ts_source,
   "CZ-Stn", "sensor_depth2",
@@ -169,11 +170,12 @@ sites_v2 <- sites |>
     .data$estimate_Ts == "YES" ~ "reconstructed",
     !is.na(.data$ts_source) ~ .data$ts_source,
     TRUE ~ "sensor"
-  ))
+  )) |>
+  select(-"estimate_Ts")
 
 # A site cannot be both reconstructed and one of the hand-coded arms: the
 # readers apply exactly one, and the declaration has to say which.
-stopifnot(!any(ts_source_sites$site_ID %in% sites_v2$site_ID[sites_v2$estimate_Ts == "YES"]))
+stopifnot(!any(ts_source_sites$site_ID %in% sites$site_ID[sites$estimate_Ts == "YES"]))
 missing_source <- setdiff(ts_source_sites$site_ID, sites_v2$site_ID)
 if (length(missing_source) > 0) {
   stop(

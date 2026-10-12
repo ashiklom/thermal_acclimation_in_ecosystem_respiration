@@ -1,6 +1,6 @@
 # `site_info.csv`: the site declaration table
 
-`data-core/site_info.csv` has one row per site (117 sites).
+`data-core/site_info.csv` has one row per site (117 sites) and 28 columns.
 `get_site_info()` (`R/utils.R`) reads it with a fixed column specification, recodes the `YES`/`NO` columns to logical, and stops if any site's `ts_source` is missing or unknown.
 In the pipeline it is a file target (`site_info_file`), read once per site into a `site_info` target, so editing a row only invalidates the sites it touches ([`data-provenance.md`](data-provenance.md#how-this-reaches-the-pipeline)).
 
@@ -10,7 +10,9 @@ Edit those columns there, not in the CSV.
 
 **Never used** by the pipeline: `ELEV`, `MAP` and `comment`.
 `IGBP` and `Climate_class` are read only by the diagnostic script `scripts/ts-qc-validate.R`.
-`estimate_Ts` is read only by `scripts/revise-site-info.R` (to derive `ts_source`) and `scripts/ts-qc-validate.R`.
+
+`site_info_orig.csv` also has an `estimate_Ts` column (`YES` where the manuscript reconstructed soil temperature).
+`revise-site-info.R` turns it into `ts_source = reconstructed` and drops it, so it is not in `site_info.csv`.
 
 ## Site description
 
@@ -65,7 +67,6 @@ See [`soil-temperature.md`](soil-temperature.md) for the two stages these feed.
 |---|---|---|
 | `ts_source` | how stage A builds `TS_measured`: one of the levels in `TS_SOURCES` (`R/constants.R`); required; derived | `ts_source()`; `qualification_soil_temperature()` picks its arm from it; the truth check behind the refuse rule. See [the stage A table](soil-temperature.md#stage-a--qualification_soil_temperature) |
 | `estimate_ts_method` | the estimator for `reconstructed` sites: `NETRAD`, `linear regression`, or blank for "TA only"; derived | `ts_estimate_method()`, in `fix_soil_temp()` (stage A) |
-| `estimate_Ts` | `YES` where the manuscript reconstructed soil temperature | **unused by the pipeline**; `revise-site-info.R` turns it into `ts_source = reconstructed` |
 | `ts_col` | the manuscript's fit column, `TS_measured` or `TS_linear` (35 sites); derived | the `ts = site_info` strategy in `choose_ts_col()` (stage B, [`recipes.md`](recipes.md#ts----soil-temperature-column)). In step 01, a `TS_linear` site stops if its `TS ~ TA` fit fails, where elsewhere the failure is only reported |
 | `ts_linear_domain` | rows the `TS ~ TA` regression is fitted on: `ac` (half-hourly, above freezing) or `night` (the nighttime table; US-Tw1 only); set exactly where `ts_col = TS_linear`; derived | `ts_linear_domain_for()` (`R/soil-temp-columns.R`); blank means `ac` for the diagnostic `TS_linear` at other sites |
 

@@ -149,7 +149,7 @@ SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 #'   borrowed_site  US-Cwt: `TA * 0.647 + 5.14`, coefficients from a neighbour
 #'   lm_ta_recent   US-BZo: `TS ~ TA` fitted on recent years, wholesale
 #'   lm_ta_cold     six AmeriFlux sites: `TS ~ TA` fitted above freezing, wholesale
-#'   reconstructed  the 16 `estimate_Ts` sites: `fix_soil_temp()`'s estimator,
+#'   reconstructed  the 16 sites the manuscript reconstructed: `fix_soil_temp()`'s estimator,
 #'                  named in `estimate_ts_method`, wholesale
 #'
 #' "none" is deliberately strict: a column that is a sensor reading at *most*

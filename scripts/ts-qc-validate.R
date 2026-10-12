@@ -52,7 +52,7 @@ d <- qc |>
   dplyr::rename(qc_column = "ts_col") |>
   dplyr::inner_join(
     dplyr::select(si, "site_ID", "primary", "IGBP", "Climate_class", "LAT",
-                  "ts_col", "estimate_Ts", "reader"),
+                  "ts_col", "ts_source", "reader"),
     by = "site_ID"
   ) |>
   dplyr::filter(.data$qc_column == .data$primary)

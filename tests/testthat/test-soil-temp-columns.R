@@ -57,7 +57,6 @@ test_that("ts_source is the readers' former dispatch, site for site", {
   src <- setNames(si$ts_source, si$site_ID)
   by_source <- function(level) unname(sort(names(src)[src == level]))
 
-  expect_setequal(by_source("reconstructed"), si$site_ID[si$estimate_Ts])
   # The two site lists the AmeriFlux reader used to dispatch on, verbatim.
   expect_setequal(by_source("lm_ta_recent"), "US-BZo")
   expect_setequal(by_source("lm_ta_cold"), c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR"))
@@ -434,18 +433,18 @@ test_that("estimate_ts_method reproduces the estimator site lists verbatim", {
   expect_identical(method == "NETRAD", !is.na(si$netrad_column))
 })
 
-test_that("the reconstruction runs at exactly the estimate_Ts sites", {
-  # `prep_fluxnet_family()` had its own copy of the list too. Both readers now
-  # branch on `estimate_Ts`, so this is the whole population.
+test_that("the reconstruction runs at exactly the manuscript's estimate_Ts sites", {
+  # `prep_fluxnet_family()` had its own copy of the list too. Stage A now
+  # branches on `ts_source`, so this is the whole population.
   si <- get_site_info()
   expect_setequal(
-    si$site_ID[si$estimate_Ts],
+    si$site_ID[si$ts_source == "reconstructed"],
     c("US-Ha1", "US-Los", "US-Ho1", "US-Ho2", "US-PFa", "US-SRG", "CA-Man", "US-Ced",
       "FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")
   )
   # Every AmeriFlux one declares the per-site columns the estimator reads;
   # without them `fix_soil_temp()` would select nothing and fail on `TA`.
-  est <- si[si$estimate_Ts, ]
+  est <- si[si$ts_source == "reconstructed", ]
   reader <- vapply(seq_len(nrow(est)), function(i) site_reader(est[i, ]), "")
   expect_false(any(is.na(est$TS[reader == "ameriflux"])))
   expect_false(any(is.na(est$TA[reader == "ameriflux"])))

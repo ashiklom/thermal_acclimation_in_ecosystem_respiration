@@ -115,7 +115,7 @@ derived in `scripts/revise-site-info.R`:
 | `borrowed_site` | US-Cwt | `TA × 0.647 + 5.14`, a neighbour's coefficients | replace | none |
 | `lm_ta_recent` | US-BZo | `lm_ta_recent`: `TS ~ TA` on years > 2021 above freezing | replace | none |
 | `lm_ta_cold` | 6 AmeriFlux | `lm_ta_pos`: `TS ~ TA` above freezing | replace | none |
-| `reconstructed` | 16 (`estimate_Ts`) | `fix_soil_temp()`: the estimator `estimate_ts_method` names, predictors gap-filled by DOY × time climatology | replace | none |
+| `reconstructed` | 16 (`estimate_Ts` in `site_info_orig.csv`) | `fix_soil_temp()`: the estimator `estimate_ts_method` names, predictors gap-filled by DOY × time climatology | replace | none |
 
 `TS_SOURCES` in `R/constants.R` is that last column:
 whether *every* row of the column is a sensor reading.

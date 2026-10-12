@@ -101,7 +101,7 @@ test_that("fix_soil_temp routes each estimate_ts_method to its registry entry an
     TS_sensor = d$TS, TS_sensor_QC = 0, TA = d$TA, NETRAD = d$NETRAD
   )
   base <- list(site_ID = "X-Tst", source = "FLUXNET", ts_source = "reconstructed",
-               estimate_Ts = TRUE, netrad_column = "NETRAD")
+               netrad_column = "NETRAD")
 
   lin <- suppressMessages(fix_soil_temp(input, c(base, estimate_ts_method = "linear regression")))
   expect_identical(lin$provenance$stage_a_estimator, "lm_ta_netrad")
