@@ -54,30 +54,23 @@ A recipe names the definition for each kind of column, `ts_bounds_measured` and 
 The `climatology_uptake` row is *not* the `climatology` row, though both are 2.5/97.5 percentiles of day-of-year mean soil temperature.
 For `TS_measured` it is the `tStart`/`tEnd` of `detect_growing_season()`, and differs in:
 
-- **Days.** It averages over the NEE-uptake days
-  (DOYs whose multi-year mean NEE is below the cut-off), not over `[gStart, gEnd]`.
+- **Days.** `climatology_uptake` averages over the NEE-uptake days (DOYs whose multi-year mean NEE is below the cut-off), not over `[gStart, gEnd]`.
   The two sets are close but not equal:
-  the season is the 7th uptake day from each end widened by 4 days,
-  so isolated uptake days outside it are counted and weak-uptake days inside it are not;
-  and the uptake days ignore both the TS ≥ 0 tightening of `gStart`
-  and the `gStart`/`gEnd` overrides in `site_info.csv` (24 sites).
-- **Years.** It is computed on the whole record,
-  before disqualified years are dropped;
-  `climatology` is computed on the step-01 output.
-- **Floors.** `tStart` is floored at 0 °C,
-  and at 2 °C at `SITES_TS_MIN_2C` (CH-Dav, US-Ha1, US-GLE).
+  the season `[gStart, gEnd]` is the 7th uptake day from each end widened by 4 days, so isolated uptake days outside it count towards `climatology_uptake` and weak-uptake days inside it do not;
+  and the uptake days ignore both the TS ≥ 0 tightening of `gStart` and the `gStart`/`gEnd` overrides in `site_info.csv` (24 sites).
+  (The TS ≥ 0 tightening and the `site_info.csv` overrides _do_ still apply to `gStart`/`gEnd` themselves.)
+- **Years.** `climatology_uptake` is computed on the whole record, before disqualified years are dropped;
+  `climatology` is computed on the years from the first to the last year step 01 kept (disqualified years inside that span are still included).
+- **Floors.** In `climatology_uptake`, `tStart` is floored at 0 °C, and at 2 °C at `SITES_TS_MIN_2C` (CH-Dav, US-Ha1, US-GLE).
   `climatology` is not floored.
 
-Because it is computed on the whole record inside season detection,
-`prep_nee_ac()` writes the measured row directly rather than through `ts_bounds_rows()`.
+Under `climatology_uptake`, `tStart` / `tEnd` values estimated from `TS_measured` come directly from `detect_growing_season()`, which runs before any years are dropped.
+That's why `prep_nee_ac()` writes it by hand instead of building it with `ts_bounds_rows()` like the other rows.
 
-An estimate's `climatology_uptake` row (`ts_bounds_climatology_uptake()`) uses the same uptake days
-(`detect_growing_season()` returns them as `uptake_doy`, and `site_data` carries them)
-and the same floors.
-It differs from the measured row in **years** only:
-an estimate exists only for the years step 01 kept,
-so its climatology averages over those rather than the whole record.
-On the same data the two definitions agree exactly (pinned in `test-recipes.R`).
+Estimated columns (e.g., `TS_linear`, `TS_memfill`) also get a `climatology_uptake` row, computed by `ts_bounds_climatology_uptake()`.
+It reuses the measured column's uptake days (`uptake_doy`) and the same floors, so the method is the same.
+The only difference is the years: an estimated column only exists from the first to the last year step 01 kept, so its climatology covers that span and not the whole record.
+Given the same data, the two calculations give identical results (tested in `test-recipes.R`).
 
 ## Why two stages
 
