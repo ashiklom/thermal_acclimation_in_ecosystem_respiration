@@ -133,15 +133,10 @@ Which arm runs is **`ts_source` in `site_info.csv`** — one level per mechanism
 | `sitespecific_US_Cwt` | US-Cwt | `TA × 0.647 + 5.14`, a neighbour's coefficients | replace | none |
 | `sitespecific_US_BZo` | US-BZo | `lm_ta_recent`: `TS ~ TA` on years > 2021 above freezing | replace | none |
 
-The `sitespecific_<site_ID>` levels are one-off fixes, not mechanisms another site could adopt;
-`ts_source()` refuses one declared by any site but its own.
+The `sitespecific_<site_ID>` levels are one-off fixes, not mechanisms another site could adopt; `ts_source()` refuses one declared by any site but its own.
 
-`TS_SOURCES` in `R/constants.R` is that last column:
-whether *every* row of the column is a sensor reading.
-It is deliberately strict —
-FI-Sod and US-MBP are "none" because part of their column is derived —
-and it is what the refuse rule (below) reads,
-through `ts_measured_truth()`.
+`TS_SOURCES` in `R/constants.R` is that last column: whether *every* row of the column is a sensor reading.
+It is deliberately strict — FI-Sod and US-MBP are "none" because part of their column is derived — and it is what the refuse rule (below) reads, through `ts_measured_truth()`.
 
 The only site names left inside stage A
 are the manuscript's three training-target rules in the `reconstructed` arm:
