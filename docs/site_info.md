@@ -68,7 +68,7 @@ See [`soil-temperature.md`](soil-temperature.md) for the two stages these feed.
 | `ts_source` | how stage A builds `TS_measured`: one of the levels in `TS_SOURCES` (`R/constants.R`); required; derived | `ts_source()`; `qualification_soil_temperature()` picks its arm from it; the truth check behind the refuse rule. See [the stage A table](soil-temperature.md#stage-a--qualification_soil_temperature) |
 | `estimate_ts_method` | the estimator for `reconstructed` sites: `NETRAD`, `linear regression`, or blank for "TA only"; derived | `ts_estimate_method()`, in `fix_soil_temp()` (stage A) |
 | `ts_col` | the manuscript's fit column, `TS_measured` or `TS_linear` (35 sites); derived | the `ts = site_info` strategy in `choose_ts_col()` (stage B, [`recipes.md`](recipes.md#ts----soil-temperature-column)). In step 01, a `TS_linear` site stops if its `TS ~ TA` fit fails, where elsewhere the failure is only reported |
-| `ts_linear_domain` | rows the `TS ~ TA` regression is fitted on: `ac` (half-hourly, above freezing) or `night` (the nighttime table; US-Tw1 only); set exactly where `ts_col = TS_linear`; derived | `ts_linear_domain_for()` (`R/soil-temp-columns.R`); blank means `ac` for the diagnostic `TS_linear` at other sites |
+| `ts_linear_domain` | rows the `TS ~ TA` regression behind `TS_linear` is fitted on: `night` (the nighttime table; US-Tw1 only), or blank for `ac` (half-hourly, above freezing); independent of `ts_col`, since `TS_linear` is built at every site; derived | `ts_linear_domain_for()` (`R/soil-temp-columns.R`), in step 01 |
 
 ## Soil water
 

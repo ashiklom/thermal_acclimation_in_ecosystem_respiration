@@ -27,12 +27,9 @@ test_that("US-Tw1 is the only site fitted on the nighttime table", {
   expect_equal(si$site_ID[!is.na(si$ts_linear_domain) & si$ts_linear_domain == "night"], "US-Tw1")
 })
 
-test_that("ts_col and ts_linear_domain cannot drift apart", {
+test_that("ts_col names a column step 01 builds", {
   si <- get_site_info()
   expect_true(all(si$ts_col %in% c("TS_measured", "TS_linear")))
-  # A domain without a selection is meaningless; a selection without a domain
-  # has nothing to fit on.
-  expect_equal(is.na(si$ts_linear_domain), si$ts_col == "TS_measured")
 })
 
 test_that("step-01 TA construction and step-02 selection stay disjoint", {
@@ -200,57 +197,27 @@ test_that("bounds are recomputed from the substituted column, over the growing s
   )))
 })
 
-test_that("an undeclared or unknown fit domain fails by name", {
+test_that("an unknown fit domain fails by name", {
   f <- ts_fixture()
-  expect_error(ts_fit_data(f$ac, f$night, NA_character_), "must declare ts_linear_domain")
   expect_error(ts_fit_data(f$ac, f$night, "whole_record"), "Unknown ts_linear_domain")
 })
 
-# ------------------------------- the domain resolver for the diagnostic column
+# ------------------------------------------------------ the domain resolver
 
-test_that("a declared TS_linear site's domain is passed through untouched", {
-  # Including NA. `TS_linear` is now built at every site, so the resolver is
-  # what stands between a half-filled site_info row and a silent default: a
-  # site that *selects* the column and forgets to say which rows to fit on
-  # must still reach `ts_fit_data()`'s error, not quietly get "ac".
-  expect_equal(
-    ts_linear_domain_for(list(ts_col = "TS_linear", ts_linear_domain = "night")),
-    "night"
-  )
-  expect_equal(
-    ts_linear_domain_for(list(ts_col = "TS_linear", ts_linear_domain = "ac")),
-    "ac"
-  )
-  expect_true(is.na(
-    ts_linear_domain_for(list(ts_col = "TS_linear", ts_linear_domain = NA_character_))
-  ))
-})
-
-test_that("a diagnostic TS_linear column defaults to the ac domain", {
-  # At a site that selects measured soil temperature the column is inert
-  # unless a sensitivity run names it, so a missing declaration is expected
-  # rather than an error. "ac" is what 34 of the 35 declared sites use.
-  expect_equal(
-    ts_linear_domain_for(list(ts_col = "TS_measured", ts_linear_domain = NA_character_)),
-    "ac"
-  )
-  # An explicit declaration still wins, so a measured-TS site can be pinned to
-  # the nighttime domain for a comparison without editing this function.
-  expect_equal(
-    ts_linear_domain_for(list(ts_col = "TS_measured", ts_linear_domain = "night")),
-    "night"
-  )
+test_that("a declared domain is used and a blank one means ac", {
+  # Independent of `ts_col`: the column is built at every site.
+  for (ts_col in c("TS_linear", "TS_measured")) {
+    expect_equal(ts_linear_domain_for(list(ts_col = ts_col, ts_linear_domain = "night")), "night")
+    expect_equal(ts_linear_domain_for(list(ts_col = ts_col, ts_linear_domain = "ac")), "ac")
+    expect_equal(ts_linear_domain_for(list(ts_col = ts_col, ts_linear_domain = NA_character_)), "ac")
+  }
 })
 
 test_that("every site in site_info resolves to a usable domain", {
   si <- get_site_info()
   domains <- vapply(seq_len(nrow(si)), function(i) ts_linear_domain_for(si[i, ]), "")
-  expect_true(all(domains %in% c("ac", "night")))
-  # The declared sites keep exactly the domains the CSV gives them, and every
-  # other site gets the default.
-  declared <- si$ts_col == "TS_linear"
-  expect_equal(domains[declared], si$ts_linear_domain[declared])
-  expect_true(all(domains[!declared] == "ac"))
+  expect_equal(si$site_ID[domains == "night"], "US-Tw1")
+  expect_true(all(domains[si$site_ID != "US-Tw1"] == "ac"))
 })
 
 # ------------------------------------- the shared TS ~ TA fit, step-01 form

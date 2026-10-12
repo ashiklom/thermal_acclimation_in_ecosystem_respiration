@@ -4,7 +4,7 @@
 
 #' The rows a site's `TS ~ TA` regression is fitted on
 #'
-#' The rows a site's regression is fitted on (`site_info$ts_linear_domain`):
+#' The rows a site's regression is fitted on, from `ts_linear_domain_for()`:
 #' `ac` above freezing everywhere but US-Tw1, which fits on the nighttime table.
 #' `ac[ac$TA > 0, ]` is verbatim from the original; its NA-TA rows come back
 #' all-NA and `na.omit` drops them, so the coefficients are unaffected.
@@ -13,14 +13,8 @@
 #' @param nightNEE Data frame of the site's nighttime NEE observations.
 #' @param domain `"ac"` or `"night"`, from `ts_linear_domain_for()`.
 #' @return The rows of `ac` with `TA > 0`, or `nightNEE`. Errors if `domain` is
-#'   missing or unknown.
+#'   unknown.
 ts_fit_data <- function(ac, nightNEE, domain) {
-  if (length(domain) != 1 || is.na(domain)) {
-    stop(
-      "A site selected for TS_linear must declare ts_linear_domain; got ",
-      if (length(domain) == 1) "NA" else paste0("length ", length(domain)), "."
-    )
-  }
   switch(
     domain,
     # using data with TA > 0, because we focus on grouping season
@@ -92,18 +86,13 @@ ts_bounds <- function(ts, doy, gStart, gEnd) {
 
 #' The fitting domain for a site's `TS_linear`
 #'
-#' A site that selects it must declare one (returned as is, NA included, so
-#' `ts_fit_data()` rejects a missing one). Elsewhere the column is only a
-#' diagnostic and defaults to `"ac"`, as 34 of the 35 declared sites have it.
+#' `ts_linear_domain` in site_info.csv, else `"ac"`. Independent of `ts_col`:
+#' the column is built at every site, whether or not a fit selects it.
 #'
 #' @param site_info One row of the site declaration table.
-#' @return `"ac"` or `"night"`, or NA for a site that selects `TS_linear`
-#'   without declaring one.
+#' @return `"ac"` or `"night"`.
 ts_linear_domain_for <- function(site_info) {
   domain <- site_info[["ts_linear_domain"]]
-  if (identical(site_info[["ts_col"]], "TS_linear")) {
-    return(domain)
-  }
   if (length(domain) == 1 && !is.na(domain)) domain else "ac"
 }
 
