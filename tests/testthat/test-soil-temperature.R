@@ -35,7 +35,12 @@ fake_provenance <- function(ts_source = "sensor") {
   )
 }
 fake_site_info <- function(ts_col = "TS_measured", ts_source = "sensor") {
-  list(site_ID = "X-Tst", ts_col = ts_col, ts_source = ts_source)
+  list(site_ID = site_declaring(ts_source), ts_col = ts_col, ts_source = ts_source)
+}
+# A `sitespecific_` level only passes `ts_source()` at its own site.
+site_declaring <- function(ts_source) {
+  if (!startsWith(ts_source, "sitespecific_")) return("X-Tst")
+  sub("_", "-", sub("^sitespecific_", "", ts_source))
 }
 fake_fill <- function(n_ac = 3, n_night = 2) {
   list(
@@ -164,7 +169,7 @@ test_that("a variant keeps step 01's column where ts_source leaves no truth", {
   expect_equal(mf$ac$TS_final, c(4, 5, 6))
 
   # The partial cases count as no truth too.
-  for (src in c("recalibrated", "gapfill_ta", "lm_ta_cold", "borrowed_site", "ta_substitute")) {
+  for (src in c("sitespecific_FI_Sod", "sitespecific_US_MBP", "lm_ta_cold", "sitespecific_US_Cwt", "ta_substitute")) {
     r <- get_soil_temperature(fake_site_data("BAD", ts_source = src), fake_site_info(ts_source = src),
                               get_recipe("screened"))
     expect_true(r$meta$ts_refused, info = src)
@@ -257,7 +262,7 @@ stage_a_input <- function(n = 480, seed = 3) {
     TS_pi = ts + 0.1
   )
 }
-stage_a_site <- function(ts_source, ..., site_ID = "X-Tst") {
+stage_a_site <- function(ts_source, ..., site_ID = site_declaring(ts_source)) {
   base <- list(site_ID = site_ID, source = "FLUXNET", ts_source = ts_source,
                estimate_ts_method = NA_character_,
                netrad_column = NA_character_, TS = "TS_1", TA = "TA_1")
@@ -271,7 +276,7 @@ run_arm <- function(ts_source, input = stage_a_input(), ...) {
 
 test_that("every arm returns TS, TS_QC and one provenance row, aligned to the input", {
   input <- stage_a_input()
-  for (src in setdiff(names(TS_SOURCES), "recalibrated")) {
+  for (src in setdiff(names(TS_SOURCES), "sitespecific_FI_Sod")) {
     out <- run_arm(src, input, estimate_ts_method = if (src == "reconstructed") "linear regression" else NA_character_)
     expect_named(out, c("TS", "TS_QC", "provenance"), info = src)
     expect_length(out$TS, nrow(input))
@@ -314,7 +319,7 @@ test_that("the gap-fills touch only the sensor's gaps", {
   expect_identical(pi$TS[gaps], input$TS_pi[gaps])
   expect_identical(pi$provenance$stage_a_mode, "fill_gaps")
 
-  mbp <- run_arm("gapfill_ta", input)
+  mbp <- run_arm("sitespecific_US_MBP", input)
   expect_identical(mbp$TS[!gaps], input$TS_sensor[!gaps])
   expect_equal(mbp$TS[gaps], input$TA[gaps] * 0.3688005 + 5.8670273)   # US-MBP's line
   expect_identical(mbp$provenance$stage_a_family, "fixed:TA")
@@ -325,7 +330,7 @@ test_that("the wholesale regressions are the registry's lines over the whole rec
   reg <- ts_estimators()
   train <- tibble::tibble(TS = input$TS_sensor, TA = input$TA, YEAR = input$YEAR)
 
-  cwt <- run_arm("borrowed_site", input)
+  cwt <- run_arm("sitespecific_US_Cwt", input)
   expect_equal(cwt$TS, input$TA * 0.64718 + 5.13873)
   expect_false(anyNA(cwt$TS))                                # nothing of the sensor survives
   expect_match(cwt$provenance$stage_a_note, "US-xGB")
@@ -336,7 +341,7 @@ test_that("the wholesale regressions are the registry's lines over the whole rec
   expect_identical(cold$provenance$stage_a_family, "lm:TA")
   expect_gt(cold$provenance$stage_a_n_train, 0)
 
-  recent <- run_arm("lm_ta_recent", input)
+  recent <- run_arm("sitespecific_US_BZo", input)
   expect_equal(recent$TS, reg$lm_ta_recent$predict(reg$lm_ta_recent$fit(train), train))
   # fitted on 2023 only, so the coefficients differ from the cold arm's
   expect_false(isTRUE(all.equal(recent$TS, cold$TS)))
@@ -388,7 +393,7 @@ test_that("an arm that needs a column the record lacks fails by name, up front",
 
 test_that("FI-Sod's recalibration is skipped, and says so, when its windows are not in the record", {
   # The fixture is 2019/2023; the recalibration windows are 2001-2006.
-  out <- run_arm("recalibrated", stage_a_input(), site_ID = "FI-Sod")
+  out <- run_arm("sitespecific_FI_Sod", stage_a_input())
   expect_identical(out$TS, stage_a_input()$TS_sensor)
   expect_match(out$provenance$stage_a_note, "skipped")
 })
@@ -431,7 +436,7 @@ test_that("the reader inputs hand over the record's columns under the shared nam
 
 test_that("ts_qc = sensor replaces the derived arms with the raw sensor, and keeps the measured ones", {
   input <- stage_a_input()
-  for (src in c("reconstructed", "lm_ta_cold", "borrowed_site", "ta_substitute", "recalibrated", "gapfill_ta")) {
+  for (src in c("reconstructed", "lm_ta_cold", "sitespecific_US_Cwt", "ta_substitute", "sitespecific_FI_Sod", "sitespecific_US_MBP")) {
     out <- suppressMessages(qualification_soil_temperature(
       input, stage_a_site(src, estimate_ts_method = "linear regression"), ts_qc = "sensor"
     ))

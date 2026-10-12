@@ -39,7 +39,7 @@ test_that("step-01 TA construction and step-02 selection stay disjoint", {
   # different fits.
   si <- get_site_info()
   step02 <- si$site_ID[si$ts_col == "TS_linear"]
-  wholesale <- si$site_ID[si$ts_source %in% c("lm_ta_recent", "lm_ta_cold")]
+  wholesale <- si$site_ID[si$ts_source %in% c("sitespecific_US_BZo", "lm_ta_cold")]
   expect_equal(intersect(wholesale, step02), character())
 })
 
@@ -55,14 +55,14 @@ test_that("ts_source is the readers' former dispatch, site for site", {
   by_source <- function(level) unname(sort(names(src)[src == level]))
 
   # The two site lists the AmeriFlux reader used to dispatch on, verbatim.
-  expect_setequal(by_source("lm_ta_recent"), "US-BZo")
+  expect_setequal(by_source("sitespecific_US_BZo"), "US-BZo")
   expect_setequal(by_source("lm_ta_cold"), c("CA-ARB", "CA-ARF", "CA-KLP", "US-Rms", "US-SRS", "US-ChR"))
   # The `name_site ==` arms, from the readers.
   expect_identical(by_source("sensor_depth2"), "CZ-Stn")
-  expect_identical(by_source("recalibrated"), "FI-Sod")
+  expect_identical(by_source("sitespecific_FI_Sod"), "FI-Sod")
   expect_identical(by_source("ta_substitute"), "GF-Guy")
-  expect_identical(by_source("borrowed_site"), "US-Cwt")
-  expect_identical(by_source("gapfill_ta"), "US-MBP")
+  expect_identical(by_source("sitespecific_US_Cwt"), "US-Cwt")
+  expect_identical(by_source("sitespecific_US_MBP"), "US-MBP")
   expect_setequal(by_source("gapfill_pi"), c("US-ICh", "US-ICs", "US-NR1"))
   # and every level in use is a known one, with `sensor` the large remainder
   expect_true(all(src %in% names(TS_SOURCES)))
@@ -88,6 +88,13 @@ test_that("an unknown or missing ts_source is refused by name", {
   expect_error(ts_source(si), "guesswork")
   si$ts_source <- NA_character_
   expect_error(ts_source(si), "DE-Tha")
+})
+
+test_that("a sitespecific_ level is refused anywhere but its own site", {
+  expect_identical(ts_source(get_site_info("FI-Sod")), "sitespecific_FI_Sod")
+  si <- get_site_info("DE-Tha")
+  si$ts_source <- "sitespecific_FI_Sod"
+  expect_error(ts_source(si), "another site's one-off fix")
 })
 
 # ------------------------------------------------- the estimator's semantics

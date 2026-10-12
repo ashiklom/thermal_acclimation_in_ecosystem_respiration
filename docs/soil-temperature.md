@@ -115,26 +115,26 @@ Splitting along that line helps for the following reasons:
 
 ## Stage A — `qualification_soil_temperature()`
 
-**In:** the record's columns under shared names
-(`fluxnet_ts_input()`, `ameriflux_ts_input()` — the readers' only job).
-**Out:** `TS`, `TS_QC`, and a one-row provenance table.
+- **In:** the record's columns under shared names (`fluxnet_ts_input()`, `ameriflux_ts_input()` — the readers' only job).
+- **Out:** `TS`, `TS_QC`, and a one-row provenance table.
 
-Which arm runs is **`ts_source` in `site_info.csv`** —
-one level per mechanism the manuscript applied,
-derived in `scripts/revise-site-info.R`:
+Which arm runs is **`ts_source` in `site_info.csv`** — one level per mechanism the manuscript applied, derived in `scripts/revise-site-info.R`:
 
 | `ts_source` | sites | what stage A does | write-back | truth? |
 |---|---|---|---|---|
 | `sensor` | 86 | the declared sensor, untouched | — | sensor |
 | `sensor_depth2` | CZ-Stn | the second depth, wholesale | replace | sensor |
 | `gapfill_pi` | US-NR1, US-ICh, US-ICs | the PI's gap-filled product, in the sensor's gaps only | fill_gaps | sensor |
-| `recalibrated` | FI-Sod | pre-2006 rebuilt by chaining two depth-to-depth regressions (`recalibrate_fi_sod_soil_temp()`) | overlay | none |
-| `gapfill_ta` | US-MBP | `TA × 0.369 + 5.87`, in the gaps only | fill_gaps | none |
-| `ta_substitute` | GF-Guy | air temperature | replace | none |
-| `borrowed_site` | US-Cwt | `TA × 0.647 + 5.14`, a neighbour's coefficients | replace | none |
-| `lm_ta_recent` | US-BZo | `lm_ta_recent`: `TS ~ TA` on years > 2021 above freezing | replace | none |
 | `lm_ta_cold` | 6 AmeriFlux | `lm_ta_pos`: `TS ~ TA` above freezing | replace | none |
 | `reconstructed` | 16 (`estimate_Ts` in `site_info_orig.csv`) | `fix_soil_temp()`: the estimator `estimate_ts_method` names, predictors gap-filled by DOY × time climatology | replace | none |
+| `ta_substitute` | GF-Guy | air temperature | replace | none |
+| `sitespecific_FI_Sod` | FI-Sod | pre-2006 rebuilt by chaining two depth-to-depth regressions (`recalibrate_fi_sod_soil_temp()`) | overlay | none |
+| `sitespecific_US_MBP` | US-MBP | `TA × 0.369 + 5.87`, in the gaps only | fill_gaps | none |
+| `sitespecific_US_Cwt` | US-Cwt | `TA × 0.647 + 5.14`, a neighbour's coefficients | replace | none |
+| `sitespecific_US_BZo` | US-BZo | `lm_ta_recent`: `TS ~ TA` on years > 2021 above freezing | replace | none |
+
+The `sitespecific_<site_ID>` levels are one-off fixes, not mechanisms another site could adopt;
+`ts_source()` refuses one declared by any site but its own.
 
 `TS_SOURCES` in `R/constants.R` is that last column:
 whether *every* row of the column is a sensor reading.
@@ -191,7 +191,7 @@ so these sites have no rows in `fill_cv.csv`.
 The rule applies at 27 sites, every `ts_source` mapped to `"none"` in `TS_SOURCES`:
 
 - 16 sites with `ts_source = reconstructed` (soil temperature estimated wholesale)
-- 7 sites with `ts_source = lm_ta_cold` or `lm_ta_recent` (wholesale `TS ~ TA` regressions)
+- 7 sites with `ts_source = lm_ta_cold` or `sitespecific_US_BZo` (wholesale `TS ~ TA` regressions)
 - GF-Guy, which uses air temperature in place of soil temperature
 - US-Cwt, which uses a regression borrowed from a neighbouring site
 - FI-Sod and US-MBP, where only part of the record is estimated
@@ -318,7 +318,7 @@ and all are worth putting to the authors:
 - **US-MBP** fills stage-A gaps from air temperature,
   then has the whole column replaced by a differently fitted regression.
 
-`ts_source ∈ {lm_ta_recent, lm_ta_cold}` and `ts_col = "TS_linear"`
+`ts_source ∈ {sitespecific_US_BZo, lm_ta_cold}` and `ts_col = "TS_linear"`
 are disjoint by construction,
 and a test checks it.
 A site in both would be regressed twice,

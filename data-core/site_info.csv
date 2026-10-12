@@ -47,7 +47,7 @@ US-BZF,64.7013,-148.3121,95,WET,Dfd,274,AmeriFlux_BASE,,FC,,TA_PI_F,TS_PI_1,SWC_
 US-KL2,42.4768,-85.4468,258.3,GRA,Dfa,1027,AmeriFlux_BASE,,FC,,TA_PI_F,TS_1_1_1,SWC,SW_IN_PI_F,USTAR,RH_PI_F,,,,,YES,,,TS_linear,,,sensor
 US-Ro4,44.6781,-93.0723,274,GRA,Dfa,879,AmeriFlux_BASE,,FC + SC,,TA,TS_1_1_1,SWC,SW_IN,USTAR,RH,,,,,NO,,,TS_measured,,,sensor
 US-KM4,42.4423,-85.3301,246.3,GRA,Dfa,1027,AmeriFlux_BASE,,FC,,TA_PI_F,TS_1_1_1,SWC,SW_IN,USTAR,RH_PI_F,,,,,YES,,,TS_measured,,,sensor
-US-MBP,47.5051,-93.4893,416,WET,Dfb,780,AmeriFlux_BASE,,FC,,TA,TS_1_1_1,,PPFD_IN,USTAR,RH,,,,,NO,,,TS_linear,,,gapfill_ta
+US-MBP,47.5051,-93.4893,416,WET,Dfb,780,AmeriFlux_BASE,,FC,,TA,TS_1_1_1,,PPFD_IN,USTAR,RH,,,,,NO,,,TS_linear,,,sitespecific_US_MBP
 US-Myb,38.0499,-121.765,-4,WET,Csa,338,AmeriFlux_BASE,"2012, 2013",FC,,TA,TS_2_1_1,,PPFD_IN_1_1_1,USTAR,RH,,"ER of 2012 and 2013 is unreasonably high, remove the two years; wetlands reconstructed in 2010, and first few years data was not natural.",,,NO,,,TS_linear,,,sensor
 US-NC4,35.7879,-75.9038,1,WET,Cfa,1311,AmeriFlux_BASE,,NEE_PI_1_1_1,FC_1_1_1,TA_1_1_1,TS_1_2_1,SWC_1_1_1,PPFD_IN_1_1_1,USTAR_1_1_1,RH_1_1_1,,,,,NO,,,TS_linear,,,sensor
 US-Tw1,38.1074,-121.6469,-5,WET,Csa,421,AmeriFlux_BASE,,FC,,TA,TS_PI_1,,SW_IN,USTAR,RH,,,,,NO,,,TS_linear,night,,sensor
@@ -66,7 +66,7 @@ DE-Hai,51.0792,10.4522,430,DBF,Cfb,720,FLUXNET,,,,,,,,,,,,,,YES,,,TS_measured,,,
 DE-Tha,50.9626,13.5651,385,ENF,Cfb,843,FLUXNET+ICOS,,,,,,,,,,,,,,YES,,,TS_measured,,,sensor
 DK-Sor,55.4859,11.6446,40,DBF,Cfb,660,FLUXNET+ICOS,1999,,,,,,,,,,1999 no SWC data,,,YES,,,TS_measured,,,sensor
 FI-Hyy,61.8474,24.2948,181,ENF,Dfc,709,FLUXNET+ICOS,,,,,,,,,,,,,,YES,,,TS_measured,,,sensor
-FI-Sod,67.3624,26.6386,180,ENF,Dfc,500,FLUXNET2015+FLUXNET+ICOS,"2002, 2003",,,,,,,,,,"2002, 2003 missed lots of data; 2002 abnormal temperature; we used loose gap constrain for this site because too many data are missed.",,270,YES,,,TS_linear,,,recalibrated
+FI-Sod,67.3624,26.6386,180,ENF,Dfc,500,FLUXNET2015+FLUXNET+ICOS,"2002, 2003",,,,,,,,,,"2002, 2003 missed lots of data; 2002 abnormal temperature; we used loose gap constrain for this site because too many data are missed.",,270,YES,,,TS_linear,,,sitespecific_FI_Sod
 FR-Pue,43.7413,3.5957,270,EBF,Csa,883,FLUXNET,"2001:2003, 2005, 2013",,,,,,,,,,"2001-2003 lack of SWC, 2005 insect effect, 2013 low model accuracy likely sensor problem",,,YES,NETRAD,NETRAD,TS_measured,,,reconstructed
 IT-MBo,46.0147,11.0458,1550,GRA,Dfb,1214,FLUXNET+ICOS,,,,,,,,,,,,,,YES,,,TS_measured,,,sensor
 IT-Noe,40.6062,8.1517,25,CSH,Csa,588,FLUXNET+ICOS,,,,,,,,,,,,,,NO,,,TS_measured,,,sensor
@@ -104,7 +104,7 @@ UK-AMo,55.792545,-3.2436917,268,WET,Cfc,960,FLUXNET+ICOS,,,,,,,,,,,,,,NO,,,TS_li
 CA-Mer,45.4094,-75.5186,70,WET,Dfb,943,AmeriFlux_BASE,,FC + SC,,TA,TS_2_1_1,SWC_2_1_1,PPFD_IN,USTAR,RH,,,,,NO,,,TS_linear,,,sensor
 CA-TPD,42.6353,-80.5577,260,DBF,Dfb,1036,AmeriFlux_BASE,,NEE_PI,FC,TA_PI_F,TS_PI_F_1,SWC_1_1_1,PPFD_IN,USTAR,RH,,,,,YES,,,TS_measured,,,sensor
 US-BZS,64.6963,-148.3235,100,ENF,Dfd,274,AmeriFlux_BASE,,FC,,TA_PI_F,TS_PI_1,SWC_PI_1,SW_IN,USTAR,RH,,,,,NO,,,TS_linear,,,sensor
-US-Cwt,35.0592,-83.4275,690,DBF,Dfb,1800,AmeriFlux_BASE,,FC + SC_PI_F,,TA_PI_F,,SWC_1_1_1,SW_IN_PI_F,USTAR_1_1_1,RH_PI_F,,use nearby site TA-TS relationships,,,NO,,,TS_measured,,,borrowed_site
+US-Cwt,35.0592,-83.4275,690,DBF,Dfb,1800,AmeriFlux_BASE,,FC + SC_PI_F,,TA_PI_F,,SWC_1_1_1,SW_IN_PI_F,USTAR_1_1_1,RH_PI_F,,use nearby site TA-TS relationships,,,NO,,,TS_measured,,,sitespecific_US_Cwt
 US-Rls,43.1439,-116.7356,1608,CSH,Bsh,333,AmeriFlux_BASE,,NEE_PI,,TA_PI_F,TS_PI_1,SWC_4_1_1,SW_IN_PI_F,USTAR,RH_PI_F,,,,,YES,,,TS_measured,,,sensor
 US-Rws,43.1675,-116.7132,1425,OSH,Bsk,290,AmeriFlux_BASE,,NEE_PI,,TA_PI_F,TS_PI_1,SWC_4_1_1,SW_IN_PI_F,USTAR,RH_PI_F,,,,,YES,,,TS_measured,,,sensor
 BR-Ma2,-2.6091,-60.2093,130,EBF,Af,2252,AmeriFlux_BASE,,NEE_PI_F,FC,TA_PI_F,TA_PI_F,,SW_IN_PI_F,USTAR,RH,VPD_PI_F,"no soil T, use bottom airT",1,366,NO,,,TS_measured,,,sensor
@@ -112,7 +112,7 @@ BR-Sa1,-2.8567,-54.9589,88,EBF,Am,2074.79,AmeriFlux_BASE,,NEE_PI,FC,TA_1_1_1,TA_
 CA-ARB,52.695,-83.9452,90,WET,Dfb,700,AmeriFlux_BASE,,NEE_PI,FC,TA,TS_1_1_1,SWC_1_1_1,SW_IN,USTAR,RH,,,,,YES,,,TS_measured,,,lm_ta_cold
 CA-ARF,52.7008,-83.955,88,WET,Dfb,700,AmeriFlux_BASE,,NEE_PI,FC,TA,TS_1_2_1,SWC_1_1_1,SW_IN,USTAR,RH,,growing season the same as CA-ARB,146,258,YES,,,TS_measured,,,lm_ta_cold
 CA-KLP,51.5902,-81.7684,71,WET,Dfb,680,AmeriFlux_BASE,,NEE_PI,FC,TA,TS_1_1_1,SWC_1_1_1,SW_IN,USTAR,RH,,,,,YES,,,TS_measured,,,lm_ta_cold
-US-BZo,64.6936,-148.33,100,WET,Dfd,274,AmeriFlux_BASE,,FC_PI_F,FC_PI_F,TA_PI_F,TS_PI_2,SWC_PI_1,SW_IN,USTAR,RH,VPD_PI_F,,,,YES,,,TS_measured,,,lm_ta_recent
+US-BZo,64.6936,-148.33,100,WET,Dfd,274,AmeriFlux_BASE,,FC_PI_F,FC_PI_F,TA_PI_F,TS_PI_2,SWC_PI_1,SW_IN,USTAR,RH,VPD_PI_F,,,,YES,,,TS_measured,,,sitespecific_US_BZo
 US-ChR,35.9311,-84.3324,286,DBF,Cfa,1358.85,AmeriFlux_BASE,,FC + SC,FC,TA,TS_PI_1,SWC_PI_2,SW_IN,USTAR,RH,VPD_PI,"1st layer SWC data may be abnormal, use 2rd layer",,,YES,,,TS_measured,,,lm_ta_cold
 US-Rms,43.0645,-116.7486,2111,CSH,Bsh,800,AmeriFlux_BASE,,NEE_PI,FC,TA,TS_PI_2,SWC_4_1_1,SW_IN,USTAR,RH,,1 year is missing,,,YES,,,TS_measured,,,lm_ta_cold
 US-SRS,31.8173,-110.8508,1169,WSA,Bsk,388,AmeriFlux_BASE,,FC,FC,TA,TS_1_1_1,SWC_1_1_1,SW_IN,USTAR,RH,VPD_PI,"abnormal flux in oct, 2013",181,280,YES,,,TS_measured,,,lm_ta_cold

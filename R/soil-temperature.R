@@ -373,7 +373,7 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
                                        note = "skipped: no PI gap-filled column in this release")
       )
     },
-    recalibrated = recalibrate_fi_sod_soil_temp(input, site_info),
+    sitespecific_FI_Sod = recalibrate_fi_sod_soil_temp(input, site_info),
     # a tropical site: air temperature stands in for soil
     ta_substitute = list(
       TS = write_back_ts(input$TS_sensor, input$TA, "replace"),
@@ -382,14 +382,14 @@ qualification_soil_temperature <- function(input, site_info, ts_qc = "manuscript
     ),
     # this site has no TS measurements, so we used TS-TA relationships from
     # nearby US-xGB of the same DBF category.
-    borrowed_site = fitted("fixed_us_cwt", "replace",
-                           est = fixed_linear_estimator(intercept = 5.13873, slope = 0.64718),
-                           note = "coefficients from US-xGB"),
+    sitespecific_US_Cwt = fitted("fixed_us_cwt", "replace",
+                                 est = fixed_linear_estimator(intercept = 5.13873, slope = 0.64718),
+                                 note = "coefficients from US-xGB"),
     # this site only missed a few TS data, so only estimate these missing data.
-    gapfill_ta = fitted("fixed_us_mbp", "fill_gaps",
-                        est = fixed_linear_estimator(intercept = 5.8670273, slope = 0.3688005)),
+    sitespecific_US_MBP = fitted("fixed_us_mbp", "fill_gaps",
+                                 est = fixed_linear_estimator(intercept = 5.8670273, slope = 0.3688005)),
     # recent data is more accurate
-    lm_ta_recent = fitted("lm_ta_recent", "replace"),
+    sitespecific_US_BZo = fitted("lm_ta_recent", "replace"),
     # cold area, use TA above 0 for growing season
     lm_ta_cold = fitted("lm_ta_pos", "replace"),
     reconstructed = fix_soil_temp(input, site_info),
@@ -522,7 +522,7 @@ ts_estimate_method <- function(site_info) {
   declared
 }
 
-# ------------------------------------------------------------ recalibrated
+# ----------------------------------------------------- sitespecific_FI_Sod
 
 #' Last year of FI-Sod's unreliable shallow-sensor record
 #'

@@ -142,15 +142,19 @@ SITES_TS_MIN_2C <- c("CH-Dav", "US-Ha1", "US-GLE")
 #'                  product (US-NR1, US-ICh, US-ICs): the data provider's own
 #'                  MDS fill, the same thing `TS_F_MDS_1` already is at every
 #'                  FLUXNET-family site
-#'   recalibrated   FI-Sod: the pre-2006 third of the record rebuilt by
-#'                  chaining two regressions between depths
-#'   gapfill_ta     US-MBP: gaps filled from air temperature
 #'   ta_substitute  GF-Guy: air temperature, wholesale
-#'   borrowed_site  US-Cwt: `TA * 0.647 + 5.14`, coefficients from a neighbour
-#'   lm_ta_recent   US-BZo: `TS ~ TA` fitted on recent years, wholesale
 #'   lm_ta_cold     six AmeriFlux sites: `TS ~ TA` fitted above freezing, wholesale
 #'   reconstructed  the 16 sites the manuscript reconstructed: `fix_soil_temp()`'s estimator,
 #'                  named in `estimate_ts_method`, wholesale
+#'
+#' and one `sitespecific_<site_ID>` level (hyphen as underscore) per one-off fix
+#' that only that site may declare:
+#'
+#'   sitespecific_FI_Sod  the pre-2006 third of the record rebuilt by chaining
+#'                        two regressions between depths
+#'   sitespecific_US_MBP  gaps filled from air temperature, `TA * 0.369 + 5.87`
+#'   sitespecific_US_Cwt  `TA * 0.647 + 5.14`, coefficients from a neighbour
+#'   sitespecific_US_BZo  `TS ~ TA` fitted on years > 2021, wholesale
 #'
 #' "none" is deliberately strict: a column that is a sensor reading at *most*
 #' rows still has rows that are not, and a fill cross-validated against it is
@@ -160,20 +164,21 @@ TS_SOURCES <- c(
   sensor        = "sensor",
   sensor_depth2 = "sensor",
   gapfill_pi    = "sensor",
-  recalibrated  = "none",
-  gapfill_ta    = "none",
   ta_substitute = "none",
-  borrowed_site = "none",
-  lm_ta_recent  = "none",
   lm_ta_cold    = "none",
-  reconstructed = "none"
+  reconstructed = "none",
+  sitespecific_FI_Sod = "none",
+  sitespecific_US_MBP = "none",
+  sitespecific_US_Cwt = "none",
+  sitespecific_US_BZo = "none"
 )
 
 #' The site's declared `ts_source`
 #'
 #' @param site_info One row of the site declaration table.
 #' @return The site's `ts_source`, one of `names(TS_SOURCES)`. Errors if the
-#'   site declares none or an unknown level.
+#'   site declares none or an unknown level, or another site's
+#'   `sitespecific_` level.
 ts_source <- function(site_info) {
   src <- site_info[["ts_source"]]
   if (length(src) != 1 || is.na(src) || !src %in% names(TS_SOURCES)) {
@@ -182,6 +187,13 @@ ts_source <- function(site_info) {
       if (length(src) == 1) shQuote(src) else paste0("length ", length(src)),
       "; must be one of ", paste(shQuote(names(TS_SOURCES)), collapse = ", "),
       ". It is derived in scripts/revise-site-info.R."
+    )
+  }
+  if (startsWith(src, "sitespecific_") &&
+      src != paste0("sitespecific_", gsub("-", "_", site_info[["site_ID"]]))) {
+    stop(
+      "Site ", site_info[["site_ID"]], " declares ts_source = ", shQuote(src),
+      ", another site's one-off fix. It is derived in scripts/revise-site-info.R."
     )
   }
   src
