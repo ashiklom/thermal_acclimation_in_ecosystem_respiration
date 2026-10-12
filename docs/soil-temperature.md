@@ -145,37 +145,22 @@ Stage A's provenance row (`site_data$ts_provenance`; `ts_provenance.csv` in the 
 
 ## Stage B — `get_soil_temperature()`
 
-**In:** `site_data`, the recipe, the per-site fill.
-**Out:** `ac` and `nightNEE`
-with **`TS_final` as their only soil-temperature column**,
-and a metadata row.
+- **In:** `site_data`, the recipe, the per-site fill.
+- **Out:** `ac` and `nightNEE` with **`TS_final` as their only soil-temperature column**, and a metadata row.
 
-It selects a candidate under the recipe's `ts` strategy (`choose_ts_col()`),
-attaches `TS_memfill` if that is what was chosen,
-looks up the bounds belonging to the selected column under the recipe's `ts_bounds_measured` or `ts_bounds_estimated` strategy,
-and drops every other candidate —
-`TS_measured`, `TS_linear`, `TS_memfill` —
-so that "no branching downstream" is a checkable property rather than a convention.
-The metadata row carries everything the settings table reports about soil temperature,
-and copies stage A's provenance fields in.
+It selects a candidate under the recipe's `ts` strategy (`choose_ts_col()`), attaches `TS_memfill` if that is what was chosen, looks up the bounds belonging to the selected column under the recipe's `ts_bounds_measured` or `ts_bounds_estimated` strategy, and drops every other candidate — `TS_measured`, `TS_linear`, `TS_memfill` — so that "no branching downstream" is a checkable property rather than a convention.
+The metadata row carries everything the settings table reports about soil temperature, and copies stage A's provenance fields in.
 
 ### The refuse rule: no estimate on top of an estimate
 
 Every variant alternative to `TS_measured` is a model fitted *to* it:
-`TS_linear` regresses it on air temperature,
-and `TS_memfill` is cross-validated against it.
+`TS_linear` regresses it on air temperature, and `TS_memfill` is cross-validated against it.
 That only makes sense if `TS_measured` is real sensor data.
-Where `ts_source` leaves rows that are not a sensor reading,
-the second model just learns to copy the first,
-and returns a function of the same predictors wearing a skill score.
+Where `ts_source` leaves rows that are not a sensor reading, the second model just learns to copy the first, and returns a function of the same predictors wearing a skill score.
 (In the extreme, DE-Hte's `lm_ta_netrad` fill reproduces its target almost exactly: CV error 1.5e-14.)
 
-So under `measured_or_lm` and `measured_or_best_fill`,
-stage B keeps `TS_measured` at those sites (and that is what later fits use),
-records `ts_refused = TRUE` and the reason,
-and `fill_soil_temp()` declines before doing any work:
-the `site_fill` target records `status = "no measured truth"`,
-so these sites have no rows in `fill_cv.csv`.
+So under `measured_or_lm` and `measured_or_best_fill`, stage B keeps `TS_measured` at those sites (and that is what later fits use), records `ts_refused = TRUE` and the reason, and `fill_soil_temp()` declines before doing any work:
+the `site_fill` target records `status = "no measured truth"`, so these sites have no rows in `fill_cv.csv`.
 
 The rule applies at 27 sites, every `ts_source` mapped to `"none"` in `TS_SOURCES`:
 
@@ -186,18 +171,12 @@ The rule applies at 27 sites, every `ts_source` mapped to `"none"` in `TS_SOURCE
 - FI-Sod and US-MBP, where only part of the record is estimated
 
 The manuscript's `site_info` strategy is exempt:
-`ts_col` there is a declaration,
-and its two double-applications are the manuscript's own.
-At FI-Sod and US-MBP, stage A rebuilds part of `TS_measured`
-(chained depth-to-depth regressions before 2006 at FI-Sod; `TA × 0.369 + 5.87` in the gaps at US-MBP),
-and then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) to that partly-estimated column.
-At US-MBP the filled rows are already an exact linear function of TA, so the second fit is pulled toward the first
-(see also [Ordering](#ordering-and-why-it-is-load-bearing)).
+`ts_col` there is a declaration, and its two double-applications are the manuscript's own.
+At FI-Sod and US-MBP, stage A rebuilds part of `TS_measured` (chained depth-to-depth regressions before 2006 at FI-Sod; `TA × 0.369 + 5.87` in the gaps at US-MBP), and then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) to that partly-estimated column.
+At US-MBP the filled rows are already an exact linear function of TA, so the second fit is pulled toward the first (see also [Ordering](#ordering-and-why-it-is-load-bearing)).
 
 The rule reads what stage A actually ran (`ts_truth` in the provenance row), not what `ts_source` declares.
-Under `ts_qc = sensor` ([below](#the-ts_qc-prep-axis)) the rule still applies,
-but stage A skips its reconstructions and keeps the raw sensor,
-so `TS_measured` is real data again, nothing is refused, and the second method has something to train on.
+Under `ts_qc = sensor` ([below](#the-ts_qc-prep-axis)) the rule still applies, but stage A skips its reconstructions and keeps the raw sensor, so `TS_measured` is real data again, nothing is refused, and the second method has something to train on.
 
 ## The shared parts
 
