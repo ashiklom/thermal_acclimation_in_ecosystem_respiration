@@ -19,10 +19,10 @@ The fit gets to choose which column it uses:
 - `TS_linear`: a `TS ~ TA` linear regression, built at **every** site (even if unused)
 - `TS_memfill`: the blocked-CV-selected reconstruction from the per-site `site_fill` target; attached by `get_soil_temperature()` under a `measured_or_best_fill` recipe
 
-In addition, the prep includes the following options for soil water content (SWC), which are used by direct fits: 
+In addition, the prep includes the following options for soil water content (SWC, as a %), which are used by direct fits: 
 
-- `SWC_measured`: tower soil water measurements, in **percent**
-- `SWC_era5`: ERA5-Land layer-1 soil water (_not_ in percent originally; rescaled to percent on read)
+- `SWC_measured`: tower soil water measurements
+- `SWC_era5`: ERA5-Land layer-1 soil water
 
 Beside the tables, `site_data` carries:
 

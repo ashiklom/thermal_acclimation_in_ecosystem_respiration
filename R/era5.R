@@ -1,13 +1,6 @@
 # ERA5-Land layer-1 soil water: the file, a site's slice of it, its join onto
 # step 01's tables, and keeping the file current.
 
-#' Scale factor from ERA5-Land soil water (m3/m3) to percent
-#'
-#' Soil water is a percent everywhere in the analysis, like the tower columns
-#' and the `Hs` prior; ERA5-Land's `swvl1` is m3/m3, rescaled on read.
-#' `data-raw/` keeps the provider's units.
-ERA5_SWC_TO_PERCENT <- 100
-
 #' Path to the ERA5-Land daily soil water file
 ERA5_SWC_CSV <- file.path(DIR_RAWDATA, "ERA5_daily_swc.csv")
 
@@ -85,7 +78,8 @@ read_era5_swc <- function(name_site, path = ERA5_SWC_CSV, table = NULL) {
       YEAR = lubridate::year(.data$date),
       MONTH = lubridate::month(.data$date),
       DAY = lubridate::day(.data$date),
-      SWC = .data$SWC * ERA5_SWC_TO_PERCENT
+      # ERA5 SWC is in m3/m3. Analysis expects %. Convert here.
+      SWC = .data$SWC * 100
     ) |>
     dplyr::select("YEAR", "MONTH", "DAY", "SWC")
 }
