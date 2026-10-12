@@ -193,21 +193,15 @@ Under `ts_qc = sensor` ([below](#the-ts_qc-prep-axis)) the rule still applies, b
 
 ## What is the manuscript and what is a variant
 
-Under the `original` recipe nothing in this design changes a number,
-and `pixi run ts-baseline` (below) holds it to that.
-Everything a variant does differently
-is a `switch()` branch in `R/strategies.R`
-or the refuse rule above.
+Under the `original` recipe nothing in this design changes a number, and `pixi run ts-baseline` (below) holds it to that.
+Everything a variant does differently is a `switch()` branch in `R/strategies.R` or the refuse rule above.
 
 ## Adding a site, or a mechanism
 
-A new site with a working sensor needs nothing:
-`ts_source = sensor` is the default `revise-site-info.R` assigns.
-A site that needs one of the existing mechanisms
-is one row in that script's `ts_source_sites` tribble.
-A new mechanism is one level in `TS_SOURCES`,
-one arm in `qualification_soil_temperature()`,
-and — if it fits a model — one entry in `ts_estimators()`.
+To add a site or modify its behavior, modify `scripts/revise-site-info.R`.
+A new site with a working sensor needs nothing: `ts_source = sensor` is the default `revise-site-info.R` assigns.
+A site that needs one of the existing mechanisms is one row in that script's `ts_source_sites` tribble.
+A new mechanism is one level in `TS_SOURCES`, one arm in `qualification_soil_temperature()`, and — if it fits a model — one entry in `ts_estimators()`.
 
 ## The `ts_qc` prep axis
 
