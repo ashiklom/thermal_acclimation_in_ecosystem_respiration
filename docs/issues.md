@@ -29,13 +29,29 @@ Each entry says where it lives.
   For sites that use measured soil temperature, quantiles are calculated from the DOY climatology over NEE-uptake days (DOYs whose multi-year mean NEE is below the growing-season cutoff), floored at 0 °C.
   But for sites that use soil temperature estimated via regression, quantiles are calculated from the raw half-hourly values within the growing season (`[gStart, gEnd]`).
   The new code makes this explicit with two recipe axes, `ts_bounds_measured` and `ts_bounds_estimated`: the manuscript is `climatology_uptake` / `halfhourly`, and either can instead be `climatology_uptake` (the `uptake_all` recipe applies it to estimates too), `climatology` (DOY climatology over `[gStart, gEnd]`, not the NEE-uptake days) or `halfhourly` (half-hourly values over `[gStart, gEnd]`), so one definition can be applied to any soil temperature column (e.g., measured TS + half-hourly quantiles).
-  Finally, there are a few additional filters not mentioned in the manuscript (probably OK).
+  Finally, there are a few additional filters not mentioned in the manuscript:
+  - A whole window is skipped if its multi-year mean Ts falls outside `[max(tStart, 2.0), tEnd]`
+  - A whole window is skipped if it has fewer than 100 observations total (combined, across all years)
+  - `R_treatment` is set to missing when he posterior mean is below the posterior SD
+  - If the control year is missing from a window, the reference is the mean across years
+  - Ratio outliers (boxplot coefficient 3 and `|ln(ratio)| > 1.5`) are removed
 
-- **Window size**
+- **Window size**.
   The manuscript says the growing season is divided into "successive two-week moving windows" / "consecutive moving windows with a window length of two weeks".
   As currently coded, the analysis uses **15-day** moving windows (because `dplyr::between(DOY, window_start, window_end)` is inclusive at both ends), with the last day of each moving window equal to the first day of the next moving window.
   I haven't tested the impacts of this on the results.
   Is this what you want, or is it important for the windows to be strictly non-overlapping?
+
+- **Soil water**.
+  At all sites where `SWC_use == YES`, measured soil water is a requirement, which significantly reduces the data eligible for a fit.
+  The SWC check happens in two places:
+  (1) In `prep_nee_ac()`, but *only for Ameriflux sites*, and *before `get_good_years()`*.
+  This means that, when large gaps are introduced due to missing SWC data, whole years of data get excluded.
+  This is effectively another significant undocumented (in the manuscript) filter on years of input data.
+  In practice, the SWC filter removes 1--6 years of data at 17 of 38 Ameriflux sites that would otherwise be eligible.
+  (2) In `fit_tas_site()`, right before the model fit.
+  Here, there is no gap analysis, and the code only drops the exact rows with missing SWC.
+  For an automatically generated data product, consider adding another step of estimating measured SWC via regression / random forest fit against ERA5 SWC.
 
 ## Pipeline
 
