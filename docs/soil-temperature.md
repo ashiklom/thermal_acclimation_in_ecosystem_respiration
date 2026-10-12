@@ -74,25 +74,44 @@ Given the same data, the two calculations give identical results (tested in `tes
 
 ## Why two stages
 
-The manuscript qualified years —
-the QC filter, the growing-season detector, the gap scan —
-on one soil-temperature column,
-and then, at 35 sites,
-fitted a `TS ~ TA` regression **on the years that scan had qualified**
-and fitted the model on the regression instead.
-So the column that decides which years are trustworthy
-is not the column the model is fitted on,
-and it cannot be:
-stage B's regression needs stage A's qualification to exist first.
-A single "decide soil temperature once, before everything" step
-would change the regression's training set and the year selection at those 35 sites,
-and would not reproduce the manuscript.
+The two stages answer different questions and depend on different inputs.
 
-Making the two stages explicit —
-two named columns, two functions, one provenance trail —
-is the tidying.
-Downstream of stage B there is exactly one soil-temperature column
-and no branching on site, origin or strategy.
+**Stage A: "What does this site's soil-temperature record look like, and which years can we trust?"**
+The answer depends on the site: its raw data and its row in `site_info.csv` (notably `ts_source`, and `estimate_ts_method` for the reconstructed sites; see [`site_info.md`](site_info.md)).
+The only recipe choices that change it are the *prep* axes: `ts_qc` and `year_qc` (see [`recipes.md`](recipes.md#prep-versus-fit)).
+Stage A and the rest of step 01 produce:
+
+- the repaired sensor column (`TS_measured`)
+- the growing season (`[gStart, gEnd]`)
+- which years are kept and which are dropped
+- the NEE-uptake days and the `climatology_uptake` bounds (`[tStart, tEnd]`)
+
+So, for example, US-Ha1 gets the same growing season and the same kept years under every `ts_qc = manuscript` recipe.
+Under `ts_qc = sensor` it gets different ones, because stage A keeps its raw sensor instead of reconstructing the column.
+
+**Stage B: "Given those trusted years, which soil-temperature column should this particular acclimation fit use?"**
+The answer depends on the recipe's *fit* axes.
+One recipe might say "use the sensor", another "always use the regression", another "use the best gap-fill".
+Each one also chooses how the temperature bounds are defined.
+So the same site can end up with a different `TS_final` and different bounds under different recipes.
+
+Splitting along that line helps for the following reasons:
+
+1. Fair comparisons between recipes.
+   Recipes that share a prep key choose from candidates built on the same kept years and the same growing season.
+   If two such recipes give different results at the same site, the cause is the column they chose, not a quiet change in which data survived.
+   If qualification ran on whatever column the recipe picked, a regression-based recipe would keep more years: `TS_linear` exists wherever air temperature does, so it has fewer gaps, and the gap scan counts rows with soil temperature.
+   The comparison would then mix up "different temperature" with "different data".
+2. Do the slow, delicate part once.
+   Qualification (QC, season detection, the gap scan, reconstructing sites without a usable sensor) is where the manuscript's site-specific logic lives.
+   It runs once per site and prep key.
+   Stage B is mostly a lookup: choose a column, look up its bounds, drop the rest.
+3. Candidates can be built before anyone asks for them.
+   `TS_linear` only needs the kept years, not a recipe's fit choices, so step 01 builds it at every site.
+   `TS_memfill` likewise comes from the per-site `site_fill` target, built once per prep key; stage B attaches it only when it is chosen.
+4. Clear responsibility.
+   If a year is missing, look at stage A, step 01 and `site_info.csv`.
+   If a fit used an unexpected column or unexpected bounds, look at stage B and the recipe.
 
 ## Stage A — `qualification_soil_temperature()`
 
