@@ -16,6 +16,30 @@ default_swc_col <- function(site_info, direct) {
   NA_character_
 }
 
+#' Whether a recipe fits on measured soil water at a site
+#'
+#' Step 01 needs this to decide whether a gap in measured soil water is a gap
+#' in the data, and it is shared by both models, so the answer must not depend
+#' on the model. Under every current strategy it does not; this errors if a
+#' future one makes it.
+#'
+#' @param recipe A recipe, or at least its `swc` entry.
+#' @param site_info One row of the site declaration table.
+#' @return `TRUE` if the recipe's soil-water column is `SWC_measured`.
+uses_measured_swc <- function(recipe, site_info) {
+  measured <- vapply(c(total = FALSE, direct = TRUE), function(direct) {
+    identical(choose_swc_col(recipe, site_info, direct)$swc_col, "SWC_measured")
+  }, logical(1))
+  if (measured[["total"]] != measured[["direct"]]) {
+    stop(
+      site_info[["site_ID"]], ": swc strategy ", shQuote(recipe$swc),
+      " uses measured soil water for one model but not the other, which ",
+      "step 01, shared by both models, cannot honour."
+    )
+  }
+  measured[["direct"]]
+}
+
 #' Materialise the chosen column as `SWC`, the name the model formula uses
 #'
 #' @param dat A site's flux table (`ac` or the nighttime NEE table), with the

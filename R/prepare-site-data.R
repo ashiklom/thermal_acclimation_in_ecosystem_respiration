@@ -165,8 +165,9 @@ prep_nee_ac <- function(site_info, recipe = original_recipe(), era5 = ERA5_SWC_C
         .data$USTAR >= .data$uStarTh
       )
 
-    # Only where soil water is used: elsewhere the column is all NA.
-    if (isTRUE(site_info$SWC_use)) {
+    # Only where the recipe fits on measured soil water. This runs before the
+    # gap scan, so a soil-water outage can disqualify a whole year.
+    if (uses_measured_swc(recipe, site_info)) {
       measured <- measured |> dplyr::filter(!is.na(.data$SWC))
     }
 

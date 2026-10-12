@@ -217,8 +217,8 @@ The provenance row records both the declaration (`ts_source`) and what ran (`sta
 stage B and the fill read the latter (see [the refuse rule](#the-refuse-rule-no-estimate-on-top-of-an-estimate)).
 A site whose raw sensor is too sparse to qualify a year fails its own step-01 target rather than falling back.
 
-As a prep axis, `ts_qc = sensor` gets its own step 01 and fill per site ([`recipes.md`](recipes.md#prep-versus-fit)): `site_data_site_info_sensor_*` and `site_fill_site_info_sensor_*`.
-The manuscript's `site_data_site_info_manuscript_*`, which every collector and the `workflows/` scripts consume, is unaffected.
+As a prep axis, `ts_qc = sensor` gets its own step 01 and fill per site ([`recipes.md`](recipes.md#prep-versus-fit)): `site_data_site_info_sensor_site_info_*` and `site_fill_site_info_sensor_site_info_*`.
+The manuscript's `site_data_site_info_manuscript_site_info_*`, which every collector and the `workflows/` scripts consume, is unaffected.
 See also [`recipes.md`](recipes.md#ts_qc).
 
 ## Soil water
@@ -231,7 +231,7 @@ Soil water is not a per-site column, because the choice depends on the model as 
 | `SWC_use = NO` | none (soil water is not in the formula) | `SWC_era5` |
 
 Measured soil water is a requirement where it is used: nighttime rows without it are dropped.
-At DE-Tha that takes 66,874 rows down to 21,821.
+For example, at DE-Tha that takes 66,874 rows down to 21,821.
 Many `SWC_use = NO` sites still report a soil-water column the analysis discards;
 for example, CH-Dav has 326,351 non-missing values of it.
 So measured and reanalysis soil water can be compared through the `swc_col=` override of `fit_tas_site()`.

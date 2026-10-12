@@ -134,6 +134,14 @@ and a recipe *selects*.
 among the recipes run (always including the manuscript's),
 and each recipe's fits read its own key's `site_data_<prep>_<site>` and `site_fill_<prep>_<site>`.
 
+`swc` is a prep axis because at AmeriFlux sites
+step 01 drops nighttime rows without measured soil water *before* the year gap scan,
+so a soil-water outage can disqualify a whole year.
+It does so only where the recipe fits on `SWC_measured` (`uses_measured_swc()`),
+which under `swc = site_info` is exactly the `SWC_use` sites, as in the manuscript.
+The `swc_col =` override of `fit_tas_site()` acts after step 01
+and cannot change which years qualified; it warns where they would differ.
+
 ## Scoping a run
 
 `THERMAL_SITES`, `THERMAL_RECIPES`, `THERMAL_MODELS` and `THERMAL_FIT`;

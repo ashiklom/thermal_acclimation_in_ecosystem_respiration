@@ -381,7 +381,7 @@ ERA5_daily_swc.csv  ->  era5_swc_tbl ──┴─>  site_data  ->  site_fill
      (site_era5_swc(), the site's days)        └──────────>  site_tas_<recipe>_<model>
 
 Each of site_prep, site_data and site_fill exists once per site and step-01
-prep key (docs/recipes.md), named e.g. site_data_site_info_manuscript_US.Kon.
+prep key (docs/recipes.md), named e.g. site_data_site_info_manuscript_site_info_US.Kon.
 
 site_info.csv (site_info_file, a file target)
         ▼

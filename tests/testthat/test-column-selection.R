@@ -73,6 +73,18 @@ test_that("default_swc_col depends on the model as well as the site", {
   expect_equal(default_swc_col(none, direct = TRUE), "SWC_era5")
 })
 
+test_that("uses_measured_swc follows the recipe, not SWC_use alone", {
+  measured <- list(site_ID = "X-Msr", SWC_use = TRUE)
+  none <- list(site_ID = "X-Non", SWC_use = FALSE)
+  # The manuscript: exactly the SWC_use sites, so its step 01 is unchanged.
+  expect_true(uses_measured_swc(original_recipe(), measured))
+  expect_false(uses_measured_swc(original_recipe(), none))
+  # ERA5 everywhere: no site qualifies years on measured soil water.
+  era5 <- modifyList(original_recipe(), list(swc = "era5"))
+  expect_false(uses_measured_swc(era5, measured))
+  expect_false(uses_measured_swc(era5, none))
+})
+
 test_that("resolve_swc_column materialises the requested column as SWC", {
   dat <- fake_tables()
   expect_equal(resolve_swc_column(dat, "SWC_measured", "X-Tst")$SWC, c(20, 21, 22))

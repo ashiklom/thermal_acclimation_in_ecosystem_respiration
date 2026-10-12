@@ -49,8 +49,8 @@ test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
   # _targets.R; every other recipe shares the manuscript's.
   keys <- vapply(read_recipes()$recipe_id, function(id) recipe_prep_key(get_recipe(id)), "")
   expect_identical(unname(keys[["original"]]), MANUSCRIPT_PREP_KEY())
-  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info_manuscript")
-  expect_identical(unname(keys[["memfill_sensor"]]), "site_info_sensor")
+  expect_identical(MANUSCRIPT_PREP_KEY(), "site_info_manuscript_site_info")
+  expect_identical(unname(keys[["memfill_sensor"]]), "site_info_sensor_site_info")
   expect_setequal(names(keys)[keys == MANUSCRIPT_PREP_KEY()],
                   setdiff(names(keys), "memfill_sensor"))
   # and the key is fit for a target name as is: `tar_map()` would otherwise
@@ -60,7 +60,7 @@ test_that("prep keys: the manuscript's is shared, memfill_sensor has its own", {
 
 test_that("step 01 is given the prep axes alone; a recipe is its axes and id", {
   axes <- get_recipe("memfill_sensor")[RECIPE_PREP_AXES]
-  expect_identical(axes, list(year_qc = "site_info", ts_qc = "sensor"))
+  expect_identical(axes, list(year_qc = "site_info", ts_qc = "sensor", swc = "site_info"))
   # `_targets.R` keys a prep from these, and it must agree with the recipe's
   expect_identical(recipe_prep_key(axes), recipe_prep_key(get_recipe("memfill_sensor")))
 

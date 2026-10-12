@@ -30,8 +30,9 @@ RECIPE_AXES <- list(
   # `TS_memfill`). An estimate's `climatology_uptake` uses the measured
   # column's uptake days but only the years step 01 kept.
   ts_bounds_estimated = c("climatology_uptake", "climatology", "halfhourly"),
-  # Which soil-water column the direct model uses.
-  swc = c("site_info", "era5"),
+  # Which soil-water column the direct model uses. A prep axis: where the
+  # column is the measured one, step 01 qualifies years on its coverage.
+  swc =c("site_info", "era5"),
   # How years are qualified. One strategy so far; see docs for `computed`.
   year_qc = c("site_info"),
   # Which soil-temperature column step 01 qualifies years on and screens.
@@ -45,7 +46,7 @@ RECIPE_AXES <- list(
 #'
 #' Recipes that agree on these share one step-01 result; every other axis is
 #' resolved in step 02.
-RECIPE_PREP_AXES <- c("year_qc", "ts_qc")
+RECIPE_PREP_AXES <- c("year_qc", "ts_qc", "swc")
 
 #' The development sample of recipes
 #'
@@ -200,7 +201,7 @@ get_recipe <- function(recipe_id, path = RECIPES_CSV) {
 #'
 #' Two recipes with the same prep key share one step-01 result per site, and
 #' the key is the suffix of its target names
-#' (`site_data_site_info_manuscript_<site>`), so it is joined with `_`.
+#' (`site_data_site_info_manuscript_site_info_<site>`), so it is joined with `_`.
 #' Strategy names contain `_` too, so two different preps could in principle
 #' share a key; `_targets.R` would then fail on a duplicate target name.
 #'

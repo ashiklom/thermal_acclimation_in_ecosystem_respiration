@@ -294,6 +294,18 @@ fit_tas_site <- function(site_data, site_info, model = "total",
     list(swc_col = swc_col, reason = "swc_col argument")
   }
   swc_col <- swc_choice$swc_col
+  # Step 01 qualified years for the recipe's column (at AmeriFlux sites, where
+  # it filters on soil water), and an override cannot change that.
+  if (swc_choice$reason == "swc_col argument" &&
+      site_reader(site_info) == "ameriflux" &&
+      identical(swc_col, "SWC_measured") != uses_measured_swc(recipe, site_info)) {
+    warning(
+      name_site, ": swc_col = ", shQuote(swc_col), " overrides the recipe's ",
+      "soil-water column, but step 01 qualified years for the recipe's (swc = ",
+      shQuote(recipe$swc), "). For years qualified on this column, use a ",
+      "recipe with the matching swc strategy."
+    )
+  }
   if (!is.na(swc_col)) {
     ac <- resolve_swc_column(ac, swc_col, name_site)
     a_measure_night_complete <- resolve_swc_column(a_measure_night_complete, swc_col, name_site)
@@ -301,8 +313,9 @@ fit_tas_site <- function(site_data, site_info, model = "total",
   SWC_use <- !is.na(swc_col)
 
   # As the original: rows without measured soil water are dropped where it is
-  # used; the ERA5 fallback is not filtered on.
-  if (isTRUE(site_info[["SWC_use"]])) {
+  # used; the ERA5 fallback is not filtered on. Keyed on the column chosen, not
+  # `SWC_use`, so a `swc_col` override filters the same way.
+  if (identical(swc_col, "SWC_measured")) {
     a_measure_night_complete <- a_measure_night_complete |>
       dplyr::filter(!is.na(.data$SWC))
   }

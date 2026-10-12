@@ -21,7 +21,7 @@ FIT_PROFILE <- Sys.getenv("THERMAL_FIT", "full")
 fit_settings(FIT_PROFILE) # check and fail early
 
 # Data preparation:
-# Only a subset of recipe parts (e.g., `year_qc`, `ts_qc`) affect data prep, 
+# Only a subset of recipe parts (`year_qc`, `ts_qc`, `swc`) affect data prep, 
 # and the same data prep can be shared by fits of different models.
 # Always build the original manuscript prep because the site-level outputs and 
 # `workflows/` scripts need it.
@@ -49,8 +49,8 @@ message(
 # Nested `tar_map()`s: sites, then step-01 preps, then recipe x model fits.
 # Each level renames the targets inside it, so a fit's `site_data` is its own
 # site's under its own recipe's prep, e.g. `site_tas_original_total` under the
-# `site_info_manuscript` prep at US-Kon is
-# `site_tas_original_total_site_info_manuscript_US.Kon`.
+# `site_info_manuscript_site_info` prep at US-Kon is
+# `site_tas_original_total_site_info_manuscript_site_info_US.Kon`.
 
 # For each kind of data preparation ("prep"):
 per_prep <- function(p) {
