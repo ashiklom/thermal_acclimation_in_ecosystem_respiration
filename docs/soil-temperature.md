@@ -180,17 +180,16 @@ Under `ts_qc = sensor` ([below](#the-ts_qc-prep-axis)) the rule still applies, b
 
 ## The shared parts
 
-- **`ts_estimators()`** (`R/ts-estimators.R`):
-  every model that produces a soil-temperature estimate,
-  one shape — `family`, `predictors`, `fit`, `predict`.
-  The manuscript's are `lm_ta`, `lm_ta_pos`, `lm_ta_recent`, `lm_ta_netrad`
-  and `rf_ta_netrad_manuscript`
-  (workflow 01_01's `randomForest`, 60 k rows, 70/30);
+- **`ts_estimators()`** (`R/ts-estimators.R`): the registry of soil-temperature estimators, each a `ts_estimator` with the same four fields — `family`, `predictors`, `fit`, `predict`.
+  The manuscript's are `lm_ta`, `lm_ta_pos`, `lm_ta_recent`, `lm_ta_netrad` and `rf_ta_netrad_manuscript` (workflow 01_01's `randomForest`, at most 60,000 sampled rows, 70/30 random split);
   the fill's are the `ranger` forests and the memory-feature models.
   Stage A and the fill draw from the same list.
-- **`write_back_ts(ts, estimate, mode)`**: `replace`, `overlay` or `fill_gaps`.
+  The exception is `fixed_linear_estimator()`, whose coefficients come from elsewhere (US-Cwt's neighbour, US-MBP's gap fill): stage A constructs it directly, since it is not in the registry.
+- **`write_back_ts(ts, estimate, mode)`**:
+  `mode` is one of: `replace` (change all original values to estimate values, NAs included), `overlay` (use the estimate where it exists; fall back to measurement elsewhere) or `fill_gaps` (use the estimate values only where the original is missing).
   No default; the mode is the point.
-- **`ts_bounds_rows()`**: both bounds definitions for any candidate column.
+- **`ts_bounds_rows()`**: the bounds rows for any candidate column — always `halfhourly` and `climatology`, plus `climatology_uptake` when given the NEE-uptake days (`uptake_doy`).
+  The measured column's `climatology_uptake` row is the exception: `prep_nee_ac()` writes it, from the whole record before years are disqualified.
 
 ## What is the manuscript and what is a variant
 

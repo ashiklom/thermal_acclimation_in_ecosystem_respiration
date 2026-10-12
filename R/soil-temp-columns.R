@@ -1,4 +1,4 @@
-# The `TS_linear` substitution (its fit domain and write-back) and the two
+# The `TS_linear` substitution (its fit domain and write-back) and the
 # bounds definitions every candidate column carries. The `TS ~ TA` line is
 # `lm_ta` in R/ts-estimators.R.
 
