@@ -29,21 +29,55 @@ Beside the tables, `site_data` carries:
 - `ts_bounds`: the 2.5/97.5 percentiles of growing-season soil temperature, one row per TS column and definition:
     - `climatology` --- calculated from the growing season climatology (i.e., calculate the average for each DOY over all years; then, take the quantiles of that)
     - `halfhourly` --- the quantiles of the raw half-hourly values within the growing season bounds
-    - `climatology_uptake` --- the manuscript's for `TS_measured`: like `climatology`, but over the NEE-uptake days and with some quirks (see [`recipes.md`](recipes.md#ts_bounds_measured--ts_bounds_estimated)); an estimate's version sees only the years step 01 kept
+    - `climatology_uptake` --- the manuscript's for `TS_measured`: like `climatology`, but over the NEE-uptake days and with some quirks (see [below](#climatology_uptake-versus-climatology)); an estimate's version sees only the years step 01 kept
     - `TS_memfill`'s rows come with the column, from the `site_fill` target, and are added by `get_soil_temperature()`.
 - `uptake_doy`: the NEE-uptake days the season was detected from, for the estimates' `climatology_uptake` rows
 - `ts_qc`: the quality verdict on `TS_measured`
 - `ts_provenance`: stage A's provenance row
 - `feature_gs`: the growing season, year count, and `TS_measured`'s `climatology_uptake` bounds.
 
+## Soil-temperature bounds
+
 **Bounds travel with the column.**
 `tStart`/`tEnd` gate the window-skip test in `fit_tas_window()`, and they are percentiles of a particular column, so selecting a column and selecting its bounds are one act.
+Every candidate column carries a row per definition in `ts_bounds` (`ts_bounds_rows()`), so selecting bounds is a lookup, not a computation.
+
 The manuscript used different definitions for different columns, and they differ a lot:
 - the measured column's bounds are percentiles of the *day-of-year climatology* over the NEE-uptake days, from `detect_growing_season()` (`climatology_uptake`);
 - the regressed column's are percentiles of the raw *half-hourly* values (`halfhourly`).
 
 Across 44 sites the half-hourly band is 16.7 °C wide against the climatology's 10.0 °C, before the column changes at all ([`ts-rework.html`](ts-rework.html), F4).
-A recipe names the definition for each kind of column, `ts_bounds_measured` and `ts_bounds_estimated`; setting them equal applies one definition throughout.
+A recipe names the definition for each kind of column, `ts_bounds_measured` and `ts_bounds_estimated` (see [`recipes.md`](recipes.md#ts_bounds_measured--ts_bounds_estimated)); setting them equal applies one definition throughout.
+
+### `climatology_uptake` versus `climatology`
+
+The `climatology_uptake` row is *not* the `climatology` row, though both are 2.5/97.5 percentiles of day-of-year mean soil temperature.
+For `TS_measured` it is the `tStart`/`tEnd` of `detect_growing_season()`, and differs in:
+
+- **Days.** It averages over the NEE-uptake days
+  (DOYs whose multi-year mean NEE is below the cut-off), not over `[gStart, gEnd]`.
+  The two sets are close but not equal:
+  the season is the 7th uptake day from each end widened by 4 days,
+  so isolated uptake days outside it are counted and weak-uptake days inside it are not;
+  and the uptake days ignore both the TS ≥ 0 tightening of `gStart`
+  and the `gStart`/`gEnd` overrides in `site_info.csv` (24 sites).
+- **Years.** It is computed on the whole record,
+  before disqualified years are dropped;
+  `climatology` is computed on the step-01 output.
+- **Floors.** `tStart` is floored at 0 °C,
+  and at 2 °C at `SITES_TS_MIN_2C` (CH-Dav, US-Ha1, US-GLE).
+  `climatology` is not floored.
+
+Because it is computed on the whole record inside season detection,
+`prep_nee_ac()` writes the measured row directly rather than through `ts_bounds_rows()`.
+
+An estimate's `climatology_uptake` row (`ts_bounds_climatology_uptake()`) uses the same uptake days
+(`detect_growing_season()` returns them as `uptake_doy`, and `site_data` carries them)
+and the same floors.
+It differs from the measured row in **years** only:
+an estimate exists only for the years step 01 kept,
+so its climatology averages over those rather than the whole record.
+On the same data the two definitions agree exactly (pinned in `test-recipes.R`).
 
 ## Why two stages
 
@@ -124,19 +158,45 @@ so that "no branching downstream" is a checkable property rather than a conventi
 The metadata row carries everything the settings table reports about soil temperature,
 and copies stage A's provenance fields in.
 
-**No second method where there is no measured truth.**
-Where `ts_source` leaves rows that are not a sensor reading,
-every variant alternative to `TS_measured` is a model fitted *to* it —
+### The refuse rule: no estimate on top of an estimate
+
+Every variant alternative to `TS_measured` is a model fitted *to* it:
 `TS_linear` regresses it on air temperature,
-`TS_memfill` is cross-validated against it —
-and either returns a function of the same predictors wearing a skill score.
+and `TS_memfill` is cross-validated against it.
+That only makes sense if `TS_measured` is real sensor data.
+Where `ts_source` leaves rows that are not a sensor reading,
+the second model just learns to copy the first,
+and returns a function of the same predictors wearing a skill score.
+(In the extreme, DE-Hte's `lm_ta_netrad` fill reproduces its target almost exactly: CV error 1.5e-14.)
+
 So under `measured_or_lm` and `measured_or_best_fill`,
-stage B keeps `TS_measured` at those 27 sites,
-records `ts_refused = TRUE`,
-and `fill_soil_temp()` declines before doing any work.
+stage B keeps `TS_measured` at those sites (and that is what later fits use),
+records `ts_refused = TRUE` and the reason,
+and `fill_soil_temp()` declines before doing any work:
+the `site_fill` target records `status = "no measured truth"`,
+so these sites have no rows in `fill_cv.csv`.
+
+The rule applies at 27 sites, every `ts_source` mapped to `"none"` in `TS_SOURCES`:
+
+- 16 sites with `ts_source = reconstructed` (soil temperature estimated wholesale)
+- 7 sites with `ts_source = lm_ta_cold` or `lm_ta_recent` (wholesale `TS ~ TA` regressions)
+- GF-Guy, which uses air temperature in place of soil temperature
+- US-Cwt, which uses a regression borrowed from a neighbouring site
+- FI-Sod and US-MBP, where only part of the record is estimated
+
 The manuscript's `site_info` strategy is exempt:
 `ts_col` there is a declaration,
-and its two double-applications (FI-Sod, US-MBP) are the manuscript's own.
+and its two double-applications are the manuscript's own.
+At FI-Sod and US-MBP, stage A rebuilds part of `TS_measured`
+(chained depth-to-depth regressions before 2006 at FI-Sod; `TA × 0.369 + 5.87` in the gaps at US-MBP),
+and then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) to that partly-estimated column.
+At US-MBP the filled rows are already an exact linear function of TA, so the second fit is pulled toward the first
+(see also [Ordering](#ordering-and-why-it-is-load-bearing)).
+
+The rule reads what stage A actually ran (`ts_truth` in the provenance row), not what `ts_source` declares.
+Under `ts_qc = sensor` ([below](#the-ts_qc-prep-axis)) the rule still applies,
+but stage A skips its reconstructions and keeps the raw sensor,
+so `TS_measured` is real data again, nothing is refused, and the second method has something to train on.
 
 ## The shared parts
 
@@ -176,17 +236,26 @@ and — if it fits a model — one entry in `ts_estimators()`.
 under `manuscript` the arm is the declaration;
 under `sensor` every arm whose result is not measured at every row
 is replaced by the raw declared sensor,
-and the arms that are (`sensor_depth2`, `gapfill_pi`) still run.
+and the arms that are (`sensor_depth2` at CZ-Stn, `gapfill_pi` at US-NR1/ICh/ICs) still run.
+Qualification, the quality screen and the fill's truth are then all measurements.
 The provenance row records both the declaration (`ts_source`)
 and what ran (`stage_a_arm`, `ts_truth`),
 and **stage B and the fill read the latter** —
 so under `ts_qc = sensor` nothing is refused
 and the fill has a real truth at the 27 sites.
 A site whose raw sensor is too sparse to qualify a year
-fails step 01 and drops from that recipe.
-In `_targets.R` each prep key gets its own `site_data_<prep>_*` and `site_fill_<prep>_*` per site;
-the manuscript's is untouched.
-See docs/recipes.md.
+fails its own step-01 target and drops from that recipe —
+the honest result, not a fallback.
+
+Because `ts_qc` is a prep axis,
+a recipe with `ts_qc = sensor` has a different prep key from the manuscript's
+and gets its own step 01 and fill per site
+(`site_data_site_info_sensor_*`, `site_fill_site_info_sensor_*` in `_targets.R`),
+which only its fits read.
+The manuscript's (`site_data_site_info_manuscript_*`) —
+what every collector and the `workflows/` scripts consume —
+never moves.
+See [`recipes.md`](recipes.md#ts_qc).
 
 ## Soil water
 

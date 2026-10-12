@@ -25,52 +25,23 @@ This allows the manuscript's specific logic --- and any number of alternatives -
 
 ### `ts` -- soil temperature column
 
-Step 01 produces a column called `TS_measured`.
-Despite the name, it is not always a sensor reading:
-at some sites, step 01 has already filled or replaced it with an estimate (_which_ estimate is set by `ts_source` in `site_info.csv`; see [docs/soil-temperature.md](soil-temperature.md)).
-Step 01 also runs a quality check on `TS_measured` (`ts_quality()`) and records a verdict, `GOOD` or `BAD`, in `site_data$ts_qc`.
-
-The `ts` axis picks which column the acclimation model is fitted on:
+Picks which soil-temperature column the acclimation model is fitted on.
+Step 01's `TS_measured` is not always a sensor reading: at some sites it has already been filled or replaced with an estimate (set by `ts_source` in `site_info.csv`).
+Step 01 also records a quality verdict on `TS_measured` --- `GOOD` or `BAD` --- in `site_data$ts_qc`.
+Possible values of `ts` are:
 
 - `site_info` — whatever `ts_col` says in `site_info.csv`. This is what the manuscript does.
-- `measured_or_lm` — if the verdict on `TS_measured` is `GOOD`, use `TS_measured`.
-  If the verdict is `BAD`, use `TS_linear`, a regression of soil temperature on air temperature (`lm(TS ~ TA)`).
-  The difference from the manuscript: good sensors are no longer thrown away (F10: 27 of 50 hand-flagged sites pass every physical test).
-- `measured_or_best_fill` — the same, but a `BAD` sensor is replaced by `TS_memfill` instead of `TS_linear`.
-  `TS_memfill` is whichever gap-filling method scored best in cross-validation at that site (the `site_fill` target; F12: these methods cut out-of-fold error by 58%).
-  If no fill is available, it falls back to `TS_linear` and says why in `settings$ts_reason`.
+- `measured_or_lm` — `TS_measured` if `GOOD`; otherwise `TS_linear` (`lm(TS ~ TA)`).
+  Good sensors are no longer thrown away (F10: 27 of 50 hand-flagged sites pass every physical test).
+- `measured_or_best_fill` — the same, but a `BAD` sensor is replaced by `TS_memfill`, the best cross-validated fill at that site (F12: out-of-fold error cut by 58%).
+  Falls back to `TS_linear` if no fill is available, saying why in `settings$ts_reason`.
 
-#### The refuse rule: no estimate on top of an estimate
+The two non-manuscript strategies follow the **refuse rule**:
+where `TS_measured` is already partly or wholly an estimate (27 sites under `ts_qc = manuscript`), they keep `TS_measured` and set `ts_refused = TRUE`.
+Under `ts_qc = sensor`, step 01 skips those reconstructions and keeps the site's declared sensor column, so `TS_measured` is real data everywhere and the rule refuses nothing:
+a `BAD` sensor is replaced by `TS_linear` or `TS_memfill` trained on the actual measurements.
+See [soil-temperature.md](soil-temperature.md#the-refuse-rule-no-estimate-on-top-of-an-estimate).
 
-`TS_linear` and `TS_memfill` are both models trained on `TS_measured`.
-That only makes sense if `TS_measured` is real sensor data.
-If `TS_measured` is _already_ an estimate, training a second model on it just teaches the second model to copy the first one, and its skill score looks good for the wrong reason.
-(In the extreme, DE-Hte's `lm_ta_netrad` fill reproduces its target almost exactly: CV error 1.5e-14.)
-
-So `measured_or_lm` and `measured_or_best_fill` first check whether `TS_measured` contains any non-sensor values.
-If it does, they do not apply `TS_linear` or `TS_memfill`.
-Instead, they keep `TS_measured` as it is (and that is what gets used by later acclimation model fits), set `ts_refused = TRUE`, and give the reason.
-The `site_fill` target skips these sites (`status = "no measured truth"`), so they have no rows in `fill_cv.csv`.
-
-The rule applies at 27 sites (every `ts_source` mapped to `"none"` in `TS_SOURCES`, `R/constants.R`):
-
-- 16 sites with `ts_source = reconstructed` (soil temperature estimated wholesale)
-- 7 sites with `ts_source = lm_ta_cold` or `lm_ta_recent` (wholesale `TS ~ TA` regressions)
-- GF-Guy, which uses air temperature in place of soil temperature
-- US-Cwt, which uses a regression borrowed from a neighbouring site
-- FI-Sod and US-MBP, where only part of the record is estimated (see below)
-
-`site_info` does _not_ apply this rule, because it reproduces the manuscript as written.
-At FI-Sod and US-MBP the manuscript does stack two estimates:
-
-1. Step 01 rebuilds part of `TS_measured`.
-   At FI-Sod, the pre-2006 record comes from chained depth-to-depth regressions (`recalibrated`).
-   At US-MBP, gaps are filled with `TA * 0.369 + 5.87` (`gapfill_ta`).
-2. Then `ts_col = TS_linear` fits `TS ~ TA` (on `TA > 0` rows) to that partly-estimated `TS_measured`.
-   At US-MBP the filled rows are already an exact linear function of TA, so the second fit is pulled toward the first.
-
-To make `measured_or_lm` or `measured_or_best_fill` apply `TS_linear` or `TS_memfill` at these 27 sites, use `ts_qc = sensor` (below).
-It makes step 01 use the raw sensor, so `TS_measured` is real data again and the second method has something to train on.
 
 ### `season`
 
@@ -106,74 +77,33 @@ See *Future work*.
 
 - `manuscript` — stage A as the manuscript had it:
   the sensor after its per-site repairs,
-  or a reconstruction where the site has none
-  (`ts_source` in `site_info.csv`; see [docs/soil-temperature.md](soil-temperature.md)).
+  or a reconstruction where the site has none (`ts_source` in `site_info.csv`).
 - `sensor` — the raw declared sensor
-  wherever the manuscript's arm would leave rows that are not a sensor reading.
-  The arms whose result *is* measured at every row
-  (the second depth at CZ-Stn, the PI gap-fill at US-NR1/ICh/ICs)
-  still run.
-  Qualification, the quality screen and the fill's truth are then all measurements,
-  which is what lets a `measured_or_best_fill` recipe act at the 27 sites
-  the refuse rule otherwise holds.
-  A site whose raw sensor is too sparse to qualify a year
-  fails its own step-01 target and drops from the recipe —
-  the honest result, not a fallback.
+  wherever the manuscript's arm would leave rows that are not a sensor reading,
+  so the refuse rule has nothing to refuse.
+  Sites whose raw sensor is too sparse to qualify a year drop from the recipe.
 
-This is a **prep** axis:
-a recipe with `ts_qc = sensor` has a different prep key from the manuscript's
-and gets its own step 01 and fill per site
-(`site_data_site_info_sensor_*`, `site_fill_site_info_sensor_*` in `_targets.R`),
-which only its fits read.
-The manuscript's (`site_data_site_info_manuscript_*`) —
-what every collector and the `workflows/` scripts consume —
-never moves.
+This is a **prep** axis, so a `sensor` recipe gets its own step 01 and fill per site.
 `memfill_sensor` is the registry's example;
 it is not in `DEV_RECIPES` because it doubles a run's step-01 cost.
+See [soil-temperature.md](soil-temperature.md#the-ts_qc-prep-axis).
 
 ### `ts_bounds_measured` / `ts_bounds_estimated`
 
 The bounds are percentiles of the selected column, so a recipe names one definition for each kind of column:
 `ts_bounds_measured` when the selected column is `TS_measured`, and `ts_bounds_estimated` when it is `TS_linear` or `TS_memfill`.
 
-- `climatology_uptake` — the manuscript's definition for measured soil temperature (below).
+- `climatology_uptake` — the manuscript's definition for measured soil temperature: percentiles of the day-of-year climatology over the NEE-uptake days, floored at 0 °C (2 °C at three sites).
 - `climatology` — 2.5/97.5 percentiles of the day-of-year climatology over `[gStart, gEnd]`.
 - `halfhourly` — 2.5/97.5 percentiles of the raw half-hourly values over `[gStart, gEnd]`.
 
-The manuscript is `climatology_uptake` / `halfhourly`, so its gate changes definition along with the column.
-F4 measured the resulting inconsistency: the admissible band is 10.0 °C wide on measured data under one definition and 16.7 °C under the other, *before the column changes at all*.
-Setting both axes to the same definition removes it.
+The manuscript is `climatology_uptake` / `halfhourly`, so its gate changes definition along with the column
+(F4: a 10.0 °C band under one definition against 16.7 °C under the other, on the same data).
+Setting both axes to the same definition removes the inconsistency.
 `uptake_all` does so with the manuscript's measured-column definition, so the measured-column sites are exactly as under `original` and only the `TS_linear` sites move;
 `memfill_hh` does so with `halfhourly`, which moves every site.
 
-Every column carries a row per definition in `ts_bounds` (`ts_bounds_rows()`), so this is a lookup, not a computation.
-The `climatology_uptake` row is *not* the `climatology` row, though both are 2.5/97.5 percentiles of day-of-year mean soil temperature.
-For `TS_measured` it is the `tStart`/`tEnd` of `detect_growing_season()`, and differs in:
-
-- **Days.** It averages over the NEE-uptake days
-  (DOYs whose multi-year mean NEE is below the cut-off), not over `[gStart, gEnd]`.
-  The two sets are close but not equal:
-  the season is the 7th uptake day from each end widened by 4 days,
-  so isolated uptake days outside it are counted and weak-uptake days inside it are not;
-  and the uptake days ignore both the TS ≥ 0 tightening of `gStart`
-  and the `gStart`/`gEnd` overrides in `site_info.csv` (24 sites).
-- **Years.** It is computed on the whole record,
-  before disqualified years are dropped;
-  `climatology` is computed on the step-01 output.
-- **Floors.** `tStart` is floored at 0 °C,
-  and at 2 °C at `SITES_TS_MIN_2C` (CH-Dav, US-Ha1, US-GLE).
-  `climatology` is not floored.
-
-Because it is computed on the whole record inside season detection,
-`prep_nee_ac()` writes the measured row directly rather than through `ts_bounds_rows()`.
-
-An estimate's `climatology_uptake` row (`ts_bounds_climatology_uptake()`) uses the same uptake days
-(`detect_growing_season()` returns them as `uptake_doy`, and `site_data` carries them)
-and the same floors.
-It differs from the measured row in **years** only:
-an estimate exists only for the years step 01 kept,
-so its climatology averages over those rather than the whole record.
-On the same data the two definitions agree exactly (pinned in `test-recipes.R`).
+See [soil-temperature.md](soil-temperature.md#soil-temperature-bounds) for how the definitions differ in detail.
 
 ### `swc`
 
@@ -181,6 +111,8 @@ On the same data the two definitions agree exactly (pinned in `test-recipes.R`).
 - `era5` — ERA5-Land for every site, so the soil-water driver is one product.
   The total model has no soil water in its formula,
   so the choice is NA there.
+
+See [soil-temperature.md](soil-temperature.md#soil-water).
 
 ### `year_qc`
 
