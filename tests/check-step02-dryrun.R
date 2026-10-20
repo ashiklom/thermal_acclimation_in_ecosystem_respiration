@@ -1,84 +1,165 @@
-# Compare the step-02 fit-input fingerprints of the loop scripts 02_01a/b at
-# a reference git ref with those of the working tree.
+# Compare the step-02 fit-input fingerprints of a reference git ref with
+# those of the working tree.
 #
 # Usage (from the repository root):
-#   Rscript tests/check-step02-dryrun.R [REF] [--sites=US-Kon,FI-Sod]
+#   Rscript tests/check-step02-dryrun.R [REF] [--sites=US-Kon,FI-Sod] [--jobs=8]
 #
-# Both versions run in dry-run mode (R/dry-run.R from the working tree):
-# every brms::brm() call is recorded instead of sampled. The check requires
-# identical call logs (site, order, data hash, priors, sampler settings) and
-# identical outcome tables. REF reads the published step-01 outputs from
-# ../original-data and data/; the working tree reads data-proc/.
+# Both versions run 02_01a and 02_01b in dry-run mode (R/dry-run.R from the
+# working tree): every brms::brm() call is recorded instead of sampled. Each
+# version runs from its own source tree (REF via `git archive`) against a
+# scratch data-proc root whose step-01 inputs are symlinked from data-proc/,
+# so nothing in data-proc/ is written. The check requires identical call logs
+# (site, call order, data hash, priors, sampler settings) and identical
+# per-site outcome tables.
+#
+# Scripts written as a loop over all sites (up to v2-s03) are restricted to
+# --sites by rewriting the loop header; per-site runner scripts (from v2-s04)
+# get --sites passed through and run in --jobs parallel processes.
 
 stopifnot(requireNamespace("parallel"))
 
 args <- commandArgs(trailingOnly = TRUE)
-ref <- if (length(args) > 0 && !startsWith(args[1], "--")) args[1] else "v2-s00-base"
-sites_arg <- grep("^--sites=", args, value = TRUE)
-sites <- if (length(sites_arg) > 0) strsplit(sub("^--sites=", "", sites_arg), ",")[[1]] else character()
+ref <- if (length(args) > 0 && !startsWith(args[1], "--")) args[1] else stop("give a reference git ref")
+opt <- function(name, default) {
+  hit <- grep(paste0("^--", name, "="), args, value = TRUE)
+  if (length(hit) > 0) sub(paste0("^--", name, "="), "", hit) else default
+}
+jobs <- as.integer(opt("jobs", "8"))
+site_info <- utils::read.csv(file.path("data", "site_info.csv"))
+sites <- strsplit(opt("sites", paste(site_info$site_ID, collapse = ",")), ",")[[1]]
+stopifnot(all(sites %in% site_info$site_ID))
+sites <- site_info$site_ID[site_info$site_ID %in% sites]
 
-scripts <- c(
+models <- c(
   total = "workflows/02_01a_estimate_total_TAS_use_moving_window.R",
   direct = "workflows/02_01b_estimate_direct_TAS_use_moving_window.R"
 )
+outputs <- list(
+  total = c("outcome_temp.csv", "outcome_siteyear_temp.csv"),
+  direct = c("outcome_temp_water_gpp.csv", "outcome_siteyear_temp_water_gpp.csv")
+)
+repo <- normalizePath(".")
+dry_run <- file.path(repo, "R", "dry-run.R")
 original_data <- normalizePath(file.path("..", "original-data"))
-work <- tempfile("check-dryrun-")
-dir.create(work)
+work <- file.path(repo, "data-proc", "checks", paste0("dryrun-", format(Sys.time(), "%Y%m%d-%H%M%S")))
+dir.create(work, recursive = TRUE)
 
-instrument <- function(lines) {
-  anchor <- max(grep('^(rm\\(list ?= ?ls\\(\\)\\)|source\\(file\\.path\\("R", "paths\\.R"\\)\\))\\s*$', lines))
-  stopifnot(is.finite(anchor))
-  lines <- append(lines, 'source(file.path("R", "dry-run.R"))', after = anchor)
-  if (length(sites) > 0) {
-    loop <- grep("^for \\(id in 1:nrow\\(site_info\\)\\)", lines)
-    stopifnot(length(loop) == 1)
-    lines[loop] <- sprintf("for (id in which(site_info$site_ID %%in%% %s)) {", paste(deparse(sites), collapse = ""))
+source_tree <- function(version) {
+  if (version == "head") return(repo)
+  dir <- file.path(work, "src-ref")
+  dir.create(dir)
+  status <- system(sprintf("git archive %s | tar -x -C %s", shQuote(ref), shQuote(dir)))
+  stopifnot(status == 0)
+  dir
+}
+
+# A scratch data-proc root holding links to the step-01 inputs.
+proc_root <- function(version, model) {
+  root <- file.path(work, version, model, "proc")
+  dir.create(root, recursive = TRUE)
+  for (f in c("RespirationData", "TS_RandomForest", "growing_season_feature_EuropFlux.csv", "growing_season_feature_AmeriFlux.csv")) {
+    file.symlink(file.path(repo, "data-proc", f), file.path(root, f))
   }
-  lines
+  root
 }
 
-prepare <- function(version, model) {
-  path <- scripts[[model]]
-  lines <- if (version == "ref") system2("git", c("show", paste0(ref, ":", path)), stdout = TRUE) else readLines(path)
-  if (version == "ref") lines <- sub("^dir_rawdata <- .*$", sprintf("dir_rawdata <- '%s'", original_data), lines)
-  script <- file.path(work, paste0(version, "-", model, ".R"))
-  writeLines(instrument(lines), script)
-  list(script = script, out_dir = file.path(work, version, model), log = paste0(script, ".log"))
-}
+is_loop_script <- function(path) any(grepl("^for \\(id in 1:nrow\\(site_info\\)\\)", readLines(path)))
 
 runs <- list()
-for (version in c("ref", "head")) for (model in names(scripts)) runs[[paste(version, model)]] <- prepare(version, model)
-
-status <- parallel::mclapply(runs, function(r) {
-  system2("Rscript", r$script, stdout = r$log, stderr = r$log, env = paste0("TAS_DRY_RUN=", r$out_dir))
-}, mc.cores = length(runs))
-failed <- names(runs)[unlist(status) != 0]
-if (length(failed) > 0) {
-  for (f in failed) message(f, " failed; log tail:\n", paste(utils::tail(readLines(runs[[f]]$log), 20), collapse = "\n"))
-  stop("Instrumented script(s) failed: ", paste(failed, collapse = ", "))
-}
-
-n_bad <- 0
-for (model in names(scripts)) {
-  a_dir <- runs[[paste("ref", model)]]$out_dir
-  b_dir <- runs[[paste("head", model)]]$out_dir
-  files <- sort(union(list.files(a_dir), list.files(b_dir)))
-  for (f in files) {
-    a <- utils::read.delim(file.path(a_dir, f), sep = if (grepl("\\.tsv$", f)) "\t" else ",", colClasses = "character")
-    b <- utils::read.delim(file.path(b_dir, f), sep = if (grepl("\\.tsv$", f)) "\t" else ",", colClasses = "character")
-    if (!identical(a, b)) {
-      n_bad <- n_bad + 1
-      message(model, " ", f, ": DIFFERENT (", nrow(a), " vs ", nrow(b), " rows)")
-      if (identical(dim(a), dim(b)) && identical(names(a), names(b))) {
-        bad_rows <- which(rowSums(a != b, na.rm = TRUE) > 0 | (is.na(a) != is.na(b)) |> rowSums() > 0)
-        print(utils::head(rbind(cbind(version = "ref", a[bad_rows, ]), cbind(version = "head", b[bad_rows, ])), 10))
-      }
+for (version in c("ref", "head")) {
+  src <- source_tree(version)
+  for (model in names(models)) {
+    script <- file.path(src, models[[model]])
+    root <- proc_root(version, model)
+    dry_dir <- file.path(work, version, model, "calls")
+    if (is_loop_script(script)) {
+      lines <- readLines(script)
+      loop <- grep("^for \\(id in 1:nrow\\(site_info\\)\\)", lines)
+      lines[loop] <- sprintf("for (id in which(site_info$site_ID %%in%% %s)) {", paste(deparse(sites), collapse = ""))
+      script <- file.path(work, paste0(version, "-", model, ".R"))
+      writeLines(lines, script)
+      chunks <- list(NULL)
     } else {
-      message(model, " ", f, ": identical (", nrow(a), " rows)")
+      chunks <- unname(split(sites, rep_len(seq_len(min(jobs, length(sites))), length(sites))))
+    }
+    for (i in seq_along(chunks)) {
+      runs[[length(runs) + 1]] <- list(
+        version = version, model = model, src = src, script = script, root = root, dry_dir = dry_dir,
+        sites = chunks[[i]], log = file.path(work, sprintf("%s-%s-%d.log", version, model, i))
+      )
     }
   }
 }
-saveRDS(runs, file.path(work, "runs.rds"))
+
+status <- parallel::mclapply(runs, function(r) {
+  cmd <- sprintf(
+    "cd %s && TAS_DRY_RUN=%s THERMAL_DATA_PROC=%s THERMAL_ORIGINAL_DATA=%s Rscript -e %s %s > %s 2>&1",
+    shQuote(r$src), shQuote(r$dry_dir), shQuote(r$root), shQuote(original_data),
+    shQuote(sprintf("source('%s'); source('%s')", dry_run, r$script)),
+    if (is.null(r$sites)) "" else shQuote(paste0("--sites=", paste(r$sites, collapse = ","))),
+    shQuote(r$log)
+  )
+  system(cmd)
+}, mc.cores = jobs)
+failed <- which(unlist(status) != 0)
+if (length(failed) > 0) {
+  for (i in failed) message(runs[[i]]$log, ":\n", paste(utils::tail(readLines(runs[[i]]$log), 15), collapse = "\n"))
+  stop(length(failed), " dry-run process(es) failed")
+}
+
+read_calls <- function(dir) {
+  files <- list.files(dir, pattern = "^brm-calls.*\\.tsv$", full.names = TRUE)
+  calls <- do.call(rbind, lapply(files, utils::read.delim, colClasses = "character"))
+  calls <- calls[order(match(calls$site, sites), as.integer(calls$seq)), ]
+  rownames(calls) <- NULL
+  calls
+}
+
+# Per-site outcome tables: from a loop script's combined CSVs, or from a
+# runner's per-site results, written out the same way and re-read as text.
+read_outcomes <- function(version, model) {
+  root <- file.path(work, version, model, "proc")
+  site_dir <- file.path(root, "TAS_sites", model)
+  if (dir.exists(site_dir)) {
+    env <- new.env()
+    sys.source(file.path(source_tree_dirs[[version]], "R", "step02-tas.R"), envir = env)
+    combined <- env$combine_tas_sites(lapply(file.path(site_dir, paste0(sites, ".rds")), readRDS))
+    tables <- list(combined$outcome, combined$siteyear)
+  } else {
+    tables <- lapply(outputs[[model]], function(f) utils::read.csv(file.path(root, f)))
+    # A loop restricted to some sites still indexes outcome rows by the site's
+    # row in site_info, leaving all-NA rows for the sites it skipped.
+    tables[[1]] <- tables[[1]][!is.na(tables[[1]]$site_ID), ]
+  }
+  lapply(tables, function(t) {
+    f <- tempfile(fileext = ".csv")
+    utils::write.csv(t, f, row.names = FALSE)
+    utils::read.csv(f, colClasses = "character")
+  })
+}
+source_tree_dirs <- list(ref = file.path(work, "src-ref"), head = repo)
+
+n_bad <- 0
+report <- function(label, a, b) {
+  if (identical(a, b)) {
+    message(label, ": identical (", nrow(a), " rows)")
+    return(invisible())
+  }
+  n_bad <<- n_bad + 1
+  message(label, ": DIFFERENT (", nrow(a), " vs ", nrow(b), " rows)")
+  if (identical(dim(a), dim(b)) && identical(names(a), names(b))) {
+    bad <- which(rowSums(as.matrix(a) != as.matrix(b) | is.na(a) != is.na(b), na.rm = TRUE) > 0)
+    print(utils::head(rbind(cbind(version = "ref", a[bad, ]), cbind(version = "head", b[bad, ])), 10))
+  }
+}
+for (model in names(models)) {
+  report(paste(model, "brm calls"), read_calls(file.path(work, "ref", model, "calls")),
+         read_calls(file.path(work, "head", model, "calls")))
+  a <- read_outcomes("ref", model)
+  b <- read_outcomes("head", model)
+  report(paste(model, "outcome"), a[[1]], b[[1]])
+  report(paste(model, "siteyear"), a[[2]], b[[2]])
+}
 message("Dry-run outputs in ", work)
 if (n_bad > 0) stop(n_bad, " differences against ", ref)
-message("OK: step-02 fit inputs identical to ", ref)
+message("OK: step-02 fit inputs and outcome tables identical to ", ref, " (", length(sites), " sites)")

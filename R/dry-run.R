@@ -6,7 +6,7 @@
 # brms::brm(), brms::fixef() and the brms methods the fitting code uses with
 # deterministic stand-ins:
 #
-# - brm() appends one row per call to <TAS_DRY_RUN>/brm-calls.tsv: the site,
+# - brm() appends one row per call to a call log (below): the site,
 #   the call's sequence number within the site, the number of rows, a hash of
 #   the model data (only the columns the formula uses, row names dropped),
 #   the numeric prior means and SDs, and the sampler settings.
@@ -17,16 +17,16 @@
 #   still run.
 # - nuts_params() reports no divergences.
 #
-# Every output table the code writes with write.csv() goes to <TAS_DRY_RUN>
-# instead of its usual location. The resulting call log is the fit-input
-# "fingerprint" used to show that a refactor leaves the fits' inputs
-# unchanged without running any MCMC.
+# Each R process writes its own log, <TAS_DRY_RUN>/brm-calls-<pid>.tsv, so
+# sites can run in parallel. The call logs are the fit-input "fingerprint"
+# used to show that a refactor leaves the fits' inputs unchanged without
+# running any MCMC.
 
 local({
   out_dir <- Sys.getenv("TAS_DRY_RUN")
   stopifnot(nzchar(out_dir))
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-  log_file <- file.path(out_dir, "brm-calls.tsv")
+  log_file <- file.path(out_dir, sprintf("brm-calls-%d.tsv", Sys.getpid()))
   state <- new.env()
   state$counter <- list()
 
@@ -113,9 +113,4 @@ local({
     n <- if (is.null(newdata)) object$n else nrow(newdata)
     cbind(Estimate = rep(object$nee, n), Est.Error = 0, Q2.5 = object$nee, Q97.5 = object$nee)
   }, envir = asNamespace("stats"))
-
-  # Redirect output tables written with write.csv() into the dry-run directory.
-  assign("write.csv", function(x, file = "", ...) {
-    utils::write.csv(x, file.path(out_dir, basename(file)), ...)
-  }, envir = globalenv())
 })
