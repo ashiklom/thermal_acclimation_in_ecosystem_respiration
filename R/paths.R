@@ -15,12 +15,12 @@ path_original <- function(...) {
 
 path_raw <- function(...) {
   path <- file.path("data-raw", ...)
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  for (dir in unique(dirname(path))) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   path
 }
 
 path_proc <- function(...) {
   path <- file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), ...)
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  for (dir in unique(dirname(path))) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   path
 }
