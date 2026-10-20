@@ -85,3 +85,10 @@ website-serve = { cmd = "caddy run --config analysis-website/Caddyfile --adapter
 
 [environments]
 website = { features = ["website"], no-default-feature = true }
+
+# R's read.csv only strips the UTF-8 byte-order mark that starts
+# data/site_info.csv (and string sorting matches the authors' setup) in a
+# UTF-8 locale; shells without LANG would otherwise give R the C locale.
+[activation.env]
+LANG = "en_US.UTF-8"
+LC_ALL = "en_US.UTF-8"
