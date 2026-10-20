@@ -9,8 +9,7 @@
 # It takes about 2 days to finish the estimate of TAS; but on other computers it could take one week, depending on number of cores used.  
 # please install 'cmdstanr' before you run this script. 
 
-library(librarian)
-shelf(dplyr, lubridate, gslnls, caret, performance, ggpubr, ggplot2, zoo, bayesplot, brms, nlme)
+stopifnot(requireNamespace("brms"), requireNamespace("caret"), requireNamespace("dplyr"), requireNamespace("gslnls"), requireNamespace("lubridate"), requireNamespace("nlme"), requireNamespace("zoo"))
 source(file.path("R", "paths.R"))
 
 set.seed(123)
@@ -22,9 +21,9 @@ feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
 
 swc_ERA5 <- read.csv(path_original("ERA5_daily_swc_1990_2024_allsites.csv"))
 swc_ERA5$date <- as.Date(swc_ERA5$date)
-swc_ERA5$YEAR <- year(swc_ERA5$date)
-swc_ERA5$MONTH <- month(swc_ERA5$date)
-swc_ERA5$DAY <- day(swc_ERA5$date)
+swc_ERA5$YEAR <- lubridate::year(swc_ERA5$date)
+swc_ERA5$MONTH <- lubridate::month(swc_ERA5$date)
+swc_ERA5$DAY <- lubridate::day(swc_ERA5$date)
 
 # outcome data frame
 outcome <- data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(), 
@@ -59,7 +58,7 @@ for (id in 1:nrow(site_info)) {
     ac <- read.csv(path_proc("RespirationData", paste0(name_site, '_ac.csv')))
   }
   if (site_info$SWC_use[id] == 'YES') {
-    a_measure_night_complete <- a_measure_night_complete |> filter(!is.na(SWC))
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(!is.na(SWC))
   }
   
   # if no measured SWC data use daily SWC from ERA5 land
@@ -70,8 +69,8 @@ for (id in 1:nrow(site_info)) {
     # use SWC data from ERA5 land climate reanalysis
     swc_ERA5_site <- swc_ERA5[swc_ERA5$name == name_site, ]
     # attach to a_measure_night_complete and ac
-    a_measure_night_complete <- a_measure_night_complete |> left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
-    ac <- ac |> left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
+    ac <- ac |> dplyr::left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
     site_info$SWC_use[id] = 'YES'
   }
   ###########################################
@@ -95,34 +94,34 @@ for (id in 1:nrow(site_info)) {
   dt = 30  # minute
   if (ac$MINUTE[2] - ac$MINUTE[1] != 30) { dt = 60 }   # minutes 
   # unit is umol / m2 / s
-  ac_day <- ac |> filter(daytime) |> group_by(YEAR, DOY) |> 
-    summarise(NEE_daytime1 = max(-sum(NEE_uStar_f, na.rm=T) * dt * 60 / 86400, 0.0), .groups = "drop")
+  ac_day <- ac |> dplyr::filter(daytime) |> dplyr::group_by(YEAR, DOY) |> 
+    dplyr::summarise(NEE_daytime1 = max(-sum(NEE_uStar_f, na.rm=T) * dt * 60 / 86400, 0.0), .groups = "drop")
   # get rolling average of the prior three days
-  ac_day$NEE_daytime <- rollapply(ac_day$NEE_daytime1, width = 3, FUN = mean,
+  ac_day$NEE_daytime <- zoo::rollapply(ac_day$NEE_daytime1, width = 3, FUN = mean,
                                   align = "right", fill = ac_day$NEE_daytime1[1])
   
   # attach it to nighttime data
   if (!"NEE_daytime1" %in% names(a_measure_night_complete)) {
-    a_measure_night_complete <- a_measure_night_complete |> mutate(DOY_gpp = case_when(HOUR >= 12 ~ DOY,
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::mutate(DOY_gpp = dplyr::case_when(HOUR >= 12 ~ DOY,
                                                                                         HOUR < 12 & DOY == min(ac$DOY) ~ DOY, 
                                                                                         HOUR < 12 & DOY != min(ac$DOY) ~ DOY - 1)) |>
-      left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> filter(!is.na(NEE_daytime1))
+      dplyr::left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> dplyr::filter(!is.na(NEE_daytime1))
   }
   
   # Deal with sites in southern hemisphere
   # add growing_year
   a_measure_night_complete <- a_measure_night_complete  |> 
-    mutate(growing_year = case_when(DOY <= 366 ~ YEAR, 
+    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR, 
                                     TRUE ~ YEAR - 1))
   ac <- ac |> 
-    mutate(growing_year = case_when(DOY <= 366 ~ YEAR, 
+    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR, 
                                     TRUE ~ YEAR - 1))
   
   # remove the growing_year with incomplete data
   # sites in southern hemisphere lose one year, because growing season crosses two years
   if (name_site %in% c('AU-Tum', 'ZA-Kru')) {
-    a_measure_night_complete <- a_measure_night_complete |> filter(between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
-    ac <- ac |> filter(between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+    ac <- ac |> dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
   }
   years <- sort(unique(a_measure_night_complete$growing_year))
   
@@ -135,12 +134,12 @@ for (id in 1:nrow(site_info)) {
   
   # Correct tStart and tEnd for sites with newly regressed TS
   if (name_site %in% site_TS_issue) {
-    tStart <- quantile(ac$TS[between(ac$DOY, gStart, gEnd)], c(0.025), na.rm=T)
-    tEnd <- quantile(ac$TS[between(ac$DOY, gStart, gEnd)], c(0.975), na.rm=T)
+    tStart <- quantile(ac$TS[dplyr::between(ac$DOY, gStart, gEnd)], c(0.025), na.rm=T)
+    tEnd <- quantile(ac$TS[dplyr::between(ac$DOY, gStart, gEnd)], c(0.975), na.rm=T)
   }
   
   # decide control year: the year with growing-season TS closest to long-term mean. 
-  ac_yearly_gs <- ac |> filter(between(DOY, gStart, gEnd)) |> filter(growing_year %in% years) |> group_by(growing_year) |> summarise(TS=mean(TS, na.rm=T))
+  ac_yearly_gs <- ac |> dplyr::filter(dplyr::between(DOY, gStart, gEnd)) |> dplyr::filter(growing_year %in% years) |> dplyr::group_by(growing_year) |> dplyr::summarise(TS=mean(TS, na.rm=T))
   control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
 
   # determine moving window size and number of windows
@@ -184,18 +183,18 @@ for (id in 1:nrow(site_info)) {
     window_start = gStart + window_size*(iwindow-1)
     window_end = min(gStart + window_size*iwindow, gEnd)
     
-    ac_yearly_window <- ac |> filter(between(DOY, window_start, window_end)) |> group_by(growing_year) |> summarise(TS=mean(TS, na.rm=T))
-    if (!between(mean(ac_yearly_window$TS, na.rm=T), max(tStart, 2.0), tEnd) & nwindow > 1) {
+    ac_yearly_window <- ac |> dplyr::filter(dplyr::between(DOY, window_start, window_end)) |> dplyr::group_by(growing_year) |> dplyr::summarise(TS=mean(TS, na.rm=T))
+    if (!dplyr::between(mean(ac_yearly_window$TS, na.rm=T), max(tStart, 2.0), tEnd) & nwindow > 1) {
       next
     }
     
-    data <- a_measure_night_complete |> filter(between(DOY, window_start, window_end)) 
+    data <- a_measure_night_complete |> dplyr::filter(dplyr::between(DOY, window_start, window_end)) 
     # skip a window if no enough data; this is for sites ('US-ICt', 'US-ICh', 'US-ICs', 'FI-Sod') with a period of the whole day is daytime. 
     if (nrow(data) < 100) { next }
     
     # try gsl_nls first because it is fast, and then update priors of brm models based on mod_nls
     # this can give abnormal initial values. 
-    mod_nls <- try(gsl_nls(fn=as.formula(frmu_nls), data=data, start=stprm))
+    mod_nls <- try(gslnls::gsl_nls(fn=as.formula(frmu_nls), data=data, start=stprm))
     if (!inherits(mod_nls, "try-error")) {
       priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2), ", 1.0)")
       priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01), ", 0.1)")
@@ -222,10 +221,10 @@ for (id in 1:nrow(site_info)) {
     } 
 
     # get reference temperature, SWC, and NEEday of each window
-    TSref <- mean(ac$TS[between(ac$DOY, window_start, window_end)], na.rm=T)
-    NEEdayref <- mean(ac_day$NEE_daytime[between(ac_day$DOY, window_start, window_end)], na.rm=T)
+    TSref <- mean(ac$TS[dplyr::between(ac$DOY, window_start, window_end)], na.rm=T)
+    NEEdayref <- mean(ac_day$NEE_daytime[dplyr::between(ac_day$DOY, window_start, window_end)], na.rm=T)
     if (site_info$SWC_use[id] == 'YES') {
-      SWCref <- mean(ac$SWC[between(ac$DOY, window_start, window_end)], na.rm=T)
+      SWCref <- mean(ac$SWC[dplyr::between(ac$DOY, window_start, window_end)], na.rm=T)
       data_ref <- data.frame(TS=TSref, NEE_daytime=NEEdayref, SWC=SWCref)
     } else {
       data_ref <- data.frame(TS=TSref, NEE_daytime=NEEdayref)
@@ -248,10 +247,10 @@ for (id in 1:nrow(site_info)) {
       # rule 2: TSref is within the 0.025 and 0.975 quantiles. 
       # if the two rules are violated, extend window size. 
       extend_days <- 0
-      while(nrow(data_subset) < nobs_threshold | !between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) {
+      while(nrow(data_subset) < nobs_threshold | !dplyr::between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) {
         extend_days <- extend_days + 3
-        data_subset <- a_measure_night_complete |> filter(growing_year == iyear) |> 
-          filter(between(DOY, window_start - extend_days, window_end + extend_days))
+        data_subset <- a_measure_night_complete |> dplyr::filter(growing_year == iyear) |> 
+          dplyr::filter(dplyr::between(DOY, window_start - extend_days, window_end + extend_days))
         # some conditions to break out to avoid dead loop
         if (nrow(data_subset) >= nobs_threshold & (window_end + extend_days) >= gEnd & TSref >= max(data_subset$TS, na.rm=T)) {break}
         if (extend_days >= 24) { break }   # max window size: two months
@@ -263,7 +262,7 @@ for (id in 1:nrow(site_info)) {
       if (nrow(data_subset) <= 25) { next }   # this is mainly for US-Uaf, which has few data
       
       # ensure enough temperature range
-      if (!between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) { next }
+      if (!dplyr::between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) { next }
       
       # ensure nighttime NEE is positive
       if (median(data_subset$NEE) < 0.2 | mean(data_subset$NEE) < 0.2) { next }
@@ -273,7 +272,7 @@ for (id in 1:nrow(site_info)) {
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0)) # , silent = 2
       
       if (!inherits(mod, "try-error")) {
-        np <- nuts_params(mod)
+        np <- brms::nuts_params(mod)
         n_divergent <- sum(subset(np, Parameter == "divergent__")$Value)
         failed_brm <- n_divergent > 0 
       } else {
@@ -289,7 +288,7 @@ for (id in 1:nrow(site_info)) {
 
       # extract model results
       data_subset$NEE_pred <- fitted(mod)[, "Estimate"]
-      ER_obs_pred <- rbind(ER_obs_pred, data_subset[between(data_subset$DOY, window_start, window_end), ])
+      ER_obs_pred <- rbind(ER_obs_pred, data_subset[dplyr::between(data_subset$DOY, window_start, window_end), ])
       
       
       # model parameters
@@ -330,13 +329,13 @@ for (id in 1:nrow(site_info)) {
   outcome_siteyear <- rbind(outcome_siteyear, df_site_year_window)
   
   outcome[id, "site_ID"] <- name_site
-  outcome[id, c("RMSE", "R2")] <- postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)[1:2]
+  outcome[id, c("RMSE", "R2")] <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)[1:2]
   outcome[id, c("control_year", "window_size", "nwindow")] <- c(control_year, window_size, nwindow)
   
   # take account of potential autocorrelation across years
-  mod_ar1 <- gls(lnRatio ~ TS + window,
+  mod_ar1 <- nlme::gls(lnRatio ~ TS + window,
                  data = df_site_year_window,
-                 correlation = corAR1(form = ~ growing_year | window), 
+                 correlation = nlme::corAR1(form = ~ growing_year | window), 
                  na.action = na.omit)
   outcome[id, c("TAS", "TASp")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value")]
 }
