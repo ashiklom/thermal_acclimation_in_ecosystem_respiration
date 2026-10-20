@@ -24,7 +24,7 @@ outcome$TASp <- outcome_temp_water_gpp$TASp
 outcome$TAS_app <- outcome$TAS_tot - outcome$TAS
 
 # comparison of different thermal response strengths
-outcome %>% tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to = 'TAS_type', values_to = "TAS_value") %>%
+outcome |> tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to = 'TAS_type', values_to = "TAS_value") |>
   ggplot(aes(x = TAS_type, y = TAS_value)) + 
   geom_boxplot() +
   theme_bw()
@@ -32,7 +32,7 @@ outcome %>% tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to =
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 if (!"IGBP" %in% names(outcome)) {
-  outcome <- outcome %>% left_join(site_info[, c('site_ID', 'IGBP', 'Climate_class')], by = 'site_ID')
+  outcome <- outcome |> left_join(site_info[, c('site_ID', 'IGBP', 'Climate_class')], by = 'site_ID')
 }
 
 IGBPs <- unique(outcome$IGBP)
@@ -125,13 +125,13 @@ summary(lm(data = outcome, TAS_app ~ Climate_class))  #  yes sig;  p-value: 0.00
 
 #-------------------------------------------------------------------------------------------------------------------------------
 
-outcome %>% tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to = 'TAS_type', values_to = "TAS_value") %>% 
+outcome |> tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to = 'TAS_type', values_to = "TAS_value") |> 
   ggplot(aes(x = Climate_class, y = TAS_value, col = TAS_type)) + 
   geom_boxplot() +
   theme_bw()
 
-outcome %>% tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to = 'TAS_type', values_to = "TAS_value") %>% 
-  mutate(IGBP = factor(IGBP, levels = c('OSH', 'SAV', 'WSA', 'CSH', 'DBF', 'DNF', 'EBF', 'MF', 'ENF', 'GRA', 'WET'))) %>%
+outcome |> tidyr::pivot_longer(col = c("TAS_tot", "TAS", "TAS_app"), names_to = 'TAS_type', values_to = "TAS_value") |> 
+  mutate(IGBP = factor(IGBP, levels = c('OSH', 'SAV', 'WSA', 'CSH', 'DBF', 'DNF', 'EBF', 'MF', 'ENF', 'GRA', 'WET'))) |>
   ggplot(aes(x = IGBP, y = TAS_value, col = TAS_type)) + 
   geom_boxplot() +
   theme_bw()

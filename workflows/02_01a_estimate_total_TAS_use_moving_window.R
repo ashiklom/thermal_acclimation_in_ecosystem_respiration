@@ -48,7 +48,7 @@ for (id in 1:nrow(site_info)) {
     ac <- read.csv(path_proc("RespirationData", paste0(name_site, '_ac.csv')))
   }
   if (site_info$SWC_use[id] == 'YES') {
-    a_measure_night_complete <- a_measure_night_complete %>% filter(!is.na(SWC))
+    a_measure_night_complete <- a_measure_night_complete |> filter(!is.na(SWC))
   }  
   
   # For the 36 sites, obtain TS from simple linear regression of TA, in order to follow reviewer's suggestion
@@ -70,7 +70,7 @@ for (id in 1:nrow(site_info)) {
   dt = 30  # minute
   if (ac$MINUTE[2] - ac$MINUTE[1] != 30) { dt = 60 }   # minutes 
   # unit is umol / m2 / s
-  ac_day <- ac %>% filter(daytime) %>% group_by(YEAR, DOY) %>% 
+  ac_day <- ac |> filter(daytime) |> group_by(YEAR, DOY) |> 
     summarise(NEE_daytime1 = max(-sum(NEE_uStar_f, na.rm=T) * dt * 60 / 86400, 0.0), .groups = "drop")
   # get rolling average of the prior three days
   ac_day$NEE_daytime <- rollapply(ac_day$NEE_daytime1, width = 3, FUN = mean,
@@ -78,26 +78,26 @@ for (id in 1:nrow(site_info)) {
   
   # attach it to nighttime data
   if (!"NEE_daytime1" %in% names(a_measure_night_complete)) {
-    a_measure_night_complete <- a_measure_night_complete %>% mutate(DOY_gpp = case_when(HOUR >= 12 ~ DOY,
+    a_measure_night_complete <- a_measure_night_complete |> mutate(DOY_gpp = case_when(HOUR >= 12 ~ DOY,
                                                                                         HOUR < 12 & DOY == min(ac$DOY) ~ DOY, 
-                                                                                        HOUR < 12 & DOY != min(ac$DOY) ~ DOY - 1)) %>%
-      left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) %>% dplyr::select(-"DOY_gpp") %>% filter(!is.na(NEE_daytime1))
+                                                                                        HOUR < 12 & DOY != min(ac$DOY) ~ DOY - 1)) |>
+      left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> filter(!is.na(NEE_daytime1))
   }
   
   # Deal with sites in southern hemisphere
   # add growing_year
-  a_measure_night_complete <- a_measure_night_complete  %>% 
+  a_measure_night_complete <- a_measure_night_complete  |> 
     mutate(growing_year = case_when(DOY <= 366 ~ YEAR, 
                                     TRUE ~ YEAR - 1))
-  ac <- ac %>% 
+  ac <- ac |> 
     mutate(growing_year = case_when(DOY <= 366 ~ YEAR, 
                                     TRUE ~ YEAR - 1))
   
   # remove the growing_year with incomplete data
   # sites in southern hemisphere lose one year, because growing season crosses two years
   if (name_site %in% c('AU-Tum', 'ZA-Kru')) {
-    a_measure_night_complete <- a_measure_night_complete %>% filter(between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
-    ac <- ac %>% filter(between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+    a_measure_night_complete <- a_measure_night_complete |> filter(between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+    ac <- ac |> filter(between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
   }
   years <- sort(unique(a_measure_night_complete$growing_year))
   
@@ -115,7 +115,7 @@ for (id in 1:nrow(site_info)) {
   }
   
   # decide control year: the year with growing-season TS closest to long-term mean. 
-  ac_yearly_gs <- ac %>% filter(between(DOY, gStart, gEnd)) %>% filter(growing_year %in% years) %>% group_by(growing_year) %>% summarise(TS=mean(TS, na.rm=T))
+  ac_yearly_gs <- ac |> filter(between(DOY, gStart, gEnd)) |> filter(growing_year %in% years) |> group_by(growing_year) |> summarise(TS=mean(TS, na.rm=T))
   control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
   
   # determine moving window size and number of windows
@@ -151,12 +151,12 @@ for (id in 1:nrow(site_info)) {
     window_start = gStart + window_size*(iwindow-1)
     window_end = min(gStart + window_size*iwindow, gEnd)
     
-    ac_yearly_window <- ac %>% filter(between(DOY, window_start, window_end)) %>% group_by(growing_year) %>% summarise(TS=mean(TS, na.rm=T))
+    ac_yearly_window <- ac |> filter(between(DOY, window_start, window_end)) |> group_by(growing_year) |> summarise(TS=mean(TS, na.rm=T))
     if (!between(mean(ac_yearly_window$TS, na.rm=T), max(tStart, 2.0), tEnd) & nwindow > 1) {
       next
     }
     
-    data <- a_measure_night_complete %>% filter(between(DOY, window_start, window_end))
+    data <- a_measure_night_complete |> filter(between(DOY, window_start, window_end))
     # skip a window if no enough data; this is for sites ('US-ICt', 'US-ICh', 'US-ICs', 'FI-Sod') with a period of the whole day is daytime. 
     if (nrow(data) < 100) { next }
     
@@ -208,7 +208,7 @@ for (id in 1:nrow(site_info)) {
       extend_days <- 0
       while(nrow(data_subset) < nobs_threshold | !between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) {
         extend_days <- extend_days + 3
-        data_subset <- a_measure_night_complete %>% filter(growing_year == iyear) %>% 
+        data_subset <- a_measure_night_complete |> filter(growing_year == iyear) |> 
           filter(between(DOY, window_start - extend_days, window_end + extend_days))
         # some conditions to break out to avoid dead loop
         if (nrow(data_subset) >= nobs_threshold & (window_end + extend_days) >= gEnd & TSref >= max(data_subset$TS, na.rm=T)) {break}
