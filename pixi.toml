@@ -1,0 +1,87 @@
+[workspace]
+name = "thermal_acclimation_in_ecosystem_respiration"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+version = "0.1.0"
+
+# ---------------------------------------------------------------- default env
+# R + Stan for workflow steps 01-04, plus the Python used by the download
+# scripts. Anything not on conda-forge is installed by `r-dependencies`.
+
+[dependencies]
+r-base = ">=4.4"
+# Stan
+cmdstan = "*"
+r-cmdstanr = "*"
+r-brms = "*"
+# Workflow packages (steps 01-04)
+r-bayesplot = "*"
+r-boot = "*"
+r-car = "*"
+r-caret = "*"
+r-corrplot = "*"
+r-dplyr = "*"
+r-fbasics = "*"
+r-ggplot2 = "*"
+r-ggpubr = "*"
+r-lme4 = "*"
+r-lubridate = "*"
+r-mblm = "*"
+r-mumin = "*"
+r-nlme = "*"
+r-performance = "*"
+r-randomforest = "*"
+r-ranger = "*"
+r-rsample = "*"
+r-suncalc = "*"
+r-terra = "*"
+r-tidyr = "*"
+r-tidyverse = "*"
+r-vip = "*"
+r-vsurf = "*"
+r-zoo = "*"
+# Kept only for Demo_code_data_for_1site/, which is left as published.
+r-librarian = "*"
+# Build-time needs of the CRAN/GitHub packages in scripts/install-r-deps.R
+# (gslnls links GSL).
+gsl = "*"
+r-remotes = "*"
+# Imports of plotbiomes (GitHub-only; Whittaker biome polygons for the website)
+r-mapview = "*"
+r-sp = "*"
+"r-data.table" = "*"
+# Pipeline, I/O and tests
+r-arrow = "*"
+r-digest = "*"
+r-optparse = "*"
+r-targets = "*"
+r-tarchetypes = "*"
+r-crew = "*"
+"r-crew.cluster" = "*"
+r-qs2 = "*"
+r-testthat = "*"
+r-rcpptoml = "*"
+# Python for scripts/*.py
+python = ">=3.12,<3.14"
+pandas = "*"
+requests = "*"
+
+[tasks]
+r-dependencies = { cmd = "Rscript scripts/install-r-deps.R", description = "Install R packages that are not on conda-forge" }
+check-deps = { cmd = "Rscript scripts/check-deps.R", description = "Load every R package the workflow needs" }
+
+# ---------------------------------------------------------------- website env
+# Kept separate so the analysis environment stays lean.
+
+[feature.website.dependencies]
+python = ">=3.12,<3.14"
+pandas = "*"
+pyarrow = "*"
+caddy = "*"
+
+[feature.website.tasks]
+website-build = { cmd = "python analysis-website/build.py", description = "Build the analysis website's data files" }
+website-serve = { cmd = "caddy run --config analysis-website/Caddyfile --adapter caddyfile", description = "Serve the analysis website on 127.0.0.1" }
+
+[environments]
+website = { features = ["website"], no-default-feature = true }
