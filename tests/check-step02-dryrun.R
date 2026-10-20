@@ -168,6 +168,12 @@ source_tree_dirs <- list(ref = file.path(work, "src-ref"), head = repo)
 
 n_bad <- 0
 report <- function(label, a, b) {
+  # columns added by the working tree (e.g. TAS_se) are reported, not compared
+  added <- setdiff(names(b), names(a))
+  if (length(added) > 0 && all(names(a) %in% names(b))) {
+    message(label, ": new column(s) ", paste(added, collapse = ", "))
+    b <- b[names(a)]
+  }
   if (identical(a, b)) {
     message(label, ": identical (", nrow(a), " rows)")
     return(invisible())

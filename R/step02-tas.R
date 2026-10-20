@@ -103,7 +103,7 @@ compile_tas_models <- function() {
 
 new_outcome <- function() {
   data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(),
-             nwindow = integer(), TAS = double(), TASp = double())
+             nwindow = integer(), TAS = double(), TASp = double(), TAS_se = double())
 }
 
 # The respiration model of each TAS type, as brms and gsl_nls formulas with
@@ -348,7 +348,7 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
                  data = df_site_year_window,
                  correlation = nlme::corAR1(form = ~ growing_year | window),
                  na.action = na.omit)
-  outcome[1, c("TAS", "TASp")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value")]
+  outcome[1, c("TAS", "TASp", "TAS_se")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value", "Std.Error")]
 
   list(outcome = outcome, siteyear = df_site_year_window, fit_profile = sampler$profile)
 }
