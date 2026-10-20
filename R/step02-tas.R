@@ -224,10 +224,12 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
     }
     
     # call the brm model to estimate parameters; this step takes much longer time.
-    mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
+    mod0 <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "total", window_start, window_end, "pooled"), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
-                      control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
+                      control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0))
+    # if the pooled fit fails there are no priors for the years: skip the window
+    if (inherits(mod0, "try-error")) { next }
     
     # use this result as prior of each year
     prior_values["alpha_mu"] <- brms::fixef(mod0)["alpha_Intercept", "Estimate"]
@@ -282,10 +284,10 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       # ensure nighttime NEE is positive
       if (median(data_subset$NEE) < 0.2 | mean(data_subset$NEE) < 0.2) { next }
       
-      mod <- brms::brm(brms::bf(frmu, param, nl = TRUE),
+      mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors + prior_sigma, data = data_subset,
                        stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
-                       control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0) # , silent = 2
+                       control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0))
       
       if (!inherits(mod, "try-error")) {
         np <- brms::nuts_params(mod)
@@ -302,6 +304,8 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
                              stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear, "retry"), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
+      # both attempts failed: leave this year without estimates
+      if (inherits(mod, "try-error")) { next }
       
       # extract model results
       data_subset$NEE_pred <- fitted(mod)[, "Estimate"]
@@ -516,10 +520,12 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
     }
     
     # call the brm model to estimate parameters; this step takes much longer time.
-    mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
+    mod0 <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "direct", window_start, window_end, "pooled"), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
-                      control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
+                      control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0))
+    # if the pooled fit fails there are no priors for the years: skip the window
+    if (inherits(mod0, "try-error")) { next }
 
     # use this result as prior of each year
     prior_values["alpha_mu"] <- brms::fixef(mod0)["alpha_Intercept", "Estimate"]
@@ -598,6 +604,8 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
                              stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear, "retry"), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
+      # both attempts failed: leave this year without estimates
+      if (inherits(mod, "try-error")) { next }
 
       # extract model results
       data_subset$NEE_pred <- fitted(mod)[, "Estimate"]
