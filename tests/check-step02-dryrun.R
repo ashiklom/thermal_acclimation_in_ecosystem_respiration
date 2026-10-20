@@ -95,6 +95,29 @@ for (version in c("ref", "head")) {
   }
 }
 
+# Versions with a separate input-preparation step (02_00, from v2-s07) prepare
+# each site's fit inputs in each scratch root first.
+prep_runs <- list()
+for (r in runs) {
+  prep <- file.path(r$src, "workflows", "02_00_prepare_TAS_inputs.R")
+  key <- r$root
+  if (file.exists(prep) && is.null(prep_runs[[key]])) {
+    prep_runs[[key]] <- lapply(unname(split(sites, rep_len(seq_len(min(jobs, length(sites))), length(sites)))), function(chunk) {
+      list(src = r$src, root = r$root, script = prep, sites = chunk)
+    })
+  }
+}
+prep_runs <- unlist(prep_runs, recursive = FALSE)
+if (length(prep_runs) > 0) {
+  prep_status <- parallel::mclapply(seq_along(prep_runs), function(i) {
+    r <- prep_runs[[i]]
+    system(sprintf("cd %s && THERMAL_DATA_PROC=%s THERMAL_ORIGINAL_DATA=%s Rscript %s %s > %s 2>&1",
+                   shQuote(r$src), shQuote(r$root), shQuote(original_data), shQuote(r$script),
+                   shQuote(paste0("--sites=", paste(r$sites, collapse = ","))), shQuote(file.path(work, sprintf("prep-%d.log", i)))))
+  }, mc.cores = jobs)
+  if (any(unlist(prep_status) != 0)) stop("input preparation failed; see ", work, "/prep-*.log")
+}
+
 status <- parallel::mclapply(runs, function(r) {
   cmd <- sprintf(
     "cd %s && TAS_DRY_RUN=%s THERMAL_DATA_PROC=%s THERMAL_ORIGINAL_DATA=%s Rscript -e %s %s > %s 2>&1",

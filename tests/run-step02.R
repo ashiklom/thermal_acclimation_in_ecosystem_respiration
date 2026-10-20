@@ -60,6 +60,15 @@ run <- function(script, extra, log) {
   ))
 }
 
+prep <- "workflows/02_00_prepare_TAS_inputs.R"
+if (file.exists(file.path(src, prep))) {
+  chunks <- unname(split(sites, rep_len(seq_len(min(jobs * 4, length(sites))), length(sites))))
+  prep_status <- parallel::mclapply(seq_along(chunks), function(i) {
+    run(prep, shQuote(paste0("--sites=", paste(chunks[[i]], collapse = ","))), file.path(root, sprintf("prep-%d.log", i)))
+  }, mc.cores = jobs * 4)
+  if (any(unlist(prep_status) != 0)) stop("input preparation failed; see ", root, "/prep-*.log")
+}
+
 if (any(grepl("--compile-only", readLines(file.path(src, scripts[["total"]])), fixed = TRUE))) {
   stopifnot(run(scripts[["total"]], "--compile-only", file.path(root, "compile.log")) == 0)
 }

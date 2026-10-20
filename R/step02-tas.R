@@ -1,14 +1,14 @@
 # Workflow step 02: thermal acclimation strength (TAS) of nighttime ecosystem
 # respiration at one site, estimated with moving windows (Junna Wang, 2025).
 #
-# estimate_tas_site() estimates either TAS type for one site: "total"
-# (02_01a; respiration as a function of soil temperature only) or "direct"
-# (02_01b; soil temperature plus soil water and the preceding days' daytime
-# uptake). The two differ only in the respiration model (tas_model()) and, for
-# now, in the direct model's ERA5 soil water at sites without measurements. It
-# takes one row of site_info, the growing-season features and the site's
-# step-01 tables, and returns list(outcome = <one row of outcome_*.csv>,
-# siteyear = <the site's rows of outcome_siteyear_*.csv>, fit_profile).
+# estimate_tas() estimates either TAS type for one site: "total" (02_01a;
+# respiration as a function of soil temperature only) or "direct" (02_01b;
+# soil temperature plus soil water and the preceding days' daytime uptake),
+# which differ only in the respiration model (tas_model()). It has no
+# site-specific logic: it takes the inputs prepared by prepare_tas_inputs()
+# (R/step02-prep.R) as arguments, and returns list(outcome = <one row of
+# outcome_*.csv>, siteyear = <the site's rows of outcome_siteyear_*.csv>,
+# fit_profile).
 # combine_tas_sites() binds per-site results in site_info order into the
 # published output tables.
 
@@ -101,12 +101,6 @@ compile_tas_models <- function() {
   invisible(NULL)
 }
 
-# Below are sites whose inter-annual TS was not strongly correlated to inter-annual TA, so use TA to obtain TS by linear regression. 
-site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "CH-Lae", "DE-RuC", "DE-SfS", "FI-Sod",
-                   "IT-Ren", "NL-Loo", "US-Bar", "US-BZB", "US-BZF", "US-BZS", "US-CMW", "US-GLE", "US-Ha2",
-                   "US-IB2", "US-Jo2", "US-KL2", "US-Kon", "US-LL1", "US-MBP", "US-Myb", "US-NC4", "US-Tw1", "US-ICt",
-                   "BE-Dor", "CA-TP4", "UK-AMo", "RU-Fyo", "ZA-Kru", "IT-Tor")
-
 new_outcome <- function() {
   data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(), 
              nwindow = integer(), TAS = double(), TASp = double())
@@ -165,114 +159,26 @@ nls_prior_mean <- function(coefs, par) {
   )
 }
 
-estimate_tas_site <- function(site, feature_gs, a_measure_night_complete, ac, model_type = c("direct", "total"), swc_ERA5 = NULL) {
+estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd, nobs_threshold, control_year,
+                         model_type = c("direct", "total"), window_size = 14, sampler = tas_fit_settings()) {
   model_type <- match.arg(model_type)
   outcome <- new_outcome()
-  sampler <- tas_fit_settings()
+  name_site <- site_id
+  a_measure_night_complete <- night
 
-  name_site <- site$site_ID
-  
-  #-------------------------------------------DATA PREPARATION--------------------------
-  if (site$SWC_use == 'YES') {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(!is.na(SWC))
-  }
-  
-  # direct model: if no measured SWC data use daily SWC from ERA5 land
-  ####################################################
-  if (model_type == "direct" && site$SWC_use == 'NO') {
-    a_measure_night_complete$SWC <- NULL
-    ac$SWC <- NULL
-    # use SWC data from ERA5 land climate reanalysis
-    swc_ERA5_site <- swc_ERA5[swc_ERA5$name == name_site, ]
-    # attach to a_measure_night_complete and ac
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
-    ac <- ac |> dplyr::left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
-    site$SWC_use <- 'YES'
-  }
-  ###########################################
+  # every variable of the model must be complete in the nighttime data (rows
+  # without them are removed when the inputs are prepared)
+  model_vars <- c("NEE", "TS", if (model_type == "direct") c("SWC", "NEE_daytime"))
+  incomplete <- vapply(model_vars, function(v) anyNA(a_measure_night_complete[[v]]), logical(1))
+  if (any(incomplete)) stop(site_id, ": missing values in ", paste(model_vars[incomplete], collapse = ", "))
 
-  # For the 36 sites, obtain TS from simple linear regression of TA, in order to follow reviewer's suggestion
-  if (name_site %in% site_TS_issue) {
-    if (name_site %in% c("US-Tw1")) {
-      # slope will be too low if using ac data for the tropical and subtropical sites. 
-      mod_lm <- lm(data = a_measure_night_complete, TS ~ TA, na.action = na.omit)
-    } else {
-      # using data with TA > 0, because we focus on grouping season
-      mod_lm <- lm(data = ac[ac$TA > 0, ], TS ~ TA, na.action = na.omit)
-    }
-    TS_pred <- predict(mod_lm, newdata = data.frame(TA = a_measure_night_complete$TA), na.action = na.pass)
-    a_measure_night_complete$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
-    TS_pred <- predict(mod_lm, newdata = data.frame(TA = ac$TA), na.action = na.pass)
-    ac$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
-  }
-  
-  # calculate daily daytime NEE and rolling average
-  dt = 30  # minute
-  if (ac$MINUTE[2] - ac$MINUTE[1] != 30) { dt = 60 }   # minutes 
-  # unit is umol / m2 / s
-  ac_day <- ac |> dplyr::filter(daytime) |> dplyr::group_by(YEAR, DOY) |> 
-    dplyr::summarise(NEE_daytime1 = max(-sum(NEE_uStar_f, na.rm=T) * dt * 60 / 86400, 0.0), .groups = "drop")
-  # get rolling average of the prior three days
-  ac_day$NEE_daytime <- zoo::rollapply(ac_day$NEE_daytime1, width = 3, FUN = mean,
-                                  align = "right", fill = ac_day$NEE_daytime1[1])
-  
-  # attach it to nighttime data
-  if (!"NEE_daytime1" %in% names(a_measure_night_complete)) {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::mutate(DOY_gpp = dplyr::case_when(HOUR >= 12 ~ DOY,
-                                                                                        HOUR < 12 & DOY == min(ac$DOY) ~ DOY, 
-                                                                                        HOUR < 12 & DOY != min(ac$DOY) ~ DOY - 1)) |>
-      dplyr::left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> dplyr::filter(!is.na(NEE_daytime1))
-  }
-  
-  # Deal with sites in southern hemisphere
-  # add growing_year
-  a_measure_night_complete <- a_measure_night_complete  |> 
-    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR, 
-                                    TRUE ~ YEAR - 1))
-  ac <- ac |> 
-    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR, 
-                                    TRUE ~ YEAR - 1))
-  
-  # remove the growing_year with incomplete data
-  # sites in southern hemisphere lose one year, because growing season crosses two years
-  if (name_site %in% c('AU-Tum', 'ZA-Kru')) {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
-    ac <- ac |> dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
-  }
   years <- sort(unique(a_measure_night_complete$growing_year))
-  
-  #---------------------------------DECIDE CONTROL YEAR, MOVING WINDOW SIZE, WINDOW NUMBERS------------------------------------
-  # get start and end dates of growing season
-  gStart <- feature_gs$gStart[feature_gs$site_ID == name_site]
-  gEnd <- feature_gs$gEnd[feature_gs$site_ID == name_site]
-  tStart <- feature_gs$tStart[feature_gs$site_ID == name_site]
-  tEnd <- feature_gs$tEnd[feature_gs$site_ID == name_site]
-  
-  # Correct tStart and tEnd for sites with newly regressed TS
-  if (name_site %in% site_TS_issue) {
-    tStart <- quantile(ac$TS[dplyr::between(ac$DOY, gStart, gEnd)], c(0.025), na.rm=T)
-    tEnd <- quantile(ac$TS[dplyr::between(ac$DOY, gStart, gEnd)], c(0.975), na.rm=T)
-  }
-  
-  # decide control year: the year with growing-season TS closest to long-term mean. 
-  ac_yearly_gs <- ac |> dplyr::filter(dplyr::between(DOY, gStart, gEnd)) |> dplyr::filter(growing_year %in% years) |> dplyr::group_by(growing_year) |> dplyr::summarise(TS=mean(TS, na.rm=T))
-  control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
 
-  # determine moving window size and number of windows
-  if (dt == 30) {
-    nobs_threshold <- 100
-  } else {
-    nobs_threshold <- 60
-  }
-  
-  # use uniform window size: 2 weeks
-  window_size <- 14
-  
   # use non-overlapping windows and determine number of windows for growing season
   nwindow <- max(round((gEnd - gStart + 1) / window_size), 1)
 
   #------------------------------------PREPARE FOR formula, stprm, priors of ER models---------------------------------
-  model <- tas_model(model_type, swc = site$SWC_use == 'YES')
+  model <- tas_model(model_type, swc = TRUE)
   frmu <- model$frmu
   param <- model$param
   priors <- model$priors
@@ -324,7 +230,7 @@ estimate_tas_site <- function(site, feature_gs, a_measure_night_complete, ac, mo
     # get reference temperature, SWC, and NEEday of each window
     TSref <- mean(ac$TS[dplyr::between(ac$DOY, window_start, window_end)], na.rm=T)
     NEEdayref <- mean(ac_day$NEE_daytime[dplyr::between(ac_day$DOY, window_start, window_end)], na.rm=T)
-    if (site$SWC_use == 'YES') {
+    if (model_type == "direct") {
       SWCref <- mean(ac$SWC[dplyr::between(ac$DOY, window_start, window_end)], na.rm=T)
       data_ref <- data.frame(TS=TSref, NEE_daytime=NEEdayref, SWC=SWCref)
     } else {
