@@ -11,6 +11,7 @@
 library(librarian)
 shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo)
 source(file.path("R", "paths.R"))
+source(file.path("R", "sun-times.R"))
 
 files_AmeriFlux_BASE <- list.files(path_original("SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
 
@@ -48,16 +49,20 @@ for (id in 1:nrow(site_info)) {
   
   # get the exact time zone, not using daylight saving so choose a winter date
   tz <- tz_offset(as.Date("2000-01-01"), tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
+  # Fixed-offset zone for the site's standard time. 'Etc/GMT+N' is the tz
+  # database name of the POSIX 'GMT+N' zone (N hours *west* of UTC), which
+  # current lubridate/timechange no longer accepts.
+  stopifnot(tz$utc_offset_h == round(tz$utc_offset_h))
   if (tz$utc_offset_h > 0) {
-    tz_site  <- paste0('GMT-', tz$utc_offset_h)
+    tz_site  <- paste0('Etc/GMT-', tz$utc_offset_h)
   } else {
-    tz_site  <- paste0('GMT+', -tz$utc_offset_h)
+    tz_site  <- paste0('Etc/GMT+', -tz$utc_offset_h)
   }
   
-  # get sunrise and sunset time
-    sunrise_set <- getSunlightTimes(
+  # get sunrise and sunset time, choosing each date's solar day the way the
+  # published outputs did (see R/sun-times.R)
+  sunrise_set <- sun_times_published(
     date = seq.Date(as.Date(a$TIMESTAMP[1]), as.Date(a$TIMESTAMP[nrow(a)]), by = 1),       # Date format: YYYY-MM-DD
-    keep = c("sunrise", "sunset"),
     lat = lat_site,
     lon = long_site,
     tz  = tz_site
