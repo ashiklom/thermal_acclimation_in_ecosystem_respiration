@@ -10,8 +10,6 @@
 
 library(librarian)
 shelf(randomForest, caret, amerifluxr, lubridate, tidyverse, ranger)
-
-rm(list=ls())
 source(file.path("R", "paths.R"))
 
 
@@ -76,7 +74,6 @@ id_estimate_TS <- which(site_info$estimate_Ts == 'YES')
 
 
 for (id in id_estimate_TS) {
-  # id <- id_estimate_TS[4]
   name_site <- site_info$site_ID[id]
   
   if (site_info$source[id] %in% c("AmeriFlux_BASE", "AmeriFlux_FLUXNET")) {
@@ -139,8 +136,6 @@ for (id in id_estimate_TS) {
   }
 
   print(id)
-  plot(data$TA)
-  plot(data$TS)
 
   # gap fill TA use DOY method if needed. 
   if (!"TA_gf" %in% colnames(data)) {
@@ -150,8 +145,6 @@ for (id in id_estimate_TS) {
   if (sum(is.na(data$TA)) > 0) {
     data$TA[is.na(data$TA)] <- data$TA_gf[is.na(data$TA)]
   }
-
-  plot(data$TA)
   
   # gap fill NETRAD if using NETRAD method
   if ("NETRAD" %in% names(data)) {
@@ -162,7 +155,6 @@ for (id in id_estimate_TS) {
     if (sum(is.na(data$NETRAD)) > 0) {
       data$NETRAD[is.na(data$NETRAD)] <- data$NETRAD_gf[is.na(data$NETRAD)]
     }
-    plot(data$NETRAD)    
   }
   
   if (name_site %in% c("DE-Akm", "FR-Pue", "US-Los", "US-SRG", "CA-Man", "US-Ced", "US-Ho1", "CZ-RAJ")) {
@@ -178,14 +170,7 @@ for (id in id_estimate_TS) {
     lm <- lm(data=data[data$TA>0, ], TS ~ TA)
     data$TS_pred <- predict(lm, data)
   } 
-  plot(data$TS_pred)
   
   write.csv(data, file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')), row.names = F)
 }
-
-# all R2 should be higher than 0.83. 
-# check TS prediction quality
-# data <- read.csv("/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation/TS_RandomForest/US-Ho2_TS_rfp.csv")
-# plot(ymd_hms(data$TIMESTAMP[140000:170000]), data$TS_pred[140000:170000])
-# data %>% group_by(year(TIMESTAMP)) %>% summarise(TS=mean(TS_pred, na.rm=T))
 # 

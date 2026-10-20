@@ -10,11 +10,7 @@
 
 library(librarian)
 shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo)
-rm(list=ls())
 source(file.path("R", "paths.R"))
-
-####################Attention: change this directory based on your own directory of raw data
-####################End Attention
 
 files_AmeriFlux_BASE <- list.files(path_original("SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
 
@@ -24,7 +20,6 @@ feature_gs <- data.frame(site_ID=character(), gStart=double(), gEnd=double(), tS
 
 # put a for loop here
 for (id in 1:nrow(site_info)) {
-  # id = 116
   print(id)
   data_source <- site_info$source[id]
   # This script only works for FLUXNET products
@@ -245,24 +240,8 @@ for (id in 1:nrow(site_info)) {
   
   ac$daytime <- a$daytime
   
-  ######################################plot and check selected variables###################################
-  # plot(ac$NEE)
-  # plot(ac$TA)
-  # plot(ac$TS)
-  # if (site_info$SWC_use[id] == 'YES') {
-  #   plot(ac$SWC)
-  # }
-  # plot(ac$SW_IN)
-  # plot(ac$USTAR)
-  # if (convert_RH_VPD) {
-  #   plot(ac$RH)
-  # } else {
-  #   plot(ac$VPD)
-  # }
-  
   ##########################################do Ustar filtering#############################################
   NEE_yearly <- ac %>% group_by(DOY) %>% summarise(NEE=mean(NEE, na.rm=T), TS=mean(TS, na.rm=T))
-  NEE_yearly_night <- ac %>% filter(!daytime) %>% group_by(DOY) %>% summarise(NEE=mean(NEE, na.rm=T), TS=mean(TS, na.rm=T))
 
   # I will use the mean of the first three values, and the mean of the last three values
   tmp    <- NEE_yearly %>% filter(NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
@@ -353,30 +332,6 @@ for (id in 1:nrow(site_info)) {
     a_measure_night_complete <- a_measure %>% filter(!daytime) %>% filter(NEE > -5 & NEE < 30)
   }
   
-  #
-  for (i in years) {
-    a_measure_night_year <- a_measure_night_complete %>% filter(YEAR==i)
-    # check length of gaps and do a distribution
-    if (nrow(a_measure_night_year) > 1) {
-      gap <- as.integer(a_measure_night_year$TIMESTAMP[2:nrow(a_measure_night_year)] - a_measure_night_year$TIMESTAMP[1:(nrow(a_measure_night_year)-1)])
-      plot(a_measure_night_year$TS, a_measure_night_year$NEE, main=as.character(i), xlim=c(-10, 40), ylim=c(-10, 40))      # TA_1_1_1
-      # check air temperature and soil temperature relationship
-      plot(a_measure_night_year$TA, a_measure_night_year$TS, main=as.character(i), xlim=c(-10, 40), ylim=c(-5, 40))
-      # see gaps each year
-      plot(a_measure_night_year$TIMESTAMP, a_measure_night_year$NEE, main=as.character(i), xlim=c(as.POSIXct(paste0(i, "-01-01 00:00:00")), as.POSIXct(paste0(i, "-12-31 00:00:00"))))
-    } else {
-      print(i)
-    }
-  }
-
-  # save site-specific TS~NEE curve
-  # png(paste0("graphs/", name_site, "TS_NEEnight_relation.png"), width = 1200, height = 1200)
-  # par(mfrow = c(2, 2))
-  # plot(a_measure_night_complete$TS, a_measure_night_complete$NEE, main=name_site)
-  # plot(NEE_yearly$DOY, NEE_yearly$NEE)
-  # plot(NEE_yearly$DOY, NEE_yearly$TS)
-  # plot(NEE_yearly_night$DOY, NEE_yearly_night$NEE)
-  # dev.off()
   
   #########################################remove years with big gaps#######################################
   # max gap and total large gap threshold
@@ -421,16 +376,6 @@ for (id in 1:nrow(site_info)) {
     summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) %>%
     filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) %>%
     distinct(growing_year) %>% pull()
-
-  # # ensure every degree of TS have measurements
-  # bad_TS_years <- a_measure_night_complete %>% filter(between(TS, tStart, tEnd)) %>%
-  #   arrange(YEAR, TS) %>% group_by(YEAR) %>%
-  #   mutate(gap = TS - lag(TS)) %>%
-  #   summarise(max_gap = max(gap, na.rm = TRUE)) %>%
-  #   filter(max_gap > max(0.2 * (tEnd - tStart), 1.0)) %>% distinct(YEAR) %>% pull()
-  # if (length(bad_TS_years) >= 1) {
-  #   good_years <- setdiff(good_years, bad_TS_years)
-  # }
 
   years2remove_automation <- setdiff(ac$YEAR[1]:ac$YEAR[nrow(ac)], good_years)
   

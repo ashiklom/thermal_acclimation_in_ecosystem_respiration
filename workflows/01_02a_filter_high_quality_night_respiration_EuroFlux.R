@@ -10,11 +10,7 @@
 
 library(librarian)
 shelf(dplyr, lubridate)
-rm(list=ls())
 source(file.path("R", "paths.R"))
-
-####################Attention: change this directory based on your own directory of raw data
-####################End Attention
 
 files_FLUXNET2015  <- list.files(path=path_original('SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
 files_FLUXNET2020  <- list.files(path=path_original('SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
@@ -28,7 +24,6 @@ feature_gs <- data.frame(site_ID=character(), gStart=double(), gEnd=double(), tS
 
 # put a for loop here 
 for (id in 1:nrow(site_info)) {
-  # id = 95
   print(id)
   data_source <- site_info$source[id]
   # This script only works for FLUXNET products
@@ -135,46 +130,16 @@ for (id in 1:nrow(site_info)) {
     SWC <- FALSE
   }
   #
-  # The four important variables I need to look for: TS, TA, SWC, NEE, and their corresponding variable names. 
-  # plot(a$TA_F_MDS)
-  # plot(a$TS_F_MDS_1)   # quality control == -9999 is missing data, 3 = poor, so filtering out these data
-  # if (SWC) {
-  #   plot(a$SWC_F_MDS_1)     
-  # }
-  # plot(a$NEE_VUT_REF)   # I should use QC=0, measured data
-  
   # we decided to relax the SWC constrains
   a_measure_night_complete <- a %>% filter(!is.na(TA_F_MDS)) %>% filter(TS_F_MDS_1_QC %in% c(0, 1, 2)) %>% filter(NEE_VUT_REF_QC == 0) %>% filter(NIGHT == 1) %>% filter(NEE_VUT_REF > -5 & NEE_VUT_REF < 30) 
   # %>% filter(SWC_F_MDS_1_QC %in% c(0, 1, 2))
   
-  # plot the data of each year
   yStart <- a_measure_night_complete$YEAR[1]
   yEnd   <- a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
-  for (i in yStart:yEnd) {
-    data <- a_measure_night_complete %>% filter(YEAR==i)
-    if (nrow(data) > 100) {
-      plot(data$TS_F_MDS_1, data$NEE_VUT_REF, main=i)
-      plot(data$TIMESTAMP, data$NEE_VUT_REF, main=i, xlim=c(as.POSIXct(paste0(i, "-01-01 00:00:00")), as.POSIXct(paste0(i, "-12-31 00:00:00"))))
-    } else {
-      print(i)
-    }
-  }
   
   # decide which years data to exclude: rule 1: maximum data gaps during growing season < 1 month; rule2: large disturbance years due to fire, insect breakout
   # estimate growing season DOY
   NEE_yearly  <- a %>% group_by(DOY) %>% summarise(NEE=mean(NEE_VUT_REF, na.rm=T), TS=mean(TS_F_MDS_1, na.rm=T))
-  NEE_yearly_night  <- a %>% filter(NIGHT==1) %>% group_by(DOY) %>% summarise(NEE=mean(NEE_VUT_REF, na.rm=T), TS=mean(TS_F_MDS_1, na.rm=T))
-  
-  
-  # save TS~NEE curve
-  # png(paste0("graphs/", name_site, "TS_NEEnight_relation.png"), width = 1200, height = 1200)
-  # par(mfrow = c(2, 2))
-  # plot(a_measure_night_complete$TS_F_MDS_1, a_measure_night_complete$NEE_VUT_REF, main=name_site)
-  # plot(NEE_yearly$DOY, NEE_yearly$NEE)
-  # plot(NEE_yearly$DOY, NEE_yearly$TS)
-  # plot(NEE_yearly_night$DOY, NEE_yearly_night$NEE)
-  # dev.off()
-  
   
   # I will use the mean of the first three values, and the mean of the last three values
   if (name_site %in% c('FI-Sod', 'DE-RuC')) {
@@ -247,16 +212,6 @@ for (id in 1:nrow(site_info)) {
     filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) %>%
     distinct(growing_year) %>% pull()
   
-  # # ensure every degree of TS have measurements
-  # bad_TS_years <- a_measure_night_complete %>% filter(between(TS_F_MDS_1, tStart, tEnd)) %>% 
-  #   arrange(YEAR, TS_F_MDS_1) %>% group_by(YEAR) %>%
-  #   mutate(gap = TS_F_MDS_1 - lag(TS_F_MDS_1)) %>%
-  #   summarise(max_gap = max(gap, na.rm = TRUE)) %>%
-  #   filter(max_gap > max(0.2 * (tEnd - tStart), 1.0)) %>% distinct(YEAR) %>% pull()
-  # if (length(bad_TS_years) >= 1) {
-  #   good_years <- setdiff(good_years, bad_TS_years)    
-  # }
-  
   years2remove_automation <- setdiff(yStart:yEnd, good_years)
   
   # years to remove due to PI reported disturbances and bad data quality
@@ -315,5 +270,3 @@ for (id in 1:nrow(site_info)) {
 
 # output growing season features
 write.csv(feature_gs, file=path_proc('growing_season_feature_EuropFlux.csv'), row.names = F)
-
-# Sys.time()
