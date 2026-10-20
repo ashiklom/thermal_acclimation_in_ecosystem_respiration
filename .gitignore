@@ -37,4 +37,14 @@
 scripts/.DS_Store
 /data_old/
 /plot_paper/
-/exploratory/
+/exploratory/# refactor-v2 #
+######################
+/_creds.toml
+/data-proc/
+/data-raw/
+/results/
+/_targets/
+/_logs/
+.pixi/
+/analysis-website/data/
+!/analysis-website/**/*.html
