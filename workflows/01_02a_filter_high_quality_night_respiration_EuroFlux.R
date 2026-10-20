@@ -10,6 +10,7 @@
 
 stopifnot(requireNamespace("dplyr"), requireNamespace("lubridate"))
 source(file.path("R", "paths.R"))
+source(file.path("R", "read-raw.R"))
 source(file.path("R", "step01-prep.R"))
 
 # Usage: Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R [--sites=SITE1,SITE2 | --combine-only]
@@ -25,7 +26,6 @@ sites_arg <- grep("^--sites=", args, value = TRUE)
 combine_only <- "--combine-only" %in% args
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
-raw_files <- raw_site_files()
 all_sites <- site_info$site_ID[site_info$source != 'AmeriFlux_BASE']
 
 sites <- if (combine_only) character() else if (length(sites_arg) > 0) strsplit(sub("^--sites=", "", sites_arg), ",")[[1]] else all_sites
@@ -33,7 +33,7 @@ stopifnot(all(sites %in% all_sites))
 
 for (name_site in sites) {
   print(name_site)
-  result <- prep_site_euroflux(site_info[site_info$site_ID == name_site, ], raw_files)
+  result <- prep_site_euroflux(site_info[site_info$site_ID == name_site, ])
   write.csv(result$ac, file=path_proc("RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
   write.csv(result$night, file=path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
   saveRDS(result$feature, path_proc("growing_season_feature_sites", paste0(name_site, ".rds")))

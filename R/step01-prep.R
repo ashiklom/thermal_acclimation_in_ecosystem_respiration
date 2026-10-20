@@ -9,19 +9,7 @@
 # sites) and 01_02b (AmeriFlux BASE sites); each returns list(ac = <the
 # site's half-hourly table>, night = <its filtered nighttime table>,
 # feature = <its row of the growing-season features>). `site` is the site's
-# row of data/site_info.csv; `raw_files` is raw_site_files().
-
-# Paths of every raw site-data file, by product.
-raw_site_files <- function() {
-  list(
-    AmeriFlux_BASE = list.files(path_original("SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T),
-    FLUXNET2015 = list.files(path=path_original('SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE),
-    FLUXNET2020 = list.files(path=path_original('SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE),
-    ICOS_after2020 = list.files(path=path_original('SiteData', 'ICOS_after2020'), pattern = ".csv$", full.names = TRUE),
-    FLUXNET2025 = list.files(path_original("SiteData", "FLUXNET07202025", "unzip"), pattern=".csv$", full.names = T),
-    ICOS2025 = list.files(path_original("SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
-  )
-}
+# row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R).
 
 # The growing-season feature table: per-site rows bound in site order onto
 # the typed empty table the loops started from.
@@ -75,18 +63,11 @@ predict_soil_temp <- function(data, use_NETRAD) {
   return(data[, c("TIMESTAMP", "TS_pred")])
 }
 
-estimate_ts_site <- function(site, raw_files) {
-  files_AmeriFlux_BASE <- raw_files$AmeriFlux_BASE
-  files_FLUXNET2015 <- raw_files$FLUXNET2015
-  files_FLUXNET2020 <- raw_files$FLUXNET2020
-  files_ICOS_after2020 <- raw_files$ICOS_after2020
-  files_FLUXNET2025 <- raw_files$FLUXNET2025
-  files_ICOS2025 <- raw_files$ICOS2025
-
+estimate_ts_site <- function(site, base_dir = path_original("SiteData")) {
   name_site <- site$site_ID
   
   if (site$source %in% c("AmeriFlux_BASE", "AmeriFlux_FLUXNET")) {
-    a <- amerifluxr::amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+    a <- read_ameriflux_base(name_site, base_dir)
     data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = a$YEAR, DOY = a$DOY, HOUR = a$HOUR, MINUTE = a$MINUTE, 
                        TS = a[, trimws(site$TS)], TA = a[, trimws(site$TA)])
     if (name_site %in% c('US-Los', "US-Ced")) {
@@ -97,34 +78,7 @@ estimate_ts_site <- function(site, raw_files) {
       data$NETRAD <- a$NETRAD_2_1_1
     } 
   } else {
-    data_source <- site$source
-    data_source <- unlist(strsplit(data_source, "_"))
-    for (isource in 1:length(data_source)) {
-      if (data_source[isource] == "FLUXNET2015") {
-        files <- files_FLUXNET2015
-      } else if (data_source[isource] == "FLUXNET2020") {
-        files <- files_FLUXNET2020
-      } else if (data_source[isource] == "ICOS2020") {
-        files <- files_ICOS_after2020
-      } else if (data_source[isource] == "FLUXNET2025") {
-        files <- files_FLUXNET2025
-      } else if (data_source[isource] == "ICOS2025") {
-        files <- files_ICOS2025
-      }
-      file  <- files[grepl(name_site, files)]
-      a_tmp <- read.csv(file)
-      if (isource == 1) {
-        a <- a_tmp
-      } else {
-        # need to check if they can connect correctly, or use bind_rows. 
-        irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
-        if (is.numeric(irow_start) && length(irow_start) == 0) {
-          irow_start = 1
-        }
-        a <- dplyr::bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
-      }
-    }
-    rm(a_tmp)
+    a <- read_fluxnet_sources(name_site, unlist(strsplit(site$source, "_")), base_dir)
     # -9999 means missing information.
     a[a==-9999] <- NA    
 
@@ -182,43 +136,12 @@ estimate_ts_site <- function(site, raw_files) {
   data
 }
 
-prep_site_euroflux <- function(site, raw_files) {
-  files_AmeriFlux_BASE <- raw_files$AmeriFlux_BASE
-  files_FLUXNET2015 <- raw_files$FLUXNET2015
-  files_FLUXNET2020 <- raw_files$FLUXNET2020
-  files_ICOS_after2020 <- raw_files$ICOS_after2020
-  files_FLUXNET2025 <- raw_files$FLUXNET2025
-  files_ICOS2025 <- raw_files$ICOS2025
-
+prep_site_euroflux <- function(site, base_dir = path_original("SiteData")) {
   data_source <- site$source
   name_site <- site$site_ID
   
   # connecting multiple data sources
-  data_source <- unlist(strsplit(data_source, "_"))
-  for (isource in 1:length(data_source)) {
-    if (data_source[isource] == "FLUXNET2015") {
-      files <- files_FLUXNET2015
-    } else if (data_source[isource] == "FLUXNET2020") {
-      files <- files_FLUXNET2020
-    } else if (data_source[isource] == "FLUXNET2025") {
-      files <- files_FLUXNET2025
-    } else if (data_source[isource] == "ICOS2025") {
-      files <- files_ICOS2025
-    }
-    file  <- files[grepl(name_site, files)]
-    a_tmp <- read.csv(file)
-    if (isource == 1) {
-      a <- a_tmp
-    } else {
-      # need to check if they can connect correctly, or use bind_rows. 
-      irow_start <- which(a_tmp$TIMESTAMP_START == a$TIMESTAMP_START[nrow(a)]) + 1
-      if (is.numeric(irow_start) && length(irow_start) == 0) {
-        irow_start = 1
-      }
-      a <- dplyr::bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
-    }
-  }
-  rm(a_tmp)
+  a <- read_fluxnet_sources(name_site, unlist(strsplit(data_source, "_")), base_dir)
   # -9999 means missing information.
   a[a==-9999] <- NA
   
@@ -426,19 +349,12 @@ prep_site_euroflux <- function(site, raw_files) {
   list(ac = ac, night = a_measure_night_complete, feature = feature)
 }
 
-prep_site_ameriflux <- function(site, raw_files) {
-  files_AmeriFlux_BASE <- raw_files$AmeriFlux_BASE
-  files_FLUXNET2015 <- raw_files$FLUXNET2015
-  files_FLUXNET2020 <- raw_files$FLUXNET2020
-  files_ICOS_after2020 <- raw_files$ICOS_after2020
-  files_FLUXNET2025 <- raw_files$FLUXNET2025
-  files_ICOS2025 <- raw_files$ICOS2025
-
+prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
   data_source <- site$source
   name_site <- site$site_ID
 
   # read data
-  a <- amerifluxr::amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+  a <- read_ameriflux_base(name_site, base_dir)
   a[a==-9999] <- NA
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year. 
@@ -521,7 +437,7 @@ prep_site_ameriflux <- function(site, raw_files) {
   }   
   if (name_site == "US-BZS") {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.
-    a_BZF <- amerifluxr::amf_read_base(files_AmeriFlux_BASE[grepl('US-BZF', files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+    a_BZF <- read_ameriflux_base('US-BZF', base_dir)
     a_BZF[a_BZF==-9999] <- NA
     df <- data.frame(BZS = a$TA_PI_F[dplyr::between(a$YEAR, 2016, 2019)], BZF = a_BZF$TA_PI_F[dplyr::between(a_BZF$YEAR, 2016, 2019)])
     mod <- lm(data=df, BZS ~ BZF)

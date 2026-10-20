@@ -10,6 +10,7 @@
 
 stopifnot(requireNamespace("amerifluxr"), requireNamespace("caret"), requireNamespace("dplyr"), requireNamespace("lubridate"), requireNamespace("randomForest"))
 source(file.path("R", "paths.R"))
+source(file.path("R", "read-raw.R"))
 source(file.path("R", "step01-prep.R"))
 
 # Usage: Rscript workflows/01_01_estimate_soil_temperature_at_some_sites.R [--sites=US-Ha1,FR-Pue]
@@ -22,13 +23,12 @@ args <- commandArgs(trailingOnly = TRUE)
 sites_arg <- grep("^--sites=", args, value = TRUE)
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
-raw_files <- raw_site_files()
 
 sites <- if (length(sites_arg) > 0) strsplit(sub("^--sites=", "", sites_arg), ",")[[1]] else site_info$site_ID[site_info$estimate_Ts == 'YES']
 stopifnot(all(sites %in% site_info$site_ID[site_info$estimate_Ts == 'YES']))
 
 for (name_site in sites) {
   print(name_site)
-  data <- estimate_ts_site(site_info[site_info$site_ID == name_site, ], raw_files)
+  data <- estimate_ts_site(site_info[site_info$site_ID == name_site, ])
   write.csv(data, file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')), row.names = F)
 }
