@@ -17,7 +17,7 @@
 # being written into the model code as numbers: the Stan program is then the
 # same for every window, year and site, and is compiled once.
 priors_temp <- brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
-  brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) + 
+  brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) +
   brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0)
 
 priors_water <- brms::prior("normal(Hs_mu, Hs_sd)", nlpar = "Hs", lb = 0, ub = 1000)
@@ -102,7 +102,7 @@ compile_tas_models <- function() {
 }
 
 new_outcome <- function() {
-  data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(), 
+  data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(),
              nwindow = integer(), TAS = double(), TASp = double())
 }
 
@@ -185,8 +185,8 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
   prior_values <- prior_defaults
   frmu_nls <- model$frmu_nls
   stprm <- model$stprm
-  
-  df_site_year_window <- data.frame(site_ID = character(), growing_year = integer(), window = character(), nobsv = integer(), extend_days = integer(),  
+
+  df_site_year_window <- data.frame(site_ID = character(), growing_year = integer(), window = character(), nobsv = integer(), extend_days = integer(),
                                     alpha = double(), beta = double(), C0 = double(), Hs = double(), k2 = double(), TS = double(), ERref = double(), lnRatio = double())
   ER_obs_pred <- data.frame()
 
@@ -195,25 +195,26 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
   for (iwindow in 1:nwindow) {
     window_start = gStart + window_size*(iwindow-1)
     window_end = min(gStart + window_size*iwindow, gEnd)
-    
-    ac_yearly_window <- ac |> dplyr::filter(dplyr::between(DOY, window_start, window_end)) |> dplyr::group_by(growing_year) |> dplyr::summarise(TS=mean(TS, na.rm=T))
+
+    ac_yearly_window <- ac |> dplyr::filter(dplyr::between(.data$DOY, .env$window_start, .env$window_end)) |> dplyr::group_by(.data$growing_year) |>
+      dplyr::summarise(TS=mean(.data$TS, na.rm=T)) |> dplyr::arrange(.data$growing_year)
     if (!dplyr::between(mean(ac_yearly_window$TS, na.rm=T), max(tStart, 2.0), tEnd) & nwindow > 1) {
       next
     }
-    
-    data <- a_measure_night_complete |> dplyr::filter(dplyr::between(DOY, window_start, window_end)) 
-    # skip a window if no enough data; this is for sites ('US-ICt', 'US-ICh', 'US-ICs', 'FI-Sod') with a period of the whole day is daytime. 
+
+    data <- a_measure_night_complete |> dplyr::filter(dplyr::between(.data$DOY, .env$window_start, .env$window_end))
+    # skip a window if no enough data; this is for sites ('US-ICt', 'US-ICh', 'US-ICs', 'FI-Sod') with a period of the whole day is daytime.
     if (nrow(data) < 100) { next }
-    
+
     # try gsl_nls first because it is fast, and then update priors of brm models based on mod_nls
-    # this can give abnormal initial values. 
+    # this can give abnormal initial values.
     mod_nls <- try(gslnls::gsl_nls(fn=as.formula(frmu_nls), data=data, start=stprm))
     if (!inherits(mod_nls, "try-error")) {
       for (par in model$pars) {
         prior_values[paste0(par, "_mu")] <- nls_prior_mean(coefficients(mod_nls), par)
       }
     }
-    
+
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
@@ -236,62 +237,62 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
     } else {
       data_ref <- data.frame(TS=TSref, NEE_daytime=NEEdayref)
     }
-    
+
     #----loop through each year----
     ERref_control <- NA
     for (iyear in years) {
       print(paste(name_site, iwindow, iyear, sep='_'))
       icount = icount + 1
-      df_site_year_window[icount, 1] <- name_site
+      df_site_year_window[icount, "site_ID"] <- name_site
       df_site_year_window$growing_year[icount] <- iyear
       df_site_year_window$window[icount] <- paste(window_start, window_end, sep='_')
-      
+
       # determine if there are enough data for the regression of each year
       data_subset <- data[data$growing_year == iyear, ]
-      
+
       # two rules are needed:
-      # rule 1: total number of points > 100. 
-      # rule 2: TSref is within the 0.025 and 0.975 quantiles. 
-      # if the two rules are violated, extend window size. 
+      # rule 1: total number of points > 100.
+      # rule 2: TSref is within the 0.025 and 0.975 quantiles.
+      # if the two rules are violated, extend window size.
       extend_days <- 0
       while(nrow(data_subset) < nobs_threshold | !dplyr::between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) {
         extend_days <- extend_days + 3
-        data_subset <- a_measure_night_complete |> dplyr::filter(growing_year == iyear) |> 
-          dplyr::filter(dplyr::between(DOY, window_start - extend_days, window_end + extend_days))
+        data_subset <- a_measure_night_complete |> dplyr::filter(.data$growing_year == .env$iyear) |>
+          dplyr::filter(dplyr::between(.data$DOY, .env$window_start - .env$extend_days, .env$window_end + .env$extend_days))
         # some conditions to break out to avoid dead loop
         if (nrow(data_subset) >= nobs_threshold & (window_end + extend_days) >= gEnd & TSref >= max(data_subset$TS, na.rm=T)) {break}
         if (extend_days >= 24) { break }   # max window size: two months
       }
-      df_site_year_window[icount, 4] <- nrow(data_subset)
-      df_site_year_window[icount, 5] <- extend_days
-      
+      df_site_year_window[icount, "nobsv"] <- nrow(data_subset)
+      df_site_year_window[icount, "extend_days"] <- extend_days
+
       # ensure enough observations
       if (nrow(data_subset) <= 25) { next }   # this is mainly for US-Uaf, which has few data
-      
+
       # ensure enough temperature range
       if (!dplyr::between(TSref, quantile(data_subset$TS, 0.025, na.rm=T), quantile(data_subset$TS, 0.975, na.rm=T))) { next }
-      
+
       # ensure nighttime NEE is positive
       if (median(data_subset$NEE) < 0.2 | mean(data_subset$NEE) < 0.2) { next }
-      
+
       mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors + prior_sigma, data = data_subset,
-                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, model_type, window_start, window_end, iyear), iter = sampler$year_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr", 
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, model_type, window_start, window_end, iyear), iter = sampler$year_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr",
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0)) # , silent = 2
-      
+
       if (!inherits(mod, "try-error")) {
         np <- brms::nuts_params(mod)
         n_divergent <- sum(subset(np, Parameter == "divergent__")$Value)
-        failed_brm <- n_divergent > 0 
+        failed_brm <- n_divergent > 0
       } else {
         failed_brm <- TRUE
       }
-      
+
       # if brm models fail or have divergent transitions, try another time
       if (failed_brm && sampler$retry) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                              prior = priors + prior_sigma, data = data_subset,
-                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, model_type, window_start, window_end, iyear, "retry"), iter = sampler$retry_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr", 
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, model_type, window_start, window_end, iyear, "retry"), iter = sampler$retry_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr",
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
       # both attempts failed: leave this year without estimates
@@ -300,32 +301,32 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
       # extract model results
       data_subset$NEE_pred <- fitted(mod)[, "Estimate"]
       ER_obs_pred <- rbind(ER_obs_pred, data_subset[dplyr::between(data_subset$DOY, window_start, window_end), ])
-      
-      
+
+
       # model parameters
       df_site_year_window[icount, sub("_Intercept$", "", names(brms::fixef(mod)[, "Estimate"]))] <- brms::fixef(mod)[, "Estimate"]
-      
+
       # average TS of moving window at each year
       df_site_year_window$TS[icount] <- ac_yearly_window$TS[ac_yearly_window$growing_year == iyear]
-      
+
       # ER at reference temperature, water, and NEEday conditions
       df_ERref <- fitted(mod, newdata=data_ref)
       df_site_year_window$ERref[icount] <- ifelse(df_ERref[, "Estimate"] <  df_ERref[, "Est.Error"], NA, df_ERref[, "Estimate"])
-      
+
       if (iyear == control_year) {
         ERref_control <- df_site_year_window$ERref[icount]
       }
     }
     # end of each year loop
-    
+
     # if no data in a control year during this window, use average ER across years as the reference conditions
     if (is.na(ERref_control)) {
       irow_site_window <- which(df_site_year_window$site_ID == name_site & df_site_year_window$window == paste(window_start, window_end, sep='_'))
       ERref_control <- mean(df_site_year_window$ERref[irow_site_window], na.rm=T)
     }
-    
+
     df_site_year_window$lnRatio[(icount-length(years) + 1):icount] <- log(df_site_year_window$ERref[(icount-length(years) + 1):icount] / ERref_control)
-    
+
     # remove unrealistic extreme values due to potentially large gaps; this only affects a few sites
     x <- df_site_year_window$lnRatio[(icount-length(years) + 1):icount]
     outlier <- boxplot.stats(x, coef = 3)$out
@@ -334,18 +335,18 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
       df_site_year_window <- df_site_year_window[-(icount - length(years) + id.remove), ]
       icount <- icount - length(id.remove)
     }
-    
+
   }
   # end of each window
-  
+
   outcome[1, "site_ID"] <- name_site
   outcome[1, c("RMSE", "R2")] <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)[1:2]
   outcome[1, c("control_year", "window_size", "nwindow")] <- c(control_year, window_size, nwindow)
-  
+
   # take account of potential autocorrelation across years
   mod_ar1 <- nlme::gls(lnRatio ~ TS + window,
                  data = df_site_year_window,
-                 correlation = nlme::corAR1(form = ~ growing_year | window), 
+                 correlation = nlme::corAR1(form = ~ growing_year | window),
                  na.action = na.omit)
   outcome[1, c("TAS", "TASp")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value")]
 

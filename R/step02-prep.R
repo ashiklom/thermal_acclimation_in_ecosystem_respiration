@@ -39,8 +39,18 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
   name_site <- site$site_ID
   stopifnot(identical(settings$site_ID, name_site))
 
+  # Only the columns used below, in a fixed order, sorted by time: nothing
+  # below depends on the order of the input tables' rows or columns.
+  by_time <- c("YEAR", "MONTH", "DAY", "HOUR", "MINUTE")
+  a_measure_night_complete <- a_measure_night_complete |>
+    dplyr::select(dplyr::all_of(c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "NEE", "TA", "TS", "SWC"))) |>
+    dplyr::arrange(dplyr::across(dplyr::all_of(by_time)))
+  ac <- ac |>
+    dplyr::select(dplyr::all_of(c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "NEE_uStar_f", "TA", "TS", "SWC", "daytime"))) |>
+    dplyr::arrange(dplyr::across(dplyr::all_of(by_time)))
+
   if (site$SWC_use == 'YES') {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(!is.na(SWC))
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(!is.na(.data$SWC))
   }
 
   # if no measured SWC data use daily SWC from ERA5 land (only the direct
@@ -48,7 +58,7 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
   if (site$SWC_use == 'NO') {
     a_measure_night_complete$SWC <- NULL
     ac$SWC <- NULL
-    swc_ERA5_site <- swc_ERA5[swc_ERA5$name == name_site, ]
+    swc_ERA5_site <- swc_ERA5[swc_ERA5$name == name_site, c('YEAR', 'MONTH', 'DAY', 'SWC')]
     a_measure_night_complete <- a_measure_night_complete |> dplyr::left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
     ac <- ac |> dplyr::left_join(swc_ERA5_site[, c('YEAR', 'MONTH', 'DAY', 'SWC')], by = c('YEAR', 'MONTH', 'DAY'))
   }
@@ -69,38 +79,43 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
     ac$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
   }
 
+  # time step (minutes): half-hourly records have two distinct minutes past
+  # the hour (e.g. 15 and 45), hourly records one
+  dt <- 60 / length(unique(ac$MINUTE))
+  stopifnot(dt %in% c(30, 60))
   # calculate daily daytime NEE and rolling average
-  dt = 30  # minute
-  if (ac$MINUTE[2] - ac$MINUTE[1] != 30) { dt = 60 }   # minutes
   # unit is umol / m2 / s
-  ac_day <- ac |> dplyr::filter(daytime) |> dplyr::group_by(YEAR, DOY) |>
-    dplyr::summarise(NEE_daytime1 = max(-sum(NEE_uStar_f, na.rm=T) * dt * 60 / 86400, 0.0), .groups = "drop")
+  ac_day <- ac |> dplyr::filter(.data$daytime) |> dplyr::group_by(.data$YEAR, .data$DOY) |>
+    dplyr::summarise(NEE_daytime1 = max(-sum(.data$NEE_uStar_f, na.rm=T) * .env$dt * 60 / 86400, 0.0), .groups = "drop") |>
+    dplyr::arrange(.data$YEAR, .data$DOY)
   # get rolling average of the prior three days
   ac_day$NEE_daytime <- zoo::rollapply(ac_day$NEE_daytime1, width = 3, FUN = mean,
                                   align = "right", fill = ac_day$NEE_daytime1[1])
 
   # attach it to nighttime data
   if (!"NEE_daytime1" %in% names(a_measure_night_complete)) {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::mutate(DOY_gpp = dplyr::case_when(HOUR >= 12 ~ DOY,
-                                                                                        HOUR < 12 & DOY == min(ac$DOY) ~ DOY,
-                                                                                        HOUR < 12 & DOY != min(ac$DOY) ~ DOY - 1)) |>
-      dplyr::left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> dplyr::filter(!is.na(NEE_daytime1))
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::mutate(DOY_gpp = dplyr::case_when(.data$HOUR >= 12 ~ .data$DOY,
+                                                                                        .data$HOUR < 12 & .data$DOY == min(ac$DOY) ~ .data$DOY,
+                                                                                        .data$HOUR < 12 & .data$DOY != min(ac$DOY) ~ .data$DOY - 1)) |>
+      dplyr::left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> dplyr::filter(!is.na(.data$NEE_daytime1))
   }
 
   # Deal with sites in southern hemisphere
   # add growing_year
   a_measure_night_complete <- a_measure_night_complete  |>
-    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR,
-                                    TRUE ~ YEAR - 1))
+    dplyr::mutate(growing_year = dplyr::case_when(.data$DOY <= 366 ~ .data$YEAR,
+                                    TRUE ~ .data$YEAR - 1))
   ac <- ac |>
-    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR,
-                                    TRUE ~ YEAR - 1))
+    dplyr::mutate(growing_year = dplyr::case_when(.data$DOY <= 366 ~ .data$YEAR,
+                                    TRUE ~ .data$YEAR - 1))
 
   # remove the growing_year with incomplete data
   # sites in southern hemisphere lose one year, because growing season crosses two years
   if (settings$trim_last_growing_year) {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
-    ac <- ac |> dplyr::filter(dplyr::between(growing_year, ac$YEAR[1], ac$YEAR[nrow(ac)] - 1))
+    first_year <- min(ac$YEAR)
+    last_year <- max(ac$YEAR)
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(dplyr::between(.data$growing_year, .env$first_year, .env$last_year - 1))
+    ac <- ac |> dplyr::filter(dplyr::between(.data$growing_year, .env$first_year, .env$last_year - 1))
   }
   years <- sort(unique(a_measure_night_complete$growing_year))
 
@@ -119,7 +134,8 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
   }
 
   # decide control year: the year with growing-season TS closest to long-term mean.
-  ac_yearly_gs <- ac |> dplyr::filter(dplyr::between(DOY, gStart, gEnd)) |> dplyr::filter(growing_year %in% years) |> dplyr::group_by(growing_year) |> dplyr::summarise(TS=mean(TS, na.rm=T))
+  ac_yearly_gs <- ac |> dplyr::filter(dplyr::between(.data$DOY, .env$gStart, .env$gEnd)) |> dplyr::filter(.data$growing_year %in% .env$years) |>
+    dplyr::group_by(.data$growing_year) |> dplyr::summarise(TS=mean(.data$TS, na.rm=T)) |> dplyr::arrange(.data$growing_year)
   control_year <- ac_yearly_gs$growing_year[which.min(abs(ac_yearly_gs$TS - mean(ac_yearly_gs$TS)))]
 
   # minimum number of observations of a window-year (before widening it)
