@@ -6,7 +6,6 @@
 
 library(librarian)
 shelf(dplyr, ggplot2, tidyr)
-rm(list=ls())
 source(file.path("R", "paths.R"))
 
 outcome_temp <- read.csv(path_proc('outcome_temp.csv'))

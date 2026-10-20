@@ -11,12 +11,9 @@
 
 library(librarian)
 shelf(dplyr, lubridate, gslnls, caret, performance, ggpubr, ggplot2, zoo, bayesplot, brms, nlme)
-rm(list=ls())
 source(file.path("R", "paths.R"))
 
 set.seed(123)
-####################Attention: change this directory based on your own directory of raw data
-####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 feature_gs <- read.csv(path_proc('growing_season_feature_EuropFlux.csv'))
@@ -39,7 +36,6 @@ site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "
                    "BE-Dor", "CA-TP4", "UK-AMo", "RU-Fyo", "ZA-Kru", "IT-Tor")
 
 for (id in 1:nrow(site_info)) {
-  # id = 25
   print(id)
   name_site <- site_info$site_ID[id]
   print(name_site)
@@ -177,7 +173,6 @@ for (id in 1:nrow(site_info)) {
     mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors, data = data, iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
-    # print(summary(mod0), digits = 3)
     
     # use this result as prior of each year
     priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", brms::fixef(mod0)["alpha_Intercept", "Estimate"], ", 1.0)")
@@ -255,8 +250,6 @@ for (id in 1:nrow(site_info)) {
       data_subset$NEE_pred <- fitted(mod)[, "Estimate"]
       ER_obs_pred <- rbind(ER_obs_pred, data_subset[between(data_subset$DOY, window_start, window_end), ])
       
-      # print(plot(data_subset$TS, data_subset$NEE, main = paste(name_site, iwindow, iyear, sep = '_')))
-      # lines(data_subset$TS, data_subset$NEE_pred)
       
       # model parameters
       df_site_year_window[icount, sub("_Intercept$", "", names(brms::fixef(mod)[, "Estimate"]))] <- brms::fixef(mod)[, "Estimate"]
@@ -294,14 +287,6 @@ for (id in 1:nrow(site_info)) {
   }
   # end of each window
   outcome_siteyear <- rbind(outcome_siteyear, df_site_year_window)
-  
-  tmp <- df_site_year_window %>% group_by(growing_year) %>% summarise(TS = mean(TS), lnRatio = sum(lnRatio*ERref)/sum(ERref)) # %>% left_join(ac_yearly_gs, by="growing_year")
-  
-  plot <- df_site_year_window %>% ggplot(aes(x=TS, y=lnRatio, col=window)) +
-    geom_point() +
-    geom_smooth(method = 'lm') +
-    labs(title = name_site)
-  print(plot)
   
   outcome[id, "site_ID"] <- name_site
   outcome[id, c("RMSE", "R2")] <- postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)[1:2]

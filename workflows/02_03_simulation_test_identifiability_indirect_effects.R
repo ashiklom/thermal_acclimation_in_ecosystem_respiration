@@ -14,7 +14,6 @@
 # direct + measured indirect, direct + measured indirect + hidden indirect. 
 # each scenario has 40 replicates. 
 
-rm(list = ls())
 source(file.path("R", "paths.R"))
 
 set.seed(20260423)
