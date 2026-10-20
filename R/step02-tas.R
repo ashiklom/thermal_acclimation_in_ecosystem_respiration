@@ -48,6 +48,14 @@ default_sigma_scale <- function(formula, data) {
   as.numeric(scale)
 }
 
+# A reproducible seed for one brm() fit, derived from what identifies the fit
+# (site, model, window, year or "pooled", retry), so a fit's result does not
+# depend on which fits ran before it or in which process.
+tas_seed <- function(...) {
+  key <- paste(..., sep = "|")
+  strtoi(substr(digest::digest(key, algo = "xxhash32", serialize = FALSE), 1, 7), 16L)
+}
+
 # Compile each model's Stan program once per machine. cmdstanr keys compiled
 # programs by a hash of their code in this directory, so once a program is
 # compiled every later brm() call, in this or any other R process, reuses the
@@ -218,7 +226,7 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
-                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
+                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "total", window_start, window_end, "pooled"), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
     
     # use this result as prior of each year
@@ -276,7 +284,7 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       
       mod <- brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors + prior_sigma, data = data_subset,
-                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0) # , silent = 2
       
       if (!inherits(mod, "try-error")) {
@@ -291,7 +299,7 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       if (failed_brm) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                              prior = priors + prior_sigma, data = data_subset,
-                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear, "retry"), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
       
@@ -510,7 +518,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
-                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
+                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "direct", window_start, window_end, "pooled"), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
 
     # use this result as prior of each year
@@ -572,7 +580,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
       
       mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors + prior_sigma, data = data_subset,
-                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0)) # , silent = 2
       
       if (!inherits(mod, "try-error")) {
@@ -587,7 +595,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
       if (failed_brm) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                              prior = priors + prior_sigma, data = data_subset,
-                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear, "retry"), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
 
