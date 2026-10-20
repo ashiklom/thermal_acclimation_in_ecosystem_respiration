@@ -10,7 +10,11 @@
 # scratch data-proc root whose step-01 inputs are symlinked from data-proc/,
 # so nothing in data-proc/ is written. The check requires identical call logs
 # (site, call order, data hash, priors, sampler settings) and identical
-# per-site outcome tables.
+# per-site outcome tables. Prior values are compared numerically to a
+# relative 1e-12 (prior means went from 15-significant-digit literals in the
+# model code to full-precision Stan data); entries for the residual SD
+# (sigma_*), which only exist once its default prior is passed explicitly,
+# and seeds, when the reference passes none, are not compared.
 #
 # Scripts written as a loop over all sites (up to v2-s03) are restricted to
 # --sites by rewriting the loop header; per-site runner scripts (from v2-s04)
@@ -152,9 +156,32 @@ report <- function(label, a, b) {
     print(utils::head(rbind(cbind(version = "ref", a[bad, ]), cbind(version = "head", b[bad, ])), 10))
   }
 }
+parse_priors <- function(x) {
+  lapply(strsplit(x, ";", fixed = TRUE), function(entries) {
+    kv <- strsplit(entries, "=", fixed = TRUE)
+    v <- stats::setNames(as.numeric(vapply(kv, `[`, "", 2)), vapply(kv, `[`, "", 1))
+    v[!startsWith(names(v), "sigma_")]
+  })
+}
+compare_calls <- function(label, a, b) {
+  if (!identical(nrow(a), nrow(b))) return(report(label, a, b))
+  pa <- parse_priors(a$priors)
+  pb <- parse_priors(b$priors)
+  close <- mapply(function(x, y) {
+    identical(names(x), names(y)) && identical(is.na(x), is.na(y)) &&
+      all(abs(x - y) <= 1e-12 * pmax(1, abs(x)), na.rm = TRUE)
+  }, pa, pb)
+  if (!all(close)) {
+    n_bad <<- n_bad + 1
+    message(label, ": prior values differ in ", sum(!close), " calls")
+    print(utils::head(cbind(a[!close, c("site", "seq", "priors")], head_priors = b$priors[!close]), 5))
+  }
+  drop <- c("priors", if (all(is.na(a$seed) | a$seed == "NA")) "seed")
+  report(paste(label, "(other columns)"), a[setdiff(names(a), drop)], b[setdiff(names(b), drop)])
+}
 for (model in names(models)) {
-  report(paste(model, "brm calls"), read_calls(file.path(work, "ref", model, "calls")),
-         read_calls(file.path(work, "head", model, "calls")))
+  compare_calls(paste(model, "brm calls"), read_calls(file.path(work, "ref", model, "calls")),
+                read_calls(file.path(work, "head", model, "calls")))
   a <- read_outcomes("ref", model)
   b <- read_outcomes("head", model)
   report(paste(model, "outcome"), a[[1]], b[[1]])

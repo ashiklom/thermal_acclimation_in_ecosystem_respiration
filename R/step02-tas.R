@@ -10,13 +10,43 @@
 # outcome_siteyear_*.csv>). combine_tas_sites() binds per-site results in
 # site_info order into the published output tables.
 
-priors_temp <- brms::prior("normal(2, 5)", nlpar = "C0", lb = 0, ub = 10) +
-  brms::prior("normal(0.1, 1)", nlpar = "alpha", lb = 0, ub = 0.2) + 
-  brms::prior("normal(-0.001, 0.1)", nlpar = "beta", lb = -0.01, ub = 0.0)
+# Priors of the respiration models. Their means are re-centred window by
+# window, so they are passed to Stan as data (see tas_stanvars()) instead of
+# being written into the model code as numbers: the Stan program is then the
+# same for every window, year and site, and is compiled once.
+priors_temp <- brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
+  brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) + 
+  brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0)
 
-priors_water <- brms::prior("normal(10, 10)", nlpar = "Hs", lb = 0, ub = 1000)
+priors_water <- brms::prior("normal(Hs_mu, Hs_sd)", nlpar = "Hs", lb = 0, ub = 1000)
 
-priors_gpp <- brms::prior("normal(0.5, 2)", nlpar = "k2", lb = 0, ub = 10)
+priors_gpp <- brms::prior("normal(k2_mu, k2_sd)", nlpar = "k2", lb = 0, ub = 10)
+
+# brms's default prior for the residual SD, student_t(3, 0, s), writes a
+# data-dependent s into the model code; pass s as data as well.
+prior_sigma <- brms::prior("student_t(3, 0, sigma_scale)", class = "sigma")
+
+# Initial prior means and SDs. The SDs never change; the means are replaced by
+# the gsl_nls and pooled-window estimates.
+prior_defaults <- c(C0_mu = 2, C0_sd = 5, alpha_mu = 0.1, alpha_sd = 1, beta_mu = -0.001, beta_sd = 0.1,
+                    Hs_mu = 10, Hs_sd = 10, k2_mu = 0.5, k2_sd = 2)
+
+# The prior values of the parameters in `priors`, from `prior_values`, plus
+# brms's default residual-SD scale for `formula` and `data`, as stanvars.
+tas_stanvars <- function(prior_values, priors, formula, data) {
+  names <- as.vector(outer(c("_mu", "_sd"), priors$nlpar[nzchar(priors$nlpar)], function(suffix, par) paste0(par, suffix)))
+  values <- c(prior_values[names], sigma_scale = default_sigma_scale(formula, data))
+  Reduce(`+`, Map(function(value, name) brms::stanvar(value, name = name), unname(values), names(values)))
+}
+
+# The scale brms would use for its default student_t(3, 0, scale) prior on
+# the residual SD of `formula` fitted to `data`.
+default_sigma_scale <- function(formula, data) {
+  dp <- brms::default_prior(formula, data = data)
+  scale <- sub("^student_t\\(3, 0, (.*)\\)$", "\\1", dp$prior[dp$class == "sigma" & !nzchar(dp$coef)])
+  stopifnot(length(scale) == 1)
+  as.numeric(scale)
+}
 
 # Below are sites whose inter-annual TS was not strongly correlated to inter-annual TA, so use TA to obtain TS by linear regression. 
 site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "CH-Lae", "DE-RuC", "DE-SfS", "FI-Sod",
@@ -124,6 +154,7 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
   frmu <- NEE ~ exp(alpha * TS + beta*TS^2) * C0
   param <- alpha+beta+C0 ~ 1
   priors <- priors_temp
+  prior_values <- prior_defaults
   # for nls models
   # alpha and CO are both positive and beta is negative
   frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * (exp(C0_ln))
@@ -152,20 +183,21 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
     # this can give abnormal initial values. 
     mod_nls <- try(gslnls::gsl_nls(fn=as.formula(frmu_nls), data=data, start=stprm))
     if (!inherits(mod_nls, "try-error")) {
-      priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2), ", 1.0)")
-      priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01), ", 0.1)")
-      priors$prior[priors$nlpar == 'C0'] <- paste0("normal(", min(exp(coefficients(mod_nls)["C0_ln"]), 10), ", 5)")
+      prior_values["alpha_mu"] <- min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2)
+      prior_values["beta_mu"] <- -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01)
+      prior_values["C0_mu"] <- min(exp(coefficients(mod_nls)["C0_ln"]), 10)
     }
     
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
-                      prior = priors, data = data, iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
+                      prior = priors + prior_sigma, data = data,
+                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
     
     # use this result as prior of each year
-    priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", brms::fixef(mod0)["alpha_Intercept", "Estimate"], ", 1.0)")
-    priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", brms::fixef(mod0)["beta_Intercept", "Estimate"], ", 0.1)")
-    priors$prior[priors$nlpar == 'C0'] <- paste0("normal(", brms::fixef(mod0)["C0_Intercept", "Estimate"], ", 5)")
+    prior_values["alpha_mu"] <- brms::fixef(mod0)["alpha_Intercept", "Estimate"]
+    prior_values["beta_mu"] <- brms::fixef(mod0)["beta_Intercept", "Estimate"]
+    prior_values["C0_mu"] <- brms::fixef(mod0)["C0_Intercept", "Estimate"]
     
     # get reference temperature, SWC, and NEEday of each window
     TSref <- mean(ac$TS[dplyr::between(ac$DOY, window_start, window_end)], na.rm=T)
@@ -216,7 +248,8 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       if (median(data_subset$NEE) < 0.2 | mean(data_subset$NEE) < 0.2) { next }
       
       mod <- brms::brm(brms::bf(frmu, param, nl = TRUE),
-                       prior = priors, data = data_subset, iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
+                       prior = priors + prior_sigma, data = data_subset,
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0) # , silent = 2
       
       if (!inherits(mod, "try-error")) {
@@ -230,7 +263,8 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       # if brm models fail or have divergent transitions, try another time
       if (failed_brm) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
-                             prior = priors, data = data_subset, iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
+                             prior = priors + prior_sigma, data = data_subset,
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
       
@@ -400,6 +434,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
     frmu <- NEE ~ exp(alpha * TS + beta*TS^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2)
     param <- alpha+beta+C0+Hs+k2 ~ 1
     priors <- priors_temp + priors_water + priors_gpp
+    prior_values <- prior_defaults
     # for nls models
     # alpha, CO, k2, and Hs are all positive and beta are negative
     frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * SWC / (exp(Hs_ln) + SWC) * (exp(C0_ln) + NEE_daytime * exp(k2_ln))
@@ -408,6 +443,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
     frmu <- NEE ~ exp(alpha * TS + beta*TS^2) * (C0 + NEE_daytime * k2)
     param <- alpha+beta+C0+k2 ~ 1
     priors <- priors_temp + priors_gpp
+    prior_values <- prior_defaults
     frmu_nls <- NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * (exp(C0_ln) + NEE_daytime * exp(k2_ln))
     stprm <- c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6)
   }
@@ -435,28 +471,29 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
     # this can give abnormal initial values. 
     mod_nls <- try(gslnls::gsl_nls(fn=as.formula(frmu_nls), data=data, start=stprm))
     if (!inherits(mod_nls, "try-error")) {
-      priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2), ", 1.0)")
-      priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01), ", 0.1)")
-      priors$prior[priors$nlpar == 'C0'] <- paste0("normal(", min(exp(coefficients(mod_nls)["C0_ln"]), 10), ", 5)")
-      priors$prior[priors$nlpar == 'k2'] <- paste0("normal(", min(exp(coefficients(mod_nls)["k2_ln"]), 10), ", 2)")
+      prior_values["alpha_mu"] <- min(exp(coefficients(mod_nls)["alpha_ln"]), 0.2)
+      prior_values["beta_mu"] <- -min(exp(coefficients(mod_nls)["beta_ln"]), 0.01)
+      prior_values["C0_mu"] <- min(exp(coefficients(mod_nls)["C0_ln"]), 10)
+      prior_values["k2_mu"] <- min(exp(coefficients(mod_nls)["k2_ln"]), 10)
       if (site$SWC_use == 'YES') {
-        priors$prior[priors$nlpar == 'Hs'] <- paste0("normal(", min(exp(coefficients(mod_nls)["Hs_ln"]), 1000), ", 10)")
+        prior_values["Hs_mu"] <- min(exp(coefficients(mod_nls)["Hs_ln"]), 1000)
       }
     }
     
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- brms::brm(brms::bf(frmu, param, nl = TRUE),
-                      prior = priors, data = data, iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
+                      prior = priors + prior_sigma, data = data,
+                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0) # , silent = 2
 
     # use this result as prior of each year
-    priors$prior[priors$nlpar == 'alpha'] <- paste0("normal(", brms::fixef(mod0)["alpha_Intercept", "Estimate"], ", 1.0)")
-    priors$prior[priors$nlpar == 'beta'] <- paste0("normal(", brms::fixef(mod0)["beta_Intercept", "Estimate"], ", 0.1)")
-    priors$prior[priors$nlpar == 'C0'] <- paste0("normal(", brms::fixef(mod0)["C0_Intercept", "Estimate"], ", 5)")
-    priors$prior[priors$nlpar == 'k2'] <- paste0("normal(", brms::fixef(mod0)["k2_Intercept", "Estimate"], ", 2)")
+    prior_values["alpha_mu"] <- brms::fixef(mod0)["alpha_Intercept", "Estimate"]
+    prior_values["beta_mu"] <- brms::fixef(mod0)["beta_Intercept", "Estimate"]
+    prior_values["C0_mu"] <- brms::fixef(mod0)["C0_Intercept", "Estimate"]
+    prior_values["k2_mu"] <- brms::fixef(mod0)["k2_Intercept", "Estimate"]
     #
     if (site$SWC_use == 'YES') {
-      priors$prior[priors$nlpar == 'Hs'] <- paste0("normal(", brms::fixef(mod0)["Hs_Intercept", "Estimate"], ", 10)")
+      prior_values["Hs_mu"] <- brms::fixef(mod0)["Hs_Intercept", "Estimate"]
     } 
 
     # get reference temperature, SWC, and NEEday of each window
@@ -507,7 +544,8 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
       if (median(data_subset$NEE) < 0.2 | mean(data_subset$NEE) < 0.2) { next }
       
       mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
-                       prior = priors, data = data_subset, iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
+                       prior = priors + prior_sigma, data = data_subset,
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0)) # , silent = 2
       
       if (!inherits(mod, "try-error")) {
@@ -521,7 +559,8 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
       # if brm models fail or have divergent transitions, try another time
       if (failed_brm) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
-                             prior = priors, data = data_subset, iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
+                             prior = priors + prior_sigma, data = data_subset,
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
 
