@@ -449,9 +449,11 @@ prep_site_ameriflux <- function(site, raw_files) {
 
   ######################################decide day or night for every TIMESTAMP#######################################
   # get site long and lat
-  sites <- amerifluxr::amf_site_info()
-  long_site  <- sites$LOCATION_LONG[sites$SITE_ID==name_site]
-  lat_site   <- sites$LOCATION_LAT[sites$SITE_ID==name_site]
+  # site coordinates as used for the published outputs (see
+  # scripts/snapshot-ameriflux-coordinates.R), not the live AmeriFlux API
+  sites <- utils::read.csv(file.path("data", "ameriflux_coordinates.csv"))
+  long_site  <- sites$LONG[sites$site_ID==name_site]
+  lat_site   <- sites$LAT[sites$site_ID==name_site]
   
   # get the exact time zone, not using daylight saving so choose a winter date
   tz <- lutz::tz_offset(as.Date("2000-01-01"), lutz::tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
