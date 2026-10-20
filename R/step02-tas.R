@@ -48,6 +48,33 @@ default_sigma_scale <- function(formula, data) {
   as.numeric(scale)
 }
 
+# Compile each model's Stan program once per machine. cmdstanr keys compiled
+# programs by a hash of their code in this directory, so once a program is
+# compiled every later brm() call, in this or any other R process, reuses the
+# executable (the code no longer depends on the data or the priors).
+use_stan_cache <- function(dir = path_proc("stan-cache")) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  options(cmdstanr_write_stan_file_dir = normalizePath(dir))
+}
+
+# Compile the total and direct models (brm() without sampling) into the
+# cache. Run this once before fitting sites in parallel processes, so they
+# never compile the same program at the same time.
+compile_tas_models <- function() {
+  data <- data.frame(NEE = c(1, 2, 3, 2), TS = c(5, 10, 15, 20), SWC = c(20, 25, 30, 35), NEE_daytime = c(1, 2, 3, 4))
+  models <- list(
+    total = list(frmu = NEE ~ exp(alpha * TS + beta*TS^2) * C0, param = alpha+beta+C0 ~ 1, priors = priors_temp),
+    direct = list(frmu = NEE ~ exp(alpha * TS + beta*TS^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2),
+                  param = alpha+beta+C0+Hs+k2 ~ 1, priors = priors_temp + priors_water + priors_gpp)
+  )
+  for (m in models) {
+    brms::brm(brms::bf(m$frmu, m$param, nl = TRUE), prior = m$priors + prior_sigma, data = data,
+              stanvars = tas_stanvars(prior_defaults, m$priors, brms::bf(m$frmu, m$param, nl = TRUE), data),
+              chains = 0, backend = "cmdstanr")
+  }
+  invisible(NULL)
+}
+
 # Below are sites whose inter-annual TS was not strongly correlated to inter-annual TA, so use TA to obtain TS by linear regression. 
 site_TS_issue <- c("BE-Bra", "CA-Cbo", "CA-Gro", "CA-Mer", "CA-Obs", "CA-TP3", "CH-Lae", "DE-RuC", "DE-SfS", "FI-Sod",
                    "IT-Ren", "NL-Loo", "US-Bar", "US-BZB", "US-BZF", "US-BZS", "US-CMW", "US-GLE", "US-Ha2",

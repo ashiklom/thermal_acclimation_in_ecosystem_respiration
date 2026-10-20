@@ -60,6 +60,8 @@ local({
 
   fake_brm <- function(formula, data, prior = NULL, stanvars = NULL, iter = 2000,
                        chains = 4, control = list(), seed = NA, ...) {
+    # chains = 0 only compiles a model; nothing to record or return.
+    if (identical(chains, 0)) return(invisible(NULL))
     site <- tryCatch(dynGet("name_site", ifnotfound = NULL), error = function(e) NULL) %||%
       get0("name_site", envir = globalenv(), ifnotfound = NA_character_)
     site <- as.character(site)[1]

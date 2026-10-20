@@ -13,7 +13,7 @@ stopifnot(requireNamespace("brms"), requireNamespace("caret"), requireNamespace(
 source(file.path("R", "paths.R"))
 source(file.path("R", "step02-tas.R"))
 
-# Usage: Rscript workflows/02_01b_estimate_direct_TAS_use_moving_window.R [--sites=SITE1,SITE2 | --combine-only]
+# Usage: Rscript workflows/02_01b_estimate_direct_TAS_use_moving_window.R [--sites=SITE1,SITE2 | --combine-only | --compile-only]
 #
 # Estimates direct TAS for each requested site (default: every site in
 # data/site_info.csv) and saves the result to data-proc/TAS_sites/direct/<site>.rds.
@@ -23,8 +23,15 @@ source(file.path("R", "step02-tas.R"))
 args <- commandArgs(trailingOnly = TRUE)
 sites_arg <- grep("^--sites=", args, value = TRUE)
 combine_only <- "--combine-only" %in% args
+compile_only <- "--compile-only" %in% args
 
 set.seed(123)
+
+# Compile both models into data-proc/stan-cache/ unless already there
+# (--compile-only: do just that, e.g. before starting parallel per-site runs).
+use_stan_cache()
+if (!combine_only) compile_tas_models()
+if (compile_only) quit(save = "no")
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 feature_gs <- read.csv(path_proc('growing_season_feature_EuropFlux.csv'))
