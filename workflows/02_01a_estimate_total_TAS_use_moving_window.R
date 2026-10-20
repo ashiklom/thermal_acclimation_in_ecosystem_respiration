@@ -45,7 +45,7 @@ for (name_site in sites) {
   print(name_site)
   a_measure_night_complete <- read.csv(path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')))
   ac <- read.csv(path_proc("RespirationData", paste0(name_site, '_ac.csv')))
-  result <- estimate_total_tas_site(site_info[site_info$site_ID == name_site, ], feature_gs, a_measure_night_complete, ac)
+  result <- estimate_tas_site(site_info[site_info$site_ID == name_site, ], feature_gs, a_measure_night_complete, ac, model_type = "total")
   saveRDS(result, path_proc("TAS_sites", "total", paste0(name_site, ".rds")))
 }
 

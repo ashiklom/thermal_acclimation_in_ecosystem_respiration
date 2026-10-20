@@ -50,7 +50,7 @@ for (name_site in sites) {
   print(name_site)
   a_measure_night_complete <- read.csv(path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')))
   ac <- read.csv(path_proc("RespirationData", paste0(name_site, '_ac.csv')))
-  result <- estimate_direct_tas_site(site_info[site_info$site_ID == name_site, ], feature_gs, a_measure_night_complete, ac, swc_ERA5)
+  result <- estimate_tas_site(site_info[site_info$site_ID == name_site, ], feature_gs, a_measure_night_complete, ac, model_type = "direct", swc_ERA5 = swc_ERA5)
   saveRDS(result, path_proc("TAS_sites", "direct", paste0(name_site, ".rds")))
 }
 
