@@ -105,7 +105,7 @@ for (id in 1:nrow(site_info)) {
     swc_2003_2020 <- bind_rows(swc_2003_2015, swc_2016_2020)
     swc_2003_2020$TIMESTAMP_START <- dmy_hm(swc_2003_2020$date_time)
     
-    a <- a %>% mutate(TIMESTAMP_START = ymd_hm(a$TIMESTAMP_START)) %>% 
+    a <- a |> mutate(TIMESTAMP_START = ymd_hm(a$TIMESTAMP_START)) |> 
     left_join(swc_2003_2020[, c("TIMESTAMP_START", "SWC_Mean")], by="TIMESTAMP_START")
     # times 100 to convert SWC into percentage
     a$SWC_Mean <- a$SWC_Mean*100
@@ -131,21 +131,21 @@ for (id in 1:nrow(site_info)) {
   }
   #
   # we decided to relax the SWC constrains
-  a_measure_night_complete <- a %>% filter(!is.na(TA_F_MDS)) %>% filter(TS_F_MDS_1_QC %in% c(0, 1, 2)) %>% filter(NEE_VUT_REF_QC == 0) %>% filter(NIGHT == 1) %>% filter(NEE_VUT_REF > -5 & NEE_VUT_REF < 30) 
-  # %>% filter(SWC_F_MDS_1_QC %in% c(0, 1, 2))
+  a_measure_night_complete <- a |> filter(!is.na(TA_F_MDS)) |> filter(TS_F_MDS_1_QC %in% c(0, 1, 2)) |> filter(NEE_VUT_REF_QC == 0) |> filter(NIGHT == 1) |> filter(NEE_VUT_REF > -5 & NEE_VUT_REF < 30) 
+  # |> filter(SWC_F_MDS_1_QC %in% c(0, 1, 2))
   
   yStart <- a_measure_night_complete$YEAR[1]
   yEnd   <- a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
   
   # decide which years data to exclude: rule 1: maximum data gaps during growing season < 1 month; rule2: large disturbance years due to fire, insect breakout
   # estimate growing season DOY
-  NEE_yearly  <- a %>% group_by(DOY) %>% summarise(NEE=mean(NEE_VUT_REF, na.rm=T), TS=mean(TS_F_MDS_1, na.rm=T))
+  NEE_yearly  <- a |> group_by(DOY) |> summarise(NEE=mean(NEE_VUT_REF, na.rm=T), TS=mean(TS_F_MDS_1, na.rm=T))
   
   # I will use the mean of the first three values, and the mean of the last three values
   if (name_site %in% c('FI-Sod', 'DE-RuC')) {
-    tmp <- NEE_yearly %>% filter(NEE < 0.0)
+    tmp <- NEE_yearly |> filter(NEE < 0.0)
   } else {
-    tmp <- NEE_yearly %>% filter(NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
+    tmp <- NEE_yearly |> filter(NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
   }
   
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
@@ -167,7 +167,7 @@ for (id in 1:nrow(site_info)) {
   # some sites NEE measurements under TS < 2C was inaccurate, so for these sites tStart should be greater than 2C
   if (name_site %in% c('CH-Dav')) {
     tStart <- max(tStart, 2)
-    a_measure_night_complete <- a_measure_night_complete %>% filter(TS_F_MDS_1 >= 2.0)
+    a_measure_night_complete <- a_measure_night_complete |> filter(TS_F_MDS_1 >= 2.0)
   }
   
   # max gap and total large gap threshold
@@ -196,21 +196,21 @@ for (id in 1:nrow(site_info)) {
                                            as.POSIXct((gEnd - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")), 
                              DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
   }
-  a_check_gaps <- a_check_gaps %>% rbind(a_gs_dates) %>% unique %>% arrange(TIMESTAMP)
+  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> arrange(TIMESTAMP)
 
-  good_years <- a_check_gaps %>% 
+  good_years <- a_check_gaps |> 
     mutate(growing_year = case_when(DOY <= 366 ~ year(TIMESTAMP), 
-                                    TRUE ~ year(TIMESTAMP) - 1)) %>% 
-    arrange(growing_year, TIMESTAMP) %>%  # <-- Sort before lag
-    group_by(growing_year) %>%
-    filter(DOY >= gStart & DOY <= gEnd) %>% 
-    mutate(lag_date = dplyr::lag(TIMESTAMP)) %>% 
-    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) %>% 
-    mutate(gap_large = ifelse(gap > 14, gap, 0)) %>%
-    filter(!is.na(gap)) %>%
-    summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) %>% 
-    filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) %>%
-    distinct(growing_year) %>% pull()
+                                    TRUE ~ year(TIMESTAMP) - 1)) |> 
+    arrange(growing_year, TIMESTAMP) |>  # <-- Sort before lag
+    group_by(growing_year) |>
+    filter(DOY >= gStart & DOY <= gEnd) |> 
+    mutate(lag_date = dplyr::lag(TIMESTAMP)) |> 
+    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |> 
+    mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
+    filter(!is.na(gap)) |>
+    summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) |> 
+    filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) |>
+    distinct(growing_year) |> pull()
   
   years2remove_automation <- setdiff(yStart:yEnd, good_years)
   
@@ -232,9 +232,9 @@ for (id in 1:nrow(site_info)) {
   
   
   # select good_years based on growing year
-  a_measure_night_complete <- a_measure_night_complete  %>% 
+  a_measure_night_complete <- a_measure_night_complete  |> 
     mutate(growing_year = case_when(DOY <= 366 ~ YEAR, 
-                                    TRUE ~ YEAR - 1)) %>% 
+                                    TRUE ~ YEAR - 1)) |> 
     filter(growing_year %in% good_years)
   # change column names
   a_measure_night_complete$TA <- a_measure_night_complete$TA_F_MDS
@@ -242,7 +242,7 @@ for (id in 1:nrow(site_info)) {
   a_measure_night_complete$SWC <- a_measure_night_complete$SWC_F_MDS_1
   a_measure_night_complete$NEE <- a_measure_night_complete$NEE_VUT_REF
   
-  a_measure_night_complete <- a_measure_night_complete %>% dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE, TA, TS, SWC))
+  a_measure_night_complete <- a_measure_night_complete |> dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE, TA, TS, SWC))
   
   # select useful column and year to output
   ac <- a[, c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE")]
@@ -259,7 +259,7 @@ for (id in 1:nrow(site_info)) {
   # only keep years between start year and end year
   iStart = a_measure_night_complete$YEAR[1]
   iEnd   = a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
-  ac <- ac %>% filter(between(YEAR, iStart, iEnd))
+  ac <- ac |> filter(between(YEAR, iStart, iEnd))
   
   # save the ac and a_measure_night_complete data:
   write.csv(ac, file=path_proc("RespirationData", paste0(name_site, '_ac.csv')), row.names = F)

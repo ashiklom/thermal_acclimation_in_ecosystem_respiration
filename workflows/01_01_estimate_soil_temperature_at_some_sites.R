@@ -139,8 +139,8 @@ for (id in id_estimate_TS) {
 
   # gap fill TA use DOY method if needed. 
   if (!"TA_gf" %in% colnames(data)) {
-    TA_gf <- data %>% group_by(DOY, HOUR, MINUTE) %>% summarise(TA_gf=mean(TA, na.rm=T))
-    data   <- data %>% left_join(TA_gf, by=c("DOY", "HOUR", "MINUTE"))
+    TA_gf <- data |> group_by(DOY, HOUR, MINUTE) |> summarise(TA_gf=mean(TA, na.rm=T))
+    data   <- data |> left_join(TA_gf, by=c("DOY", "HOUR", "MINUTE"))
   }
   if (sum(is.na(data$TA)) > 0) {
     data$TA[is.na(data$TA)] <- data$TA_gf[is.na(data$TA)]
@@ -149,8 +149,8 @@ for (id in id_estimate_TS) {
   # gap fill NETRAD if using NETRAD method
   if ("NETRAD" %in% names(data)) {
     if (!"NETRAD_gf" %in% colnames(data)) {
-      gf <- data %>% group_by(DOY, HOUR, MINUTE) %>% summarise(NETRAD_gf=mean(NETRAD, na.rm=T))
-      data   <- data %>% left_join(gf, by=c("DOY", "HOUR", "MINUTE"))
+      gf <- data |> group_by(DOY, HOUR, MINUTE) |> summarise(NETRAD_gf=mean(NETRAD, na.rm=T))
+      data   <- data |> left_join(gf, by=c("DOY", "HOUR", "MINUTE"))
     }
     if (sum(is.na(data$NETRAD)) > 0) {
       data$NETRAD[is.na(data$NETRAD)] <- data$NETRAD_gf[is.na(data$NETRAD)]

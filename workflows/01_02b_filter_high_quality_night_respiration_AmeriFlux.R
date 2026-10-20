@@ -85,7 +85,7 @@ for (id in 1:nrow(site_info)) {
   # create ancillary df
   ac <- a[, 1:7]  
   ac$DATE <- as.Date(ac$TIMESTAMP) 
-  ac <- ac %>% left_join(sunrise_set, by = c('DATE' = 'date'))
+  ac <- ac |> left_join(sunrise_set, by = c('DATE' = 'date'))
   
   # determine: day-time or night-time
   dt <- difftime(a$TIMESTAMP[2], a$TIMESTAMP[1], units = "hours")
@@ -99,13 +99,13 @@ for (id in 1:nrow(site_info)) {
   
   if (name_site == "US-CMW") {
     # only use data after 2000
-    a <- a %>% filter (YEAR > 2000)
-    ac <- ac %>% filter (YEAR > 2000)
+    a <- a |> filter (YEAR > 2000)
+    ac <- ac |> filter (YEAR > 2000)
   }
   if (name_site == "CA-Mer") {
     # only use data after 1999, the first two-year data have some problems. 
-    a <- a %>% filter (YEAR > 1999)
-    ac <- ac %>% filter (YEAR > 1999)
+    a <- a |> filter (YEAR > 1999)
+    ac <- ac |> filter (YEAR > 1999)
   }
   if (name_site == "US-Jo2") {
     # TA data from 123453~124049 has problems use Tsonic data 
@@ -246,10 +246,10 @@ for (id in 1:nrow(site_info)) {
   ac$daytime <- a$daytime
   
   ##########################################do Ustar filtering#############################################
-  NEE_yearly <- ac %>% group_by(DOY) %>% summarise(NEE=mean(NEE, na.rm=T), TS=mean(TS, na.rm=T))
+  NEE_yearly <- ac |> group_by(DOY) |> summarise(NEE=mean(NEE, na.rm=T), TS=mean(TS, na.rm=T))
 
   # I will use the mean of the first three values, and the mean of the last three values
-  tmp    <- NEE_yearly %>% filter(NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
+  tmp    <- NEE_yearly |> filter(NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
   #
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
@@ -301,7 +301,7 @@ for (id in 1:nrow(site_info)) {
     EProc$sMDSGapFillAfterUstar('NEE', FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
-    ac_u <- ac_u %>% mutate(seasonYear = year(DateTime)) %>% 
+    ac_u <- ac_u |> mutate(seasonYear = year(DateTime)) |> 
       left_join(uStarTh[uStarTh$aggregationMode == 'year', c(2, 4)], by="seasonYear")
   } else {
     ac_u$season <- usCreateSeasonFactorYdayYear(
@@ -318,23 +318,23 @@ for (id in 1:nrow(site_info)) {
     EProc$sMDSGapFillAfterUstar('NEE', FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
-    ac_u <- ac_u %>% left_join(uStarTh[,3:4], by="season")
+    ac_u <- ac_u |> left_join(uStarTh[,3:4], by="season")
   }
   ac$uStarTh <- ac_u$uStar  
   
   #
   #########################################end with Ustar filtering#######################################
   if (site_info$SWC_use[id] == 'YES') {
-    a_measure     <- ac %>% filter(!is.na(NEE) & !is.na(TS) & !is.na(SWC) & !is.na(USTAR)) %>% filter(USTAR >= uStarTh)
+    a_measure     <- ac |> filter(!is.na(NEE) & !is.na(TS) & !is.na(SWC) & !is.na(USTAR)) |> filter(USTAR >= uStarTh)
   } else {
-    a_measure     <- ac %>% filter(!is.na(NEE) & !is.na(TS) & !is.na(USTAR)) %>% filter(USTAR >= uStarTh)
+    a_measure     <- ac |> filter(!is.na(NEE) & !is.na(TS) & !is.na(USTAR)) |> filter(USTAR >= uStarTh)
   }
   #
   if (name_site %in% c("US-ICh", "US-ICt", "US-ICs")) {
     # tundra sites take advantage of data with little light
-    a_measure_night_complete <- a_measure %>% filter(SW_IN < 10 | !daytime) %>% filter(NEE > -5 & NEE < 30)
+    a_measure_night_complete <- a_measure |> filter(SW_IN < 10 | !daytime) |> filter(NEE > -5 & NEE < 30)
   } else {
-    a_measure_night_complete <- a_measure %>% filter(!daytime) %>% filter(NEE > -5 & NEE < 30)
+    a_measure_night_complete <- a_measure |> filter(!daytime) |> filter(NEE > -5 & NEE < 30)
   }
   
   
@@ -366,21 +366,21 @@ for (id in 1:nrow(site_info)) {
                                            as.POSIXct((gEnd - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")), 
                              DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
   } 
-  a_check_gaps <- a_check_gaps %>% rbind(a_gs_dates) %>% unique %>% arrange(TIMESTAMP)
+  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> arrange(TIMESTAMP)
 
-  good_years <- a_check_gaps %>%
+  good_years <- a_check_gaps |>
     mutate(growing_year = case_when(DOY <= 366 ~ year(TIMESTAMP),
-                                    TRUE ~ year(TIMESTAMP) - 1)) %>%
-    arrange(growing_year, TIMESTAMP) %>%  # <-- Sort before lag
-    group_by(growing_year) %>%
-    filter(DOY >= gStart & DOY <= gEnd) %>%
-    mutate(lag_date = dplyr::lag(TIMESTAMP)) %>%
-    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) %>%
-    mutate(gap_large = ifelse(gap > 14, gap, 0)) %>%
-    filter(!is.na(gap)) %>%
-    summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) %>%
-    filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) %>%
-    distinct(growing_year) %>% pull()
+                                    TRUE ~ year(TIMESTAMP) - 1)) |>
+    arrange(growing_year, TIMESTAMP) |>  # <-- Sort before lag
+    group_by(growing_year) |>
+    filter(DOY >= gStart & DOY <= gEnd) |>
+    mutate(lag_date = dplyr::lag(TIMESTAMP)) |>
+    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |>
+    mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
+    filter(!is.na(gap)) |>
+    summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) |>
+    filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) |>
+    distinct(growing_year) |> pull()
 
   years2remove_automation <- setdiff(ac$YEAR[1]:ac$YEAR[nrow(ac)], good_years)
   
@@ -404,19 +404,19 @@ for (id in 1:nrow(site_info)) {
   # we can only use TS > 2C for some sites, because data quality issue below TS < 2C 
   if (name_site %in% c("US-Ha1", "US-GLE")) {
     tStart <- max(tStart, 2.0)
-    a_measure_night_complete <- a_measure_night_complete %>% filter(TS >= 2.0)
+    a_measure_night_complete <- a_measure_night_complete |> filter(TS >= 2.0)
   } 
   
-  a_measure_night_complete <- a_measure_night_complete %>% 
-    filter(YEAR %in% good_years) %>%
+  a_measure_night_complete <- a_measure_night_complete |> 
+    filter(YEAR %in% good_years) |>
     dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE, TA, TS, SWC))
 
   iStart = a_measure_night_complete$YEAR[1]
   iEnd   = a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
-  ac <- ac %>% filter(between(YEAR, iStart, iEnd)) %>% dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE_uStar_f, TA, TS, SWC, SW_IN, daytime))
+  ac <- ac |> filter(between(YEAR, iStart, iEnd)) |> dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE_uStar_f, TA, TS, SWC, SW_IN, daytime))
 
   # I have to gap fill TA, TS, NEE;
-  T_gf <- ac %>% group_by(DOY, HOUR, MINUTE) %>% summarise(TA_gf=mean(TA, na.rm=T), TS_gf=mean(TS, na.rm=T), NEE_gf=mean(NEE_uStar_f, na.rm=T))  # for gap fill only.
+  T_gf <- ac |> group_by(DOY, HOUR, MINUTE) |> summarise(TA_gf=mean(TA, na.rm=T), TS_gf=mean(TS, na.rm=T), NEE_gf=mean(NEE_uStar_f, na.rm=T))  # for gap fill only.
   # ensure no NA values
   for (i in 4:6) {
     na.gf <- which(is.na(T_gf[,i]))
@@ -426,7 +426,7 @@ for (id in 1:nrow(site_info)) {
   }
   
   if (!"TA_gf" %in% colnames(ac)) {
-    ac   <- ac %>% left_join(T_gf, by=c("DOY", "HOUR", "MINUTE"))
+    ac   <- ac |> left_join(T_gf, by=c("DOY", "HOUR", "MINUTE"))
   }
 
   if (sum(is.na(ac$TA)) > 0) {
