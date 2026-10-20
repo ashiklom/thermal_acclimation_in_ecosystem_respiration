@@ -11,14 +11,12 @@
 library(librarian)
 shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
-# dir_rawdata <- '/Users/junnawang/YaleLab/data_server'
 ####################End Attention
 
-files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
+files_AmeriFlux_BASE <- list.files(path_original("SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 
@@ -167,7 +165,7 @@ for (id in 1:nrow(site_info)) {
   
   # soil temperature TS
   if (site_info$estimate_Ts[id] == 'YES') {
-    df_TS <- read.csv(file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')))
+    df_TS <- read.csv(file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')))
     df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
     df_TS <- left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
     ac$TS <- df_TS$TS_pred
@@ -492,11 +490,11 @@ for (id in 1:nrow(site_info)) {
   }
 
   # save the ac and a_measure_night_complete data:
-  write.csv(ac, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
-  write.csv(a_measure_night_complete, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
+  write.csv(ac, file=path_proc("RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
+  write.csv(a_measure_night_complete, file=path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
 
   feature_gs <- bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
 }
 
 # output growing season features
-write.csv(feature_gs, file=file.path('data', 'growing_season_feature_AmeriFlux.csv'), row.names = F)
+write.csv(feature_gs, file=path_proc('growing_season_feature_AmeriFlux.csv'), row.names = F)

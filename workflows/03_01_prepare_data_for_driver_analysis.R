@@ -10,17 +10,16 @@
 library(librarian)
 shelf(dplyr, lubridate, ggpubr, ggplot2, zoo, terra, corrplot, mblm, boot)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 
 #--------------------------------------------SOIL DATA-------------------------------------
 # get measured soil carbon data from AmeriFlux BIF data
-BIF <- read.csv(file.path(dir_rawdata, 'AMF_AA-Net_BIF_CCBY4_20251017.csv'))
+BIF <- read.csv(path_original('AMF_AA-Net_BIF_CCBY4_20251017.csv'))
 BIF.site <- BIF %>% filter(SITE_ID %in% site_info$site_ID) %>% filter(VARIABLE=='SOIL_CHEM_C_ORG') %>% group_by(SITE_ID) %>% summarise(soc_obs = mean(as.numeric(DATAVALUE), na.rm=T), .groups = 'drop')     # 26 sites
 # the unit of SOIL_CHEM_C_ORG: g C kg soil-1
 
@@ -28,7 +27,7 @@ BIF.site <- BIF %>% filter(SITE_ID %in% site_info$site_ID) %>% filter(VARIABLE==
 # the unit of this product: total SOC stocks t/ha
 stat.soil <- data.frame(site_ID=site_info$site_ID)
 #
-GSOCmap <- terra::rast(file.path(dir_rawdata, 'GSOCmap1.5.0.tif'))
+GSOCmap <- terra::rast(path_original('GSOCmap1.5.0.tif'))
 # plot(GSOCmap)
 #
 xy <- data.frame(x=site_info$LONG, y=site_info$LAT)
@@ -92,7 +91,7 @@ mblm_slope_test <- function(x, y, R_boot = 1000, R_perm = 1000, seed = 123) {
 #------------------
 #
 # Read ac data
-files <- list.files(file.path(dir_rawdata, 'RespirationData'), pattern = '_ac.csv$', full.names = TRUE)
+files <- list.files(path_proc("RespirationData"), pattern = '_ac.csv$', full.names = TRUE)
 for (i in 1:length(files)) {
   # i = 67
   name_site <- substring(files[i], nchar(files[i])-12, nchar(files[i])-7)
@@ -101,7 +100,7 @@ for (i in 1:length(files)) {
   ac <- read.csv(files[i])
   
   # use only the years with qualified data
-  a_measure_night_complete <- read.csv(file.path(dir_rawdata, 'RespirationData', paste0(name_site, '_nightNEE.csv')))
+  a_measure_night_complete <- read.csv(path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')))
   good_years <- unique(a_measure_night_complete$YEAR)
   
   # I have to gap fill TA, TS, and NEE, if needed.
@@ -199,7 +198,7 @@ cor(stat.climate[, c(2:14, 18)])
 
 #---------------------------------------------------SPECTRAL DATA------------------------------------------------
 # Take a look at spectral data
-file1    <- read.csv(file.path(dir_rawdata, 'towers-MOD13A2-061-results.csv'))  ##EVI and NDVI
+file1    <- read.csv(path_original('towers-MOD13A2-061-results.csv'))  ##EVI and NDVI
 
 # only use good quality data
 file1$MOD13A2_061__1_km_16_days_EVI[!file1$MOD13A2_061__1_km_16_days_VI_Quality_MODLAND_Description %in% c("VI produced, good quality", "VI produced, but check other QA")]  <- NA
@@ -230,7 +229,7 @@ file1_interp <- file1_interp %>% group_by(ID) %>% mutate(NDVI_interp = na.approx
 # }
 
 #######
-file2    <- read.csv(file.path(dir_rawdata, 'towers-MOD15A2H-061-results.csv'))  ## Fpar and LAI
+file2    <- read.csv(path_original('towers-MOD15A2H-061-results.csv'))  ## Fpar and LAI
 
 # remove low quality data
 file2$MOD15A2H_061_Fpar_500m[file2$MOD15A2H_061_FparLai_QC_MODLAND_Description == "Other Quality (back-up algorithm or fill values)"] <- NA
@@ -246,7 +245,7 @@ file2_interp <- file2 %>% mutate(month = month(Date)) %>% group_by(ID, month) %>
 file2_interp <- file2_interp %>% group_by(ID) %>% mutate(Fpar_interp = na.approx(Fpar, rule = 2), Lai_interp = na.approx(Lai, rule = 2))
 
 #####
-file3  <- read.csv(file.path(dir_rawdata, 'towers-MYD17A2HGF-061-results.csv'))  ##GPP
+file3  <- read.csv(path_original('towers-MYD17A2HGF-061-results.csv'))  ##GPP
 
 # remove low quality data
 file3$MYD17A2HGF_061_Gpp_500m[file3$MYD17A2HGF_061_Psn_QC_500m_MODLAND_Description == "Other quality (back-up algorithm or fill values)"] <- NA
@@ -277,9 +276,9 @@ corrplot(cor(data.spectral.tower[, 2:9]),
 # LAI, GPP are strongly related to NEE_day; try to use this. 
 
 #--------------------------------combine soil, climate, spectral, and thermal response strength data together-------------
-data.TAS_tot <- read.csv(file.path('data', 'outcome_temp.csv'))
+data.TAS_tot <- read.csv(path_proc('outcome_temp.csv'))
 data.TAS_tot <- data.TAS_tot %>% rename("TAS_tot" = "TAS", "TAS_totp" = "TASp")
-data.TAS <- read.csv(file.path('data', 'outcome_temp_water_gpp.csv'))
+data.TAS <- read.csv(path_proc('outcome_temp_water_gpp.csv'))
 
 acclimation <- site_info[, 1:7] %>% left_join(stat.climate[, c(1:8, 18:19)], by = "site_ID") %>% 
   left_join(data.spectral[, c("ID", "EVI", "NDVI", "LAI", "GPP")], by=c("site_ID" = "ID")) %>% 
@@ -289,4 +288,4 @@ acclimation <- site_info[, 1:7] %>% left_join(stat.climate[, c(1:8, 18:19)], by 
 
 #--------------------------------
 # output the data used for identify drivers of thermal acclimation
-write.csv(acclimation, file=file.path('data', 'acclimation_data.csv'), row.names = F)
+write.csv(acclimation, file=path_proc('acclimation_data.csv'), row.names = F)

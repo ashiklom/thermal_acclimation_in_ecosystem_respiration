@@ -7,10 +7,11 @@
 library(librarian)
 shelf(dplyr, ggplot2, tidyr)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
-outcome_temp <- read.csv(file.path('data', 'outcome_temp.csv'))
+outcome_temp <- read.csv(path_proc('outcome_temp.csv'))
 
-outcome_temp_water_gpp <- read.csv(file.path('data', 'outcome_temp_water_gpp.csv'))
+outcome_temp_water_gpp <- read.csv(path_proc('outcome_temp_water_gpp.csv'))
 
 outcome <- data.frame(site_ID = outcome_temp$site_ID, TAS_tot = outcome_temp$TAS, TAS_totp = outcome_temp$TASp)
 

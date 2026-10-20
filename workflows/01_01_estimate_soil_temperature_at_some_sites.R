@@ -12,8 +12,8 @@ library(librarian)
 shelf(randomForest, caret, amerifluxr, lubridate, tidyverse, ranger)
 
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
-dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
 
 #--------A function to predict soil temperature
 # inputs: a data frame data with 2-3 columns (TS, TA, NETRAD), the last column is optional
@@ -62,14 +62,14 @@ predict_soil_temp <- function(data, use_NETRAD) {
 #-------------Predict soil temperature for 9 Ameriflux sites using the function above
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 
-files_AmeriFlux_BASE <- list.files(file.path(dir_rawdata, "SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
+files_AmeriFlux_BASE <- list.files(path_original("SiteData", "AmeriFlux_BASE"), pattern=".zip$", full.names = T)
 #
-files_FLUXNET2015  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-files_FLUXNET2020  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-files_ICOS_after2020 <- list.files(path=file.path(dir_rawdata, 'SiteData', 'ICOS_after2020'), pattern = ".csv$", full.names = TRUE)
+files_FLUXNET2015  <- list.files(path=path_original('SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
+files_FLUXNET2020  <- list.files(path=path_original('SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
+files_ICOS_after2020 <- list.files(path=path_original('SiteData', 'ICOS_after2020'), pattern = ".csv$", full.names = TRUE)
 #
-files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern=".csv$", full.names = T)
-files_ICOS2025 <- list.files(file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
+files_FLUXNET2025 <- list.files(path_original("SiteData", "FLUXNET07202025", "unzip"), pattern=".csv$", full.names = T)
+files_ICOS2025 <- list.files(path_original("SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
 
 # 
 id_estimate_TS <- which(site_info$estimate_Ts == 'YES')
@@ -180,7 +180,7 @@ for (id in id_estimate_TS) {
   } 
   plot(data$TS_pred)
   
-  write.csv(data, file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')), row.names = F)
+  write.csv(data, file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')), row.names = F)
 }
 
 # all R2 should be higher than 0.83. 

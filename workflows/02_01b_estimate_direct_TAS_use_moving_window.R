@@ -12,20 +12,18 @@
 library(librarian)
 shelf(dplyr, lubridate, gslnls, caret, performance, ggpubr, ggplot2, zoo, bayesplot, brms, nlme)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
 set.seed(123)
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-# dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
-dir_rawdata <- '/Users/junnawang/YaleLab/data_server'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
-feature_gs <- read.csv(file.path('data', 'growing_season_feature_EuropFlux.csv'))
-feature_gs_AmeriFlux <- read.csv(file.path('data', 'growing_season_feature_AmeriFlux.csv'))
+feature_gs <- read.csv(path_proc('growing_season_feature_EuropFlux.csv'))
+feature_gs_AmeriFlux <- read.csv(path_proc('growing_season_feature_AmeriFlux.csv'))
 feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
 
-swc_ERA5 <- read.csv(file.path(dir_rawdata, "ERA5_daily_swc_1990_2024_allsites.csv"))
+swc_ERA5 <- read.csv(path_original("ERA5_daily_swc_1990_2024_allsites.csv"))
 swc_ERA5$date <- as.Date(swc_ERA5$date)
 swc_ERA5$YEAR <- year(swc_ERA5$date)
 swc_ERA5$MONTH <- month(swc_ERA5$date)
@@ -59,10 +57,10 @@ for (id in 1:nrow(site_info)) {
   
   #-------------------------------------------DATA PREPARATION--------------------------
   # read data
-  path <- file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv'))
+  path <- path_proc("RespirationData", paste0(name_site, '_nightNEE.csv'))
   if (file.exists(path)) {
     a_measure_night_complete <- read.csv(path)
-    ac <- read.csv(file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')))
+    ac <- read.csv(path_proc("RespirationData", paste0(name_site, '_ac.csv')))
   }
   if (site_info$SWC_use[id] == 'YES') {
     a_measure_night_complete <- a_measure_night_complete %>% filter(!is.na(SWC))
@@ -360,6 +358,6 @@ for (id in 1:nrow(site_info)) {
 }
 # end of each site
 
-write.csv(outcome, file = file.path('data', 'outcome_temp_water_gpp.csv'), row.names = F)
-write.csv(outcome_siteyear, file = file.path('data', 'outcome_siteyear_temp_water_gpp.csv'), row.names = F)
+write.csv(outcome, file = path_proc('outcome_temp_water_gpp.csv'), row.names = F)
+write.csv(outcome_siteyear, file = path_proc('outcome_siteyear_temp_water_gpp.csv'), row.names = F)
 

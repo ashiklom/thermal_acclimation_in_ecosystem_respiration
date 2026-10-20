@@ -11,17 +11,16 @@
 library(librarian)
 shelf(dplyr, lubridate)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
 ####################End Attention
 
-files_FLUXNET2015  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
-files_FLUXNET2020  <- list.files(path=file.path(dir_rawdata, 'SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
+files_FLUXNET2015  <- list.files(path=path_original('SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
+files_FLUXNET2020  <- list.files(path=path_original('SiteData', 'FLUXNET2020', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
 #
-files_FLUXNET2025 <- list.files(file.path(dir_rawdata, "SiteData", "FLUXNET07202025", "unzip"), pattern=".csv$", full.names = T)
-files_ICOS2025 <- list.files(file.path(dir_rawdata, "SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
+files_FLUXNET2025 <- list.files(path_original("SiteData", "FLUXNET07202025", "unzip"), pattern=".csv$", full.names = T)
+files_ICOS2025 <- list.files(path_original("SiteData", "Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"), pattern=".csv$", full.names = T)
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 
@@ -84,7 +83,7 @@ for (id in 1:nrow(site_info)) {
     a$TS_F_MDS_1 <- a$TS_F_MDS_2  # use TS of second layer because the first layer is incomplete
     a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
   } else if (name_site %in% c("FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")) {
-    df_TS <- read.csv(file=file.path(dir_rawdata, 'TS_RandomForest', paste0(name_site, '_TS_rfp.csv')))
+    df_TS <- read.csv(file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')))
     df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
     df_TS <- left_join(data.frame(TIMESTAMP=a$TIMESTAMP), df_TS, by = "TIMESTAMP")
     a$TS_F_MDS_1 <- df_TS$TS_pred
@@ -106,8 +105,8 @@ for (id in 1:nrow(site_info)) {
   
   # FLUXNET data do not include soil data for Site FR-Pue, but site PI provided the SWC data
   if (name_site == 'FR-Pue') {
-    swc_2003_2015 <- read.table(file.path(dir_rawdata, "SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2003-2015.csv"), sep=';', header=T)
-    swc_2016_2020 <- read.table(file.path(dir_rawdata, "SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2016-2020.csv"), sep=';', header=T)
+    swc_2003_2015 <- read.table(path_original("SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2003-2015.csv"), sep=';', header=T)
+    swc_2016_2020 <- read.table(path_original("SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2016-2020.csv"), sep=';', header=T)
     swc_2003_2020 <- bind_rows(swc_2003_2015, swc_2016_2020)
     swc_2003_2020$TIMESTAMP_START <- dmy_hm(swc_2003_2020$date_time)
     
@@ -308,13 +307,13 @@ for (id in 1:nrow(site_info)) {
   ac <- ac %>% filter(between(YEAR, iStart, iEnd))
   
   # save the ac and a_measure_night_complete data:
-  write.csv(ac, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
-  write.csv(a_measure_night_complete, file=file.path(dir_rawdata, "RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
+  write.csv(ac, file=path_proc("RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
+  write.csv(a_measure_night_complete, file=path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
   
   feature_gs <- bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
 }
 
 # output growing season features
-write.csv(feature_gs, file=file.path('data', 'growing_season_feature_EuropFlux.csv'), row.names = F)
+write.csv(feature_gs, file=path_proc('growing_season_feature_EuropFlux.csv'), row.names = F)
 
 # Sys.time()

@@ -6,22 +6,21 @@
 library(librarian)
 shelf(dplyr, ggplot2, caret, performance, zoo, bayesplot, brms, gslnls, lubridate)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
 ####################Attention: change this directory based on your own directory of raw data
-# dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-dir_rawdata <- '/Volumes/WZZ_disk/Thermal_Acclimation'
 ####################End Attention
 
 options(na.action = "na.omit")
 #
 # read data used for this module
-feature_gs <- read.csv(file.path('data', 'growing_season_feature_EuropFlux.csv'))
-feature_gs_AmeriFlux <- read.csv(file.path('data', 'growing_season_feature_AmeriFlux.csv'))
+feature_gs <- read.csv(path_proc('growing_season_feature_EuropFlux.csv'))
+feature_gs_AmeriFlux <- read.csv(path_proc('growing_season_feature_AmeriFlux.csv'))
 feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
 #
-acclimation <- read.csv(file.path("data", "acclimation_data.csv"))
+acclimation <- read.csv(path_proc("acclimation_data.csv"))
 #
-Tmin_month <- read.csv(file.path('data', 'Tmin_month_ssp245_wc.csv'))
+Tmin_month <- read.csv(path_proc('Tmin_month_ssp245_wc.csv'))
 acclimation     <- acclimation %>% left_join(Tmin_month, by='site_ID')
 
 # add 6 column about respiration
@@ -42,7 +41,7 @@ param <- alpha+beta+C0 ~ 1
 priors <- priors_temp
 
 #
-files  <- list.files(path = file.path(dir_rawdata, "RespirationData"), pattern = '_ac.csv$', full.names = FALSE)
+files  <- list.files(path = path_proc("RespirationData"), pattern = '_ac.csv$', full.names = FALSE)
 # air and soil temperature patterns
 for (i in 1:length(files)) {
   ###
@@ -52,10 +51,10 @@ for (i in 1:length(files)) {
   #
   iacclimation <- which(acclimation$site_ID==name_site)
   #
-  ac <- read.csv(file.path(dir_rawdata, "RespirationData", files[i]))
+  ac <- read.csv(path_proc("RespirationData", files[i]))
   #
   # use only the years with qualified data
-  a_measure_night_complete <- read.csv(file.path(dir_rawdata, "RespirationData", paste0(name_site, "_nightNEE.csv")))
+  a_measure_night_complete <- read.csv(path_proc("RespirationData", paste0(name_site, "_nightNEE.csv")))
   good_years <- unique(a_measure_night_complete$YEAR)
   # print(good_years)
   
@@ -182,4 +181,4 @@ for (i in 1:length(files)) {
 }
 #
 
-write.csv(acclimation, file=file.path('data', 'acclimation_data_future_ssp245.csv'), row.names = F)
+write.csv(acclimation, file=path_proc('acclimation_data_future_ssp245.csv'), row.names = F)

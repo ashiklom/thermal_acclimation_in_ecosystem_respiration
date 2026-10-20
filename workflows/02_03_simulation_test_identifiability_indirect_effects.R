@@ -15,11 +15,10 @@
 # each scenario has 40 replicates. 
 
 rm(list = ls())
+source(file.path("R", "paths.R"))
 
 set.seed(20260423)
 
-dir.create("data", showWarnings = FALSE)
-dir.create("figures", showWarnings = FALSE)
 
 simulate_scenario <- function(
   scenario,
@@ -219,8 +218,8 @@ summary_results <- do.call(
 summary_results$scenario <- rep(names(split(replicate_results, replicate_results$scenario)), each = 4)
 summary_results <- summary_results[, c("scenario", "component", "target", "truth", "mean_est", "sd_est", "bias", "rmse", "coverage")]
 
-write.csv(replicate_results, file = "data/simulation_identifiability_replications.csv", row.names = FALSE)
-write.csv(summary_results, file = "data/simulation_identifiability_summary.csv", row.names = FALSE)
+write.csv(replicate_results, file = path_proc("simulation_identifiability_replications.csv"), row.names = FALSE)
+write.csv(summary_results, file = path_proc("simulation_identifiability_summary.csv"), row.names = FALSE)
 
 plot_panel <- function(df, title_text, apparent_note = FALSE) {
   vals <- list(df$total_est, df$direct_est, df$apparent_est)
@@ -268,7 +267,7 @@ plot_panel <- function(df, title_text, apparent_note = FALSE) {
 }
 
 png(
-  filename = "figures/tas_identifiability_simulation.png",
+  filename = path_proc("figures", "tas_identifiability_simulation.png"),
   width = 1800,
   height = 1600,
   res = 180

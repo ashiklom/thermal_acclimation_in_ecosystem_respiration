@@ -10,10 +10,9 @@
 library(librarian)
 shelf(dplyr, terra)
 rm(list=ls())
+source(file.path("R", "paths.R"))
 
 ####################Attention: change this directory based on your own directory of raw data
-dir_rawdata <- '/Volumes/MaloneLab/Research/Stability_Project/Thermal_Acclimation'
-# dir_rawdata <- '/Users/junnawang/YaleLab/data_server/'
 ####################End Attention
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
@@ -21,7 +20,7 @@ xy <- data.frame(x=site_info$LONG, y=site_info$LAT)
 
 #----------------Step 1: get monthly temperature of the current period
 # dir <- '/Users/jw2946/Documents/data/climate/wc2.1_2.5m_tmin/'
-dir <- file.path(dir_rawdata, 'Climate', 'wc2.1_2.5m_tmin')
+dir <- path_raw("Climate", 'wc2.1_2.5m_tmin')
 #
 files <- list.files(dir)
 base_line <- terra::rast()
@@ -40,7 +39,7 @@ names(base_line) <- 1:12
 plot(base_line)
 
 #----------------Step 2: get monthly temperature of the future period under emissions scenario (SSP245)
-files <- list.files(path=file.path(dir_rawdata, 'Climate', 'wc2.1_2.5m_tmin_2041-2060'), pattern='.tif$', full.names = T)  # 12 future models
+files <- list.files(path=path_raw("Climate", 'wc2.1_2.5m_tmin_2041-2060'), pattern='.tif$', full.names = T)  # 12 future models
 nfiles <- length(files)
 #
 ssps <- c('ssp245')            #  c('ssp126', 'ssp245', 'ssp370', 'ssp585')
@@ -74,7 +73,7 @@ for (ssp in ssps) {
     Tmin_month[,i+1] <- as.vector(tapply(tmp[,i], rep(1:nrow(xy), times=5), mean, na.rm=T))
   }
   colnames(Tmin_month)[2:13] <- paste0('Tmin', 1:12)
-  write.csv(Tmin_month, file=file.path('data', paste0('Tmin_month_', ssp, '_wc.csv')), row.names=FALSE)
+  write.csv(Tmin_month, file=path_proc(paste0('Tmin_month_', ssp, '_wc.csv')), row.names=FALSE)
   #
 }
 
