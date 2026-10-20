@@ -48,6 +48,26 @@ default_sigma_scale <- function(formula, data) {
   as.numeric(scale)
 }
 
+# Sampler settings. "full" (the default) is the published setting; "fast"
+# (TAS_FIT_PROFILE=fast) is only for checking that the code runs end to end:
+# its TAS values are not results.
+tas_fit_settings <- function(profile = Sys.getenv("TAS_FIT_PROFILE", "full")) {
+  switch(profile,
+    full = list(profile = "full", chains = 4, cores = 4, pooled_iter = 2000, year_iter = 1000, retry = TRUE, retry_iter = 4000),
+    fast = list(profile = "fast", chains = 2, cores = 2, pooled_iter = 400, year_iter = 400, retry = FALSE, retry_iter = 400),
+    stop("unknown TAS_FIT_PROFILE: ", profile)
+  )
+}
+
+# Sites to use for small local runs: together they exercise every
+# site-specific code path of steps 01-02 (southern-hemisphere wrap and hourly
+# data: AU-Tum; AmeriFlux with measured soil water: US-Uaf; TS ~ TA
+# regression, TS >= 2 floor and ERA5 soil water: US-GLE; estimated soil
+# temperature and TS >= 2 floor: CH-Dav; TS ~ TA regression and the NEE < 0
+# season rule: DE-RuC; the night-data regression domain: US-Tw1;
+# random-forest soil temperature and PI soil water: FR-Pue).
+DEV_SITES <- c("AU-Tum", "US-Uaf", "US-GLE", "CH-Dav", "DE-RuC", "US-Tw1", "FR-Pue")
+
 # A reproducible seed for one brm() fit, derived from what identifies the fit
 # (site, model, window, year or "pooled", retry), so a fit's result does not
 # depend on which fits ran before it or in which process.
@@ -96,6 +116,7 @@ new_outcome <- function() {
 
 estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, ac) {
   outcome <- new_outcome()
+  sampler <- tas_fit_settings()
 
   name_site <- site$site_ID
   
@@ -226,7 +247,7 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
-                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "total", window_start, window_end, "pooled"), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
+                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "total", window_start, window_end, "pooled"), iter = sampler$pooled_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0))
     # if the pooled fit fails there are no priors for the years: skip the window
     if (inherits(mod0, "try-error")) { next }
@@ -286,7 +307,7 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       
       mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors + prior_sigma, data = data_subset,
-                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear), iter = sampler$year_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr", 
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0))
       
       if (!inherits(mod, "try-error")) {
@@ -298,10 +319,10 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
       }
       
       # if brm models fail or have divergent transitions, try another time
-      if (failed_brm) {
+      if (failed_brm && sampler$retry) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                              prior = priors + prior_sigma, data = data_subset,
-                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear, "retry"), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "total", window_start, window_end, iyear, "retry"), iter = sampler$retry_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
       # both attempts failed: leave this year without estimates
@@ -360,11 +381,12 @@ estimate_total_tas_site <- function(site, feature_gs, a_measure_night_complete, 
   )
   outcome[1, c("TAS", "TASp")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value")]
 
-  list(outcome = outcome, siteyear = df_site_year_window)
+  list(outcome = outcome, siteyear = df_site_year_window, fit_profile = sampler$profile)
 }
 
 estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete, ac, swc_ERA5) {
   outcome <- new_outcome()
+  sampler <- tas_fit_settings()
 
   name_site <- site$site_ID
   
@@ -522,7 +544,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
     # call the brm model to estimate parameters; this step takes much longer time.
     mod0 <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                       prior = priors + prior_sigma, data = data,
-                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "direct", window_start, window_end, "pooled"), iter = 2000, cores =4, chains = 4, backend = "cmdstanr",
+                      stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data), seed = tas_seed(name_site, "direct", window_start, window_end, "pooled"), iter = sampler$pooled_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr",
                       control = list(adapt_delta = 0.95, max_treedepth = 15), refresh = 0))
     # if the pooled fit fails there are no priors for the years: skip the window
     if (inherits(mod0, "try-error")) { next }
@@ -586,7 +608,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
       
       mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                        prior = priors + prior_sigma, data = data_subset,
-                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear), iter = 1000, cores =4, chains = 4, backend = "cmdstanr", 
+                       stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear), iter = sampler$year_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr", 
                        control = list(adapt_delta = 0.90, max_treedepth = 15), refresh = 0)) # , silent = 2
       
       if (!inherits(mod, "try-error")) {
@@ -598,10 +620,10 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
       }
       
       # if brm models fail or have divergent transitions, try another time
-      if (failed_brm) {
+      if (failed_brm && sampler$retry) {
         mod <- try(brms::brm(brms::bf(frmu, param, nl = TRUE),
                              prior = priors + prior_sigma, data = data_subset,
-                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear, "retry"), iter = 4000, cores =4, chains = 4, backend = "cmdstanr", 
+                             stanvars = tas_stanvars(prior_values, priors, brms::bf(frmu, param, nl = TRUE), data_subset), seed = tas_seed(name_site, "direct", window_start, window_end, iyear, "retry"), iter = sampler$retry_iter, cores = sampler$cores, chains = sampler$chains, backend = "cmdstanr", 
                              control = list(adapt_delta = 0.98, max_treedepth = 15), refresh = 0)) # , silent = 2
       }
       # both attempts failed: leave this year without estimates
@@ -659,7 +681,7 @@ estimate_direct_tas_site <- function(site, feature_gs, a_measure_night_complete,
                  na.action = na.omit)
   outcome[1, c("TAS", "TASp")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value")]
 
-  list(outcome = outcome, siteyear = df_site_year_window)
+  list(outcome = outcome, siteyear = df_site_year_window, fit_profile = sampler$profile)
 }
 
 # Bind per-site results (list(outcome, siteyear)), given in site_info order,
