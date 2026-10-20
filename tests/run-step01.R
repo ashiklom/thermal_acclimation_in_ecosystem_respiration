@@ -18,7 +18,8 @@ stopifnot(requireNamespace("parallel"))
 args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) >= 2)
 ref <- args[1]
-root <- normalizePath(args[2], mustWork = FALSE)
+dir.create(args[2], recursive = TRUE, showWarnings = FALSE)
+root <- normalizePath(args[2])
 opt <- function(name, default) {
   hit <- grep(paste0("^--", name, "="), args, value = TRUE)
   if (length(hit) > 0) sub(paste0("^--", name, "="), "", hit) else default
@@ -34,7 +35,6 @@ stopifnot(all(steps %in% names(scripts)))
 
 repo <- normalizePath(".")
 original_data <- normalizePath(file.path("..", "original-data"))
-dir.create(root, recursive = TRUE, showWarnings = FALSE)
 src <- if (ref == "worktree") repo else {
   dir <- file.path(root, "src")
   dir.create(dir, showWarnings = FALSE)
@@ -82,5 +82,7 @@ run_step <- function(step) {
 # 01_01 feeds 01_02a/b; 01_02a and 01_02b are independent of each other.
 if ("01_01" %in% steps) run_step("01_01")
 rest <- intersect(c("01_02a", "01_02b"), steps)
-invisible(parallel::mclapply(rest, run_step, mc.cores = length(rest)))
+results <- parallel::mclapply(rest, run_step, mc.cores = length(rest))
+failed <- vapply(results, inherits, logical(1), "try-error")
+if (any(failed)) stop(paste(vapply(results[failed], as.character, character(1)), collapse = "\n"))
 message("step 01 outputs in ", root)
