@@ -13,15 +13,16 @@ stopifnot(requireNamespace("brms"), requireNamespace("caret"), requireNamespace(
 source(file.path("R", "paths.R"))
 source(file.path("R", "step02-tas.R"))
 
-# Usage: Rscript workflows/02_01b_estimate_direct_TAS_use_moving_window.R [--sites=US-Kon,FI-Sod]
+# Usage: Rscript workflows/02_01b_estimate_direct_TAS_use_moving_window.R [--sites=SITE1,SITE2 | --combine-only]
 #
 # Estimates direct TAS for each requested site (default: every site in
 # data/site_info.csv) and saves the result to data-proc/TAS_sites/direct/<site>.rds.
-# Sites are independent, so they can run in separate processes. Once every
-# site has a result, writes data-proc/outcome_temp_water_gpp.csv and outcome_siteyear_temp_water_gpp.csv.
+# Sites are independent, so they can run in separate processes; after
+# per-site runs, --combine-only (or a run over every site) writes data-proc/outcome_temp_water_gpp.csv and outcome_siteyear_temp_water_gpp.csv.
 
 args <- commandArgs(trailingOnly = TRUE)
 sites_arg <- grep("^--sites=", args, value = TRUE)
+combine_only <- "--combine-only" %in% args
 
 set.seed(123)
 
@@ -35,7 +36,7 @@ swc_ERA5$YEAR <- lubridate::year(swc_ERA5$date)
 swc_ERA5$MONTH <- lubridate::month(swc_ERA5$date)
 swc_ERA5$DAY <- lubridate::day(swc_ERA5$date)
 
-sites <- if (length(sites_arg) > 0) strsplit(sub("^--sites=", "", sites_arg), ",")[[1]] else site_info$site_ID
+sites <- if (combine_only) character() else if (length(sites_arg) > 0) strsplit(sub("^--sites=", "", sites_arg), ",")[[1]] else site_info$site_ID
 stopifnot(all(sites %in% site_info$site_ID))
 
 for (name_site in sites) {
@@ -46,8 +47,12 @@ for (name_site in sites) {
   saveRDS(result, path_proc("TAS_sites", "direct", paste0(name_site, ".rds")))
 }
 
+# Combine only in a run over every site, or when asked to (--combine-only)
+# after per-site runs in separate processes.
 site_files <- path_proc("TAS_sites", "direct", paste0(site_info$site_ID, ".rds"))
-if (all(file.exists(site_files))) {
+if (length(sites_arg) > 0 && !combine_only) {
+  # per-site run: nothing to combine
+} else if (all(file.exists(site_files))) {
   combined <- combine_tas_sites(lapply(site_files, readRDS))
   write.csv(combined$outcome, file = path_proc('outcome_temp_water_gpp.csv'), row.names = F)
   write.csv(combined$siteyear, file = path_proc('outcome_siteyear_temp_water_gpp.csv'), row.names = F)
