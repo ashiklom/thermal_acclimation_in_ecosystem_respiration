@@ -8,8 +8,7 @@
 # sites in southern hemisphere ('AU-Tum', 'ZA-Kru') have growing seasons spanning two years. 
 # we added 11 European sites in Aug. 2025
 
-library(librarian)
-shelf(dplyr, lubridate)
+stopifnot(requireNamespace("dplyr"), requireNamespace("lubridate"))
 source(file.path("R", "paths.R"))
 
 files_FLUXNET2015  <- list.files(path=path_original('SiteData', 'FLUXNET2015', "unzip"), pattern = "_FLUXNET2015_FULLSET_(HH|HR)_", full.names = TRUE)
@@ -56,7 +55,7 @@ for (id in 1:nrow(site_info)) {
       if (is.numeric(irow_start) && length(irow_start) == 0) {
         irow_start = 1
       }
-      a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
+      a <- dplyr::bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
     }
   }
   rm(a_tmp)
@@ -64,14 +63,14 @@ for (id in 1:nrow(site_info)) {
   a[a==-9999] <- NA
   
   # add more columns
-  dt <- ymd_hm(a$TIMESTAMP_START[2]) - ymd_hm(a$TIMESTAMP_START[1])
-  a$TIMESTAMP  <- ymd_hm(a$TIMESTAMP_START) + dt / 2
-  a$YEAR  <- year(a$TIMESTAMP)
-  a$MONTH <- month(a$TIMESTAMP)
-  a$DAY   <- day(a$TIMESTAMP)
-  a$DOY   <- yday(a$TIMESTAMP)
-  a$HOUR  <- hour(a$TIMESTAMP)
-  a$MINUTE <- minute(a$TIMESTAMP)
+  dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
+  a$TIMESTAMP  <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
+  a$YEAR  <- lubridate::year(a$TIMESTAMP)
+  a$MONTH <- lubridate::month(a$TIMESTAMP)
+  a$DAY   <- lubridate::day(a$TIMESTAMP)
+  a$DOY   <- lubridate::yday(a$TIMESTAMP)
+  a$HOUR  <- lubridate::hour(a$TIMESTAMP)
+  a$MINUTE <- lubridate::minute(a$TIMESTAMP)
 
   # read soil temperature data, or use specific soil temperature data for some sites. 
   if (name_site %in% c('CZ-Stn')) {
@@ -79,8 +78,8 @@ for (id in 1:nrow(site_info)) {
     a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
   } else if (name_site %in% c("FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")) {
     df_TS <- read.csv(file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')))
-    df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
-    df_TS <- left_join(data.frame(TIMESTAMP=a$TIMESTAMP), df_TS, by = "TIMESTAMP")
+    df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
+    df_TS <- dplyr::left_join(data.frame(TIMESTAMP=a$TIMESTAMP), df_TS, by = "TIMESTAMP")
     a$TS_F_MDS_1 <- df_TS$TS_pred
     a$TS_F_MDS_1_QC[is.na(a$TS_F_MDS_1_QC) | a$TS_F_MDS_1_QC == 3] <- 2
     rm(df_TS)
@@ -102,11 +101,11 @@ for (id in 1:nrow(site_info)) {
   if (name_site == 'FR-Pue') {
     swc_2003_2015 <- read.table(path_original("SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2003-2015.csv"), sep=';', header=T)
     swc_2016_2020 <- read.table(path_original("SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2016-2020.csv"), sep=';', header=T)
-    swc_2003_2020 <- bind_rows(swc_2003_2015, swc_2016_2020)
-    swc_2003_2020$TIMESTAMP_START <- dmy_hm(swc_2003_2020$date_time)
+    swc_2003_2020 <- dplyr::bind_rows(swc_2003_2015, swc_2016_2020)
+    swc_2003_2020$TIMESTAMP_START <- lubridate::dmy_hm(swc_2003_2020$date_time)
     
-    a <- a |> mutate(TIMESTAMP_START = ymd_hm(a$TIMESTAMP_START)) |> 
-    left_join(swc_2003_2020[, c("TIMESTAMP_START", "SWC_Mean")], by="TIMESTAMP_START")
+    a <- a |> dplyr::mutate(TIMESTAMP_START = lubridate::ymd_hm(a$TIMESTAMP_START)) |> 
+    dplyr::left_join(swc_2003_2020[, c("TIMESTAMP_START", "SWC_Mean")], by="TIMESTAMP_START")
     # times 100 to convert SWC into percentage
     a$SWC_Mean <- a$SWC_Mean*100
     a$SWC_F_MDS_1[!is.na(a$SWC_Mean)] <- a$SWC_Mean[!is.na(a$SWC_Mean)]
@@ -131,21 +130,21 @@ for (id in 1:nrow(site_info)) {
   }
   #
   # we decided to relax the SWC constrains
-  a_measure_night_complete <- a |> filter(!is.na(TA_F_MDS)) |> filter(TS_F_MDS_1_QC %in% c(0, 1, 2)) |> filter(NEE_VUT_REF_QC == 0) |> filter(NIGHT == 1) |> filter(NEE_VUT_REF > -5 & NEE_VUT_REF < 30) 
-  # |> filter(SWC_F_MDS_1_QC %in% c(0, 1, 2))
+  a_measure_night_complete <- a |> dplyr::filter(!is.na(TA_F_MDS)) |> dplyr::filter(TS_F_MDS_1_QC %in% c(0, 1, 2)) |> dplyr::filter(NEE_VUT_REF_QC == 0) |> dplyr::filter(NIGHT == 1) |> dplyr::filter(NEE_VUT_REF > -5 & NEE_VUT_REF < 30) 
+  # |> dplyr::filter(SWC_F_MDS_1_QC %in% c(0, 1, 2))
   
   yStart <- a_measure_night_complete$YEAR[1]
   yEnd   <- a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
   
   # decide which years data to exclude: rule 1: maximum data gaps during growing season < 1 month; rule2: large disturbance years due to fire, insect breakout
   # estimate growing season DOY
-  NEE_yearly  <- a |> group_by(DOY) |> summarise(NEE=mean(NEE_VUT_REF, na.rm=T), TS=mean(TS_F_MDS_1, na.rm=T))
+  NEE_yearly  <- a |> dplyr::group_by(DOY) |> dplyr::summarise(NEE=mean(NEE_VUT_REF, na.rm=T), TS=mean(TS_F_MDS_1, na.rm=T))
   
   # I will use the mean of the first three values, and the mean of the last three values
   if (name_site %in% c('FI-Sod', 'DE-RuC')) {
-    tmp <- NEE_yearly |> filter(NEE < 0.0)
+    tmp <- NEE_yearly |> dplyr::filter(NEE < 0.0)
   } else {
-    tmp <- NEE_yearly |> filter(NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
+    tmp <- NEE_yearly |> dplyr::filter(NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
   }
   
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
@@ -167,7 +166,7 @@ for (id in 1:nrow(site_info)) {
   # some sites NEE measurements under TS < 2C was inaccurate, so for these sites tStart should be greater than 2C
   if (name_site %in% c('CH-Dav')) {
     tStart <- max(tStart, 2)
-    a_measure_night_complete <- a_measure_night_complete |> filter(TS_F_MDS_1 >= 2.0)
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(TS_F_MDS_1 >= 2.0)
   }
   
   # max gap and total large gap threshold
@@ -196,21 +195,21 @@ for (id in 1:nrow(site_info)) {
                                            as.POSIXct((gEnd - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")), 
                              DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
   }
-  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> arrange(TIMESTAMP)
+  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> dplyr::arrange(TIMESTAMP)
 
   good_years <- a_check_gaps |> 
-    mutate(growing_year = case_when(DOY <= 366 ~ year(TIMESTAMP), 
-                                    TRUE ~ year(TIMESTAMP) - 1)) |> 
-    arrange(growing_year, TIMESTAMP) |>  # <-- Sort before lag
-    group_by(growing_year) |>
-    filter(DOY >= gStart & DOY <= gEnd) |> 
-    mutate(lag_date = dplyr::lag(TIMESTAMP)) |> 
-    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |> 
-    mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
-    filter(!is.na(gap)) |>
-    summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) |> 
-    filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) |>
-    distinct(growing_year) |> pull()
+    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ lubridate::year(TIMESTAMP), 
+                                    TRUE ~ lubridate::year(TIMESTAMP) - 1)) |> 
+    dplyr::arrange(growing_year, TIMESTAMP) |>  # <-- Sort before lag
+    dplyr::group_by(growing_year) |>
+    dplyr::filter(DOY >= gStart & DOY <= gEnd) |> 
+    dplyr::mutate(lag_date = dplyr::lag(TIMESTAMP)) |> 
+    dplyr::mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |> 
+    dplyr::mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
+    dplyr::filter(!is.na(gap)) |>
+    dplyr::summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) |> 
+    dplyr::filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) |>
+    dplyr::distinct(growing_year) |> dplyr::pull()
   
   years2remove_automation <- setdiff(yStart:yEnd, good_years)
   
@@ -233,9 +232,9 @@ for (id in 1:nrow(site_info)) {
   
   # select good_years based on growing year
   a_measure_night_complete <- a_measure_night_complete  |> 
-    mutate(growing_year = case_when(DOY <= 366 ~ YEAR, 
+    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ YEAR, 
                                     TRUE ~ YEAR - 1)) |> 
-    filter(growing_year %in% good_years)
+    dplyr::filter(growing_year %in% good_years)
   # change column names
   a_measure_night_complete$TA <- a_measure_night_complete$TA_F_MDS
   a_measure_night_complete$TS <- a_measure_night_complete$TS_F_MDS_1
@@ -259,13 +258,13 @@ for (id in 1:nrow(site_info)) {
   # only keep years between start year and end year
   iStart = a_measure_night_complete$YEAR[1]
   iEnd   = a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
-  ac <- ac |> filter(between(YEAR, iStart, iEnd))
+  ac <- ac |> dplyr::filter(dplyr::between(YEAR, iStart, iEnd))
   
   # save the ac and a_measure_night_complete data:
   write.csv(ac, file=path_proc("RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
   write.csv(a_measure_night_complete, file=path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
   
-  feature_gs <- bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
+  feature_gs <- dplyr::bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
 }
 
 # output growing season features

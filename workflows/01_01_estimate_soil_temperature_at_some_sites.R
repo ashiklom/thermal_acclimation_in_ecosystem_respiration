@@ -8,8 +8,7 @@
 #  Author: Junna Wang, July 2025
 #  It will take ~40 min to finish running this script. 
 
-library(librarian)
-shelf(randomForest, caret, amerifluxr, lubridate, tidyverse, ranger)
+stopifnot(requireNamespace("amerifluxr"), requireNamespace("caret"), requireNamespace("dplyr"), requireNamespace("lubridate"), requireNamespace("randomForest"))
 source(file.path("R", "paths.R"))
 
 
@@ -30,10 +29,10 @@ predict_soil_temp <- function(data, use_NETRAD) {
   test  <- na.omit(test)
   #
   if (use_NETRAD) {
-    rf <- randomForest(formula = TS ~ TA + NETRAD, data=train)  # this takes lots of time
+    rf <- randomForest::randomForest(formula = TS ~ TA + NETRAD, data=train)  # this takes lots of time
     lm <- lm(data=data, TS ~ TA + NETRAD)
   } else {
-    rf <- randomForest(formula = TS ~ TA, data=train)  # this takes lots of time
+    rf <- randomForest::randomForest(formula = TS ~ TA, data=train)  # this takes lots of time
     lm <- lm(data=data, TS ~ TA)
   }
   
@@ -41,10 +40,10 @@ predict_soil_temp <- function(data, use_NETRAD) {
   y1 <- predict(rf, test)
   
   print('Training data performance by random forests: ')
-  print(postResample(pred=y0, obs=train$TS)) 
+  print(caret::postResample(pred=y0, obs=train$TS)) 
   
   print('Testing data performance by random forests: ')
-  print(postResample(pred=y1, obs=test$TS))
+  print(caret::postResample(pred=y1, obs=test$TS))
 
   # compare with linear regression
   print('Performance by linear regression: ')
@@ -77,7 +76,7 @@ for (id in id_estimate_TS) {
   name_site <- site_info$site_ID[id]
   
   if (site_info$source[id] %in% c("AmeriFlux_BASE", "AmeriFlux_FLUXNET")) {
-    a <- amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+    a <- amerifluxr::amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
     data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = a$YEAR, DOY = a$DOY, HOUR = a$HOUR, MINUTE = a$MINUTE, 
                        TS = a[, trimws(site_info$TS[id])], TA = a[, trimws(site_info$TA[id])])
     if (name_site %in% c('US-Los', "US-Ced")) {
@@ -112,18 +111,18 @@ for (id in id_estimate_TS) {
         if (is.numeric(irow_start) && length(irow_start) == 0) {
           irow_start = 1
         }
-        a <- bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
+        a <- dplyr::bind_rows(a, a_tmp[irow_start:nrow(a_tmp), ])
       }
     }
     rm(a_tmp)
     # -9999 means missing information.
     a[a==-9999] <- NA    
 
-    dt <- ymd_hm(a$TIMESTAMP_START[2]) - ymd_hm(a$TIMESTAMP_START[1])
-    a$TIMESTAMP  <- ymd_hm(a$TIMESTAMP_START) + dt / 2
-    a$DOY <- yday(a$TIMESTAMP)
-    data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = year(a$TIMESTAMP), DOY = a$DOY, 
-                       HOUR = hour(a$TIMESTAMP), MINUTE = minute(a$TIMESTAMP), TS = a$TS_F_MDS_1, TA = a$TA_F_MDS, NETRAD=a$NETRAD)
+    dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
+    a$TIMESTAMP  <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2
+    a$DOY <- lubridate::yday(a$TIMESTAMP)
+    data <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = lubridate::year(a$TIMESTAMP), DOY = a$DOY, 
+                       HOUR = lubridate::hour(a$TIMESTAMP), MINUTE = lubridate::minute(a$TIMESTAMP), TS = a$TS_F_MDS_1, TA = a$TA_F_MDS, NETRAD=a$NETRAD)
     if (name_site == 'DE-Hte') {
       # too few data in TS_F_MDS_1, so use TS_F_MDS_2
       data$TS <- a$TS_F_MDS_2
@@ -139,8 +138,8 @@ for (id in id_estimate_TS) {
 
   # gap fill TA use DOY method if needed. 
   if (!"TA_gf" %in% colnames(data)) {
-    TA_gf <- data |> group_by(DOY, HOUR, MINUTE) |> summarise(TA_gf=mean(TA, na.rm=T))
-    data   <- data |> left_join(TA_gf, by=c("DOY", "HOUR", "MINUTE"))
+    TA_gf <- data |> dplyr::group_by(DOY, HOUR, MINUTE) |> dplyr::summarise(TA_gf=mean(TA, na.rm=T))
+    data   <- data |> dplyr::left_join(TA_gf, by=c("DOY", "HOUR", "MINUTE"))
   }
   if (sum(is.na(data$TA)) > 0) {
     data$TA[is.na(data$TA)] <- data$TA_gf[is.na(data$TA)]
@@ -149,8 +148,8 @@ for (id in id_estimate_TS) {
   # gap fill NETRAD if using NETRAD method
   if ("NETRAD" %in% names(data)) {
     if (!"NETRAD_gf" %in% colnames(data)) {
-      gf <- data |> group_by(DOY, HOUR, MINUTE) |> summarise(NETRAD_gf=mean(NETRAD, na.rm=T))
-      data   <- data |> left_join(gf, by=c("DOY", "HOUR", "MINUTE"))
+      gf <- data |> dplyr::group_by(DOY, HOUR, MINUTE) |> dplyr::summarise(NETRAD_gf=mean(NETRAD, na.rm=T))
+      data   <- data |> dplyr::left_join(gf, by=c("DOY", "HOUR", "MINUTE"))
     }
     if (sum(is.na(data$NETRAD)) > 0) {
       data$NETRAD[is.na(data$NETRAD)] <- data$NETRAD_gf[is.na(data$NETRAD)]

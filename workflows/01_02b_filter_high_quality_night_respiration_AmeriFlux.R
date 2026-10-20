@@ -8,8 +8,7 @@
 # we added 6 more Ameriflux sites into the data in Aug. 2025
 # we added 2 more tropical Ameriflux sites into the data in Dec. 2025
 
-library(librarian)
-shelf(dplyr, lubridate, amerifluxr, suncalc, REddyProc, lutz, zoo)
+stopifnot(requireNamespace("amerifluxr"), requireNamespace("dplyr"), requireNamespace("lubridate"), requireNamespace("lutz"), requireNamespace("REddyProc"), requireNamespace("suncalc"), requireNamespace("zoo"))
 source(file.path("R", "paths.R"))
 source(file.path("R", "sun-times.R"))
 
@@ -32,7 +31,7 @@ for (id in 1:nrow(site_info)) {
   print(name_site)
 
   # read data
-  a <- amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+  a <- amerifluxr::amf_read_base(files_AmeriFlux_BASE[grepl(name_site, files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
   a[a==-9999] <- NA
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year. 
@@ -43,12 +42,12 @@ for (id in 1:nrow(site_info)) {
 
   ######################################decide day or night for every TIMESTAMP#######################################
   # get site long and lat
-  sites <- amf_site_info()
+  sites <- amerifluxr::amf_site_info()
   long_site  <- sites$LOCATION_LONG[sites$SITE_ID==name_site]
   lat_site   <- sites$LOCATION_LAT[sites$SITE_ID==name_site]
   
   # get the exact time zone, not using daylight saving so choose a winter date
-  tz <- tz_offset(as.Date("2000-01-01"), tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
+  tz <- lutz::tz_offset(as.Date("2000-01-01"), lutz::tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
   # Fixed-offset zone for the site's standard time. 'Etc/GMT+N' is the tz
   # database name of the POSIX 'GMT+N' zone (N hours *west* of UTC), which
   # current lubridate/timechange no longer accepts.
@@ -72,8 +71,8 @@ for (id in 1:nrow(site_info)) {
   # Find a day with estimated sunrise and sunset
   iday_sun <- which(!is.na(sunrise_set$sunrise))[1]
   # ensure each row represents the same date
-  sunrise_set$sunrise <- as.POSIXct(as.character(sunrise_set$sunrise), tz='GMT') + difftime(sunrise_set$date[iday_sun], as_date(sunrise_set$sunset[iday_sun]))
-  sunrise_set$sunset <- as.POSIXct(as.character(sunrise_set$sunset), tz='GMT') + difftime(sunrise_set$date[iday_sun], as_date(sunrise_set$sunset[iday_sun]))
+  sunrise_set$sunrise <- as.POSIXct(as.character(sunrise_set$sunrise), tz='GMT') + difftime(sunrise_set$date[iday_sun], lubridate::as_date(sunrise_set$sunset[iday_sun]))
+  sunrise_set$sunset <- as.POSIXct(as.character(sunrise_set$sunset), tz='GMT') + difftime(sunrise_set$date[iday_sun], lubridate::as_date(sunrise_set$sunset[iday_sun]))
 
   # if in southern Hemisphere, so we need to change DOY values
   southern_hemisphere = FALSE
@@ -85,7 +84,7 @@ for (id in 1:nrow(site_info)) {
   # create ancillary df
   ac <- a[, 1:7]  
   ac$DATE <- as.Date(ac$TIMESTAMP) 
-  ac <- ac |> left_join(sunrise_set, by = c('DATE' = 'date'))
+  ac <- ac |> dplyr::left_join(sunrise_set, by = c('DATE' = 'date'))
   
   # determine: day-time or night-time
   dt <- difftime(a$TIMESTAMP[2], a$TIMESTAMP[1], units = "hours")
@@ -93,19 +92,19 @@ for (id in 1:nrow(site_info)) {
   
   # special cases: sites in Arctic do not have sunrise and sunset sometime of a year
   if (name_site %in% c('US-ICt', 'US-ICh', "US-ICs")) {
-    a$daytime[is.na(a$daytime) & between(a$MONTH, 4, 8)] <- TRUE
-    a$daytime[is.na(a$daytime) & !between(a$MONTH, 4, 8)] <- FALSE
+    a$daytime[is.na(a$daytime) & dplyr::between(a$MONTH, 4, 8)] <- TRUE
+    a$daytime[is.na(a$daytime) & !dplyr::between(a$MONTH, 4, 8)] <- FALSE
   }
   
   if (name_site == "US-CMW") {
     # only use data after 2000
-    a <- a |> filter (YEAR > 2000)
-    ac <- ac |> filter (YEAR > 2000)
+    a <- a |> dplyr::filter(YEAR > 2000)
+    ac <- ac |> dplyr::filter(YEAR > 2000)
   }
   if (name_site == "CA-Mer") {
     # only use data after 1999, the first two-year data have some problems. 
-    a <- a |> filter (YEAR > 1999)
-    ac <- ac |> filter (YEAR > 1999)
+    a <- a |> dplyr::filter(YEAR > 1999)
+    ac <- ac |> dplyr::filter(YEAR > 1999)
   }
   if (name_site == "US-Jo2") {
     # TA data from 123453~124049 has problems use Tsonic data 
@@ -113,11 +112,11 @@ for (id in 1:nrow(site_info)) {
   }   
   if (name_site == "US-BZS") {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.
-    a_BZF <- amf_read_base(files_AmeriFlux_BASE[grepl('US-BZF', files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
+    a_BZF <- amerifluxr::amf_read_base(files_AmeriFlux_BASE[grepl('US-BZF', files_AmeriFlux_BASE)], parse_timestamp=TRUE, unzip = T)
     a_BZF[a_BZF==-9999] <- NA
-    df <- data.frame(BZS = a$TA_PI_F[between(a$YEAR, 2016, 2019)], BZF = a_BZF$TA_PI_F[between(a_BZF$YEAR, 2016, 2019)])
+    df <- data.frame(BZS = a$TA_PI_F[dplyr::between(a$YEAR, 2016, 2019)], BZF = a_BZF$TA_PI_F[dplyr::between(a_BZF$YEAR, 2016, 2019)])
     mod <- lm(data=df, BZS ~ BZF)
-    a$TA_PI_F[between(a$YEAR, 2012, 2014)] <- predict(mod, newdata = data.frame(BZF = a_BZF$TA_PI_F[between(a_BZF$YEAR, 2012, 2014)]))
+    a$TA_PI_F[dplyr::between(a$YEAR, 2012, 2014)] <- predict(mod, newdata = data.frame(BZF = a_BZF$TA_PI_F[dplyr::between(a_BZF$YEAR, 2012, 2014)]))
   } 
   ######################################decide which variables to use#######################################
   # modify the dataframe ac
@@ -166,8 +165,8 @@ for (id in 1:nrow(site_info)) {
   # soil temperature TS
   if (site_info$estimate_Ts[id] == 'YES') {
     df_TS <- read.csv(file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')))
-    df_TS$TIMESTAMP <- ymd_hms(df_TS$TIMESTAMP)
-    df_TS <- left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
+    df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
+    df_TS <- dplyr::left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
     ac$TS <- df_TS$TS_pred
     rm(df_TS)
   } else {
@@ -210,7 +209,7 @@ for (id in 1:nrow(site_info)) {
     print(paste0('minimum soil gaps: ', min_gap))
     if (min_gap <= 8) {
       # Perform interpolation on eligible gaps only
-      ac$SWC <- na.approx(x, na.rm = FALSE, maxgap = 8)
+      ac$SWC <- zoo::na.approx(x, na.rm = FALSE, maxgap = 8)
     }
   } else {
     ac$SWC <- NA
@@ -246,10 +245,10 @@ for (id in 1:nrow(site_info)) {
   ac$daytime <- a$daytime
   
   ##########################################do Ustar filtering#############################################
-  NEE_yearly <- ac |> group_by(DOY) |> summarise(NEE=mean(NEE, na.rm=T), TS=mean(TS, na.rm=T))
+  NEE_yearly <- ac |> dplyr::group_by(DOY) |> dplyr::summarise(NEE=mean(NEE, na.rm=T), TS=mean(TS, na.rm=T))
 
   # I will use the mean of the first three values, and the mean of the last three values
-  tmp    <- NEE_yearly |> filter(NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
+  tmp    <- NEE_yearly |> dplyr::filter(NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
   #
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
@@ -272,7 +271,7 @@ for (id in 1:nrow(site_info)) {
   seasonStarts <- data.frame(DOY = rep(c(gStart, gEnd), length(years)), YEAR=rep(years, each=2))
   #
   # create the data frame
-  ac_u       <- data.frame(DateTime = ymd_hm(a$TIMESTAMP_END))   # The first dataset has to be 00:30
+  ac_u       <- data.frame(DateTime = lubridate::ymd_hm(a$TIMESTAMP_END))   # The first dataset has to be 00:30
   ac_u$NEE   <- ac$NEE
   ac_u$Rg    <- ac$SW_IN
   ac_u$Tair  <- ac$TA
@@ -280,15 +279,15 @@ for (id in 1:nrow(site_info)) {
 
   if (convert_RH_VPD) {
     ac_u$rH    <- ac$RH
-    ac_u$VPD <- fCalcVPDfromRHandTair(ac_u$rH, ac_u$Tair)
+    ac_u$VPD <- REddyProc::fCalcVPDfromRHandTair(ac_u$rH, ac_u$Tair)
   } else {
     ac_u$VPD <- ac$VPD
   }
 
   if (dt == 1) {
-    EProc <- sEddyProc$new(name_site, ac_u, c('NEE', 'Rg', 'Tair', 'VPD', 'Ustar'), DTS.n=24)
+    EProc <- REddyProc::sEddyProc$new(name_site, ac_u, c('NEE', 'Rg', 'Tair', 'VPD', 'Ustar'), DTS.n=24)
   } else {
-    EProc <- sEddyProc$new(name_site, ac_u, c('NEE', 'Rg', 'Tair', 'VPD', 'Ustar'))
+    EProc <- REddyProc::sEddyProc$new(name_site, ac_u, c('NEE', 'Rg', 'Tair', 'VPD', 'Ustar'))
   }
   # Rg should not have negative values.
   EProc$sSetLocationInfo(LatDeg = lat_site, LongDeg = long_site, TimeZoneHour = tz$utc_offset_h)
@@ -301,10 +300,10 @@ for (id in 1:nrow(site_info)) {
     EProc$sMDSGapFillAfterUstar('NEE', FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
-    ac_u <- ac_u |> mutate(seasonYear = year(DateTime)) |> 
-      left_join(uStarTh[uStarTh$aggregationMode == 'year', c(2, 4)], by="seasonYear")
+    ac_u <- ac_u |> dplyr::mutate(seasonYear = lubridate::year(DateTime)) |> 
+      dplyr::left_join(uStarTh[uStarTh$aggregationMode == 'year', c(2, 4)], by="seasonYear")
   } else {
-    ac_u$season <- usCreateSeasonFactorYdayYear(
+    ac_u$season <- REddyProc::usCreateSeasonFactorYdayYear(
       ac_u$DateTime - 15*60, starts = seasonStarts)  # it sets back 15 min.
     #
     uStarTh <- EProc$sEstUstarThold(seasonFactor = ac_u$season)
@@ -318,23 +317,23 @@ for (id in 1:nrow(site_info)) {
     EProc$sMDSGapFillAfterUstar('NEE', FillAll = FALSE, isVerbose = FALSE)
     ac$NEE_uStar_f <- EProc$sExportResults()$NEE_uStar_f
     #
-    ac_u <- ac_u |> left_join(uStarTh[,3:4], by="season")
+    ac_u <- ac_u |> dplyr::left_join(uStarTh[,3:4], by="season")
   }
   ac$uStarTh <- ac_u$uStar  
   
   #
   #########################################end with Ustar filtering#######################################
   if (site_info$SWC_use[id] == 'YES') {
-    a_measure     <- ac |> filter(!is.na(NEE) & !is.na(TS) & !is.na(SWC) & !is.na(USTAR)) |> filter(USTAR >= uStarTh)
+    a_measure     <- ac |> dplyr::filter(!is.na(NEE) & !is.na(TS) & !is.na(SWC) & !is.na(USTAR)) |> dplyr::filter(USTAR >= uStarTh)
   } else {
-    a_measure     <- ac |> filter(!is.na(NEE) & !is.na(TS) & !is.na(USTAR)) |> filter(USTAR >= uStarTh)
+    a_measure     <- ac |> dplyr::filter(!is.na(NEE) & !is.na(TS) & !is.na(USTAR)) |> dplyr::filter(USTAR >= uStarTh)
   }
   #
   if (name_site %in% c("US-ICh", "US-ICt", "US-ICs")) {
     # tundra sites take advantage of data with little light
-    a_measure_night_complete <- a_measure |> filter(SW_IN < 10 | !daytime) |> filter(NEE > -5 & NEE < 30)
+    a_measure_night_complete <- a_measure |> dplyr::filter(SW_IN < 10 | !daytime) |> dplyr::filter(NEE > -5 & NEE < 30)
   } else {
-    a_measure_night_complete <- a_measure |> filter(!daytime) |> filter(NEE > -5 & NEE < 30)
+    a_measure_night_complete <- a_measure |> dplyr::filter(!daytime) |> dplyr::filter(NEE > -5 & NEE < 30)
   }
   
   
@@ -366,21 +365,21 @@ for (id in 1:nrow(site_info)) {
                                            as.POSIXct((gEnd - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")), 
                              DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
   } 
-  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> arrange(TIMESTAMP)
+  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> dplyr::arrange(TIMESTAMP)
 
   good_years <- a_check_gaps |>
-    mutate(growing_year = case_when(DOY <= 366 ~ year(TIMESTAMP),
-                                    TRUE ~ year(TIMESTAMP) - 1)) |>
-    arrange(growing_year, TIMESTAMP) |>  # <-- Sort before lag
-    group_by(growing_year) |>
-    filter(DOY >= gStart & DOY <= gEnd) |>
-    mutate(lag_date = dplyr::lag(TIMESTAMP)) |>
-    mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |>
-    mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
-    filter(!is.na(gap)) |>
-    summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) |>
-    filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) |>
-    distinct(growing_year) |> pull()
+    dplyr::mutate(growing_year = dplyr::case_when(DOY <= 366 ~ lubridate::year(TIMESTAMP),
+                                    TRUE ~ lubridate::year(TIMESTAMP) - 1)) |>
+    dplyr::arrange(growing_year, TIMESTAMP) |>  # <-- Sort before lag
+    dplyr::group_by(growing_year) |>
+    dplyr::filter(DOY >= gStart & DOY <= gEnd) |>
+    dplyr::mutate(lag_date = dplyr::lag(TIMESTAMP)) |>
+    dplyr::mutate(gap = as.numeric(difftime(TIMESTAMP, lag_date, units = "days"))) |>
+    dplyr::mutate(gap_large = ifelse(gap > 14, gap, 0)) |>
+    dplyr::filter(!is.na(gap)) |>
+    dplyr::summarise(gap_max = max(gap, na.rm=T), gap_total = sum(gap_large, na.rm=T) / (gEnd - gStart + 1)) |>
+    dplyr::filter(gap_max < gap_max_thresh &  gap_total < gap_total_thresh) |>
+    dplyr::distinct(growing_year) |> dplyr::pull()
 
   years2remove_automation <- setdiff(ac$YEAR[1]:ac$YEAR[nrow(ac)], good_years)
   
@@ -404,19 +403,19 @@ for (id in 1:nrow(site_info)) {
   # we can only use TS > 2C for some sites, because data quality issue below TS < 2C 
   if (name_site %in% c("US-Ha1", "US-GLE")) {
     tStart <- max(tStart, 2.0)
-    a_measure_night_complete <- a_measure_night_complete |> filter(TS >= 2.0)
+    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(TS >= 2.0)
   } 
   
   a_measure_night_complete <- a_measure_night_complete |> 
-    filter(YEAR %in% good_years) |>
+    dplyr::filter(YEAR %in% good_years) |>
     dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE, TA, TS, SWC))
 
   iStart = a_measure_night_complete$YEAR[1]
   iEnd   = a_measure_night_complete$YEAR[nrow(a_measure_night_complete)]
-  ac <- ac |> filter(between(YEAR, iStart, iEnd)) |> dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE_uStar_f, TA, TS, SWC, SW_IN, daytime))
+  ac <- ac |> dplyr::filter(dplyr::between(YEAR, iStart, iEnd)) |> dplyr::select(c(YEAR, MONTH, DAY, DOY, HOUR, MINUTE, NEE_uStar_f, TA, TS, SWC, SW_IN, daytime))
 
   # I have to gap fill TA, TS, NEE;
-  T_gf <- ac |> group_by(DOY, HOUR, MINUTE) |> summarise(TA_gf=mean(TA, na.rm=T), TS_gf=mean(TS, na.rm=T), NEE_gf=mean(NEE_uStar_f, na.rm=T))  # for gap fill only.
+  T_gf <- ac |> dplyr::group_by(DOY, HOUR, MINUTE) |> dplyr::summarise(TA_gf=mean(TA, na.rm=T), TS_gf=mean(TS, na.rm=T), NEE_gf=mean(NEE_uStar_f, na.rm=T))  # for gap fill only.
   # ensure no NA values
   for (i in 4:6) {
     na.gf <- which(is.na(T_gf[,i]))
@@ -426,7 +425,7 @@ for (id in 1:nrow(site_info)) {
   }
   
   if (!"TA_gf" %in% colnames(ac)) {
-    ac   <- ac |> left_join(T_gf, by=c("DOY", "HOUR", "MINUTE"))
+    ac   <- ac |> dplyr::left_join(T_gf, by=c("DOY", "HOUR", "MINUTE"))
   }
 
   if (sum(is.na(ac$TA)) > 0) {
@@ -443,7 +442,7 @@ for (id in 1:nrow(site_info)) {
   write.csv(ac, file=path_proc("RespirationData", paste0(name_site, '_ac.csv')), row.names = F)
   write.csv(a_measure_night_complete, file=path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')), row.names = F)
 
-  feature_gs <- bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
+  feature_gs <- dplyr::bind_rows(feature_gs, data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years)))
 }
 
 # output growing season features
