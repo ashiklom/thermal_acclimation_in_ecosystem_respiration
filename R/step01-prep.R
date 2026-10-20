@@ -169,9 +169,11 @@ prep_site_euroflux <- function(site, base_dir = path_original("SiteData")) {
   } else if (name_site == "FI-Sod") {
     # the first 5 year TS measurements was off, likely because sensor changed locations. 
     # in 2001, measurements in soil profile 2 are correct, so building relations between profiles 1 and 2
-    mod1 <- lm(data = a[1:24383,], TS_F_MDS_2 ~ TS_F_MDS_1)
+    # (2001-01-01 to 2002-05-23, rows 1:24383 of the FLUXNET2015 record)
+    mod1 <- lm(data = a[a$TIMESTAMP_START <= 200205232300, ], TS_F_MDS_2 ~ TS_F_MDS_1)
     pred2 <- predict(mod1, data.frame(TS_F_MDS_1 = a$TS_F_MDS_1[a$YEAR <= 2005]))
-    mod2 <- lm(data = a[90000:245000,], TS_F_MDS_1 ~ TS_F_MDS_2)
+    # (2006-02-18 23:30 to 2014-12-23 03:30, rows 90000:245000 of the FLUXNET2015 record)
+    mod2 <- lm(data = a[a$TIMESTAMP_START >= 200602182330 & a$TIMESTAMP_START <= 201412230330, ], TS_F_MDS_1 ~ TS_F_MDS_2)
     a$TS_F_MDS_1[a$YEAR <= 2005] <- predict(mod2, data.frame(TS_F_MDS_2 = pred2))
     a$TS_F_MDS_1_QC[a$YEAR <= 2005] <- 2
   } else if (name_site == "GF-Guy") {
@@ -358,7 +360,9 @@ prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
   a[a==-9999] <- NA
   if (name_site == "US-Myb") {
     # use data from the second year, because lots of missing NEE in the first year. 
-    a <- a[17521:245424, ]
+    # (rows 17521:245424 of the BASE record: 2011-2023; the record now runs
+    # through 2024, which the published row range left out)
+    a <- a[dplyr::between(a$YEAR, 2011, 2023), ]
     # combine TS data at two depth
     a$TS_2_1_1[is.na(a$TS_2_1_1)] <- a$TS_2_2_1[is.na(a$TS_2_1_1)] * 0.9324892 + 0.9077066
   }
@@ -433,15 +437,20 @@ prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
   }
   if (name_site == "US-Jo2") {
     # TA data from 123453~124049 has problems use Tsonic data 
-    a$TA[123453:124049] <- a$T_SONIC[123453:124049] * 1.0183316 - 0.9299
+    # (rows 123453:124049: 2017-01-15 22:15 to 2017-01-28 08:15)
+    bad_ta <- a$TIMESTAMP >= as.POSIXct("2017-01-15 22:15:00", tz = "GMT") & a$TIMESTAMP <= as.POSIXct("2017-01-28 08:15:00", tz = "GMT")
+    a$TA[bad_ta] <- a$T_SONIC[bad_ta] * 1.0183316 - 0.9299
   }   
   if (name_site == "US-BZS") {
     # TA data in 2012-2014 is not accurate, so use nearby US-BZF's TA data.
     a_BZF <- read_ameriflux_base('US-BZF', base_dir)
     a_BZF[a_BZF==-9999] <- NA
-    df <- data.frame(BZS = a$TA_PI_F[dplyr::between(a$YEAR, 2016, 2019)], BZF = a_BZF$TA_PI_F[dplyr::between(a_BZF$YEAR, 2016, 2019)])
+    # pair the two towers' half-hours by timestamp
+    BZF_TA <- a_BZF$TA_PI_F[match(a$TIMESTAMP, a_BZF$TIMESTAMP)]
+    df <- data.frame(BZS = a$TA_PI_F, BZF = BZF_TA)[dplyr::between(a$YEAR, 2016, 2019), ]
     mod <- lm(data=df, BZS ~ BZF)
-    a$TA_PI_F[dplyr::between(a$YEAR, 2012, 2014)] <- predict(mod, newdata = data.frame(BZF = a_BZF$TA_PI_F[dplyr::between(a_BZF$YEAR, 2012, 2014)]))
+    replace_ta <- dplyr::between(a$YEAR, 2012, 2014)
+    a$TA_PI_F[replace_ta] <- predict(mod, newdata = data.frame(BZF = BZF_TA[replace_ta]))
   } 
   ######################################decide which variables to use#######################################
   # modify the dataframe ac
@@ -549,7 +558,9 @@ prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
   
   # Special cases: US-Jo2: interpolating SW_IN, otherwise ReddyProc does not work for years before 2013 because of no SW_IN data. 
   if (name_site == "US-Jo2") {
-    ac$SW_IN[which(is.na(ac$SW_IN))] <- ac$SW_IN[which(is.na(ac$SW_IN)) + 365*48*4]
+    # fill each gap with the value 4 x 365 days later (365*48*4 half-hours)
+    later <- match(ac$TIMESTAMP + 4 * 365 * 86400, ac$TIMESTAMP)
+    ac$SW_IN[is.na(ac$SW_IN)] <- ac$SW_IN[later[is.na(ac$SW_IN)]]
   } else if (name_site == 'US-KM4') {
     # use PI gap-filled data
     ac$SW_IN[is.na(ac$SW_IN)] <- a$SW_IN_PI_F[is.na(ac$SW_IN)]
