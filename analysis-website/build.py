@@ -25,7 +25,7 @@ Writes analysis-website/data/:
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
 
-Run with `pixi run -e website website-build`.
+Run with `pixi run website-build`.
 """
 
 import json

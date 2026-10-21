@@ -82,8 +82,8 @@ pyarrow = "*"
 caddy = "*"
 
 [feature.website.tasks]
-website-build = { cmd = "python analysis-website/build.py", description = "Build the analysis website's data files" }
-website-serve = { cmd = "caddy run --config analysis-website/Caddyfile --adapter caddyfile", description = "Serve the analysis website on 127.0.0.1" }
+website-build = { cmd = "python analysis-website/build.py", default-environment = "website", description = "Build the analysis website's data files" }
+website-serve = { cmd = "caddy run --config analysis-website/Caddyfile --adapter caddyfile", default-environment = "website", description = "Serve the analysis website on 127.0.0.1" }
 
 # --------------------------------------------------------------- download env
 # The data update's downloads (refactor-v2 stage S18): flux releases
@@ -117,7 +117,7 @@ icoscp-core = ">=0.3.13,<0.4"
 terndata-flux = ">=1.0.7"
 
 [feature.download.tasks]
-download-r-deps = { cmd = "Rscript -e 'if (!requireNamespace(\"amerifluxr\", quietly = TRUE)) remotes::install_github(\"chuhousen/amerifluxr\", upgrade = \"never\")'", description = "Install amerifluxr (GitHub)" }
+download-r-deps = { cmd = "Rscript -e 'if (!requireNamespace(\"amerifluxr\", quietly = TRUE)) remotes::install_github(\"chuhousen/amerifluxr\", upgrade = \"never\")'", default-environment = "download", description = "Install amerifluxr (GitHub)" }
 
 [environments]
 website = { features = ["website"], no-default-feature = true }
