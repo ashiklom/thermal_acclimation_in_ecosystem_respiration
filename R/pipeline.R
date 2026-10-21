@@ -4,7 +4,7 @@
 # products' files, plus US-BZF's record at US-BZS (borrowed air temperature)
 # and the PI soil-water files at FR-Pue.
 site_raw_files <- function(site, base_dir = path_original("SiteData")) {
-  products <- if (site$source == "AmeriFlux_BASE") "AmeriFlux_BASE" else strsplit(site$source, "_")[[1]]
+  products <- source_products(site$source)
   files <- vapply(products, function(p) raw_product_file(site$site_ID, p, base_dir), character(1))
   if (site$site_ID == "US-BZS") files <- c(files, raw_product_file("US-BZF", "AmeriFlux_BASE", base_dir))
   if (site$site_ID == "FR-Pue") {

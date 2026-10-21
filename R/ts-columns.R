@@ -46,7 +46,7 @@ read_ts_sensor <- function(site, settings, base_dir = path_original("SiteData"))
     timestamp <- a$TIMESTAMP
     qc <- rep(NA_real_, nrow(a))
   } else {
-    a <- read_fluxnet_sources(site$site_ID, unlist(strsplit(site$source, "_")), base_dir)
+    a <- read_fluxnet_record(site$site_ID, site$source, base_dir)
     a[a == -9999] <- NA
     dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
     timestamp <- lubridate::ymd_hm(a$TIMESTAMP_START) + dt / 2

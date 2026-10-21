@@ -45,7 +45,7 @@ raw_columns <- function(site) {
     # two metadata lines, then the header
     strsplit(readLines(con, n = 3)[3], ",")[[1]]
   } else {
-    products <- strsplit(site$source, "_")[[1]]
+    products <- source_products(site$source)
     unique(unlist(lapply(products, function(p) strsplit(readLines(raw_product_file(site$site_ID, p), n = 1), ",")[[1]])))
   }
 }

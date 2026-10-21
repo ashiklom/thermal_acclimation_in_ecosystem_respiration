@@ -67,6 +67,13 @@ python = ">=3.12,<3.14"
 pandas = "*"
 requests = "*"
 
+# Flux-data downloads (R/download-flux.R): FLUXNET-archive shuttle, ICOS
+# carbon portal, TERN
+[pypi-dependencies]
+fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }
+icoscp-core = ">=0.3.13,<0.4"
+terndata-flux = ">=1.0.7"
+
 [tasks]
 r-dependencies = { cmd = "Rscript scripts/install-r-deps.R", description = "Install R packages that are not on conda-forge" }
 check-deps = { cmd = "Rscript scripts/check-deps.R", description = "Load every R package the workflow needs" }

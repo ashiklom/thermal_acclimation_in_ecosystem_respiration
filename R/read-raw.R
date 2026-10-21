@@ -7,6 +7,17 @@
 #   FLUXNET2025     FLUXNET07202025/unzip/FLX_<site>_*.csv
 #   ICOS2025        Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1/unzip/ICOSETC_<site>_*.csv
 #   ICOS2020        ICOS_after2020/*<site>*.csv (listed in the original scripts; no site uses it)
+#
+# and, downloaded for the data update (R/download-flux.R), in path_raw("flux")
+# whatever `base_dir`:
+#   SHUTTLE         SHUTTLE/unzip/<hub>_<site>_FLUXNET_FLUXMET_(HH|HR)_*.csv
+#
+# A site's `source` names its products in one of two ways: joined by "_"
+# (stitched: each later product only adds the records after the end of the
+# record so far, as the original scripts did) or by "+" (spliced: the first
+# product wins wherever it has records, the others only add records before
+# its start or after its end; used for the data update, where the newest
+# release comes first).
 
 raw_product_dirs <- list(
   AmeriFlux_BASE = "AmeriFlux_BASE",
@@ -14,8 +25,17 @@ raw_product_dirs <- list(
   FLUXNET2020 = file.path("FLUXNET2020", "unzip"),
   FLUXNET2025 = file.path("FLUXNET07202025", "unzip"),
   ICOS2025 = file.path("Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"),
-  ICOS2020 = "ICOS_after2020"
+  ICOS2020 = "ICOS_after2020",
+  SHUTTLE = file.path("SHUTTLE", "unzip")
 )
+
+# Products downloaded for the data update, read from path_raw("flux").
+update_products <- c("SHUTTLE")
+
+# The products named by a site's source.
+source_products <- function(source) {
+  if (source == "AmeriFlux_BASE") "AmeriFlux_BASE" else strsplit(source, "[_+]")[[1]]
+}
 
 # Path of a site's file of one product.
 raw_product_file <- function(site_id, product, base_dir = path_original("SiteData")) {
@@ -27,9 +47,11 @@ raw_product_file <- function(site_id, product, base_dir = path_original("SiteDat
     FLUXNET2025 = paste0("^FLX_", site_re, "_.*\\.csv$"),
     ICOS2025 = paste0("^ICOSETC_", site_re, "_.*\\.csv$"),
     ICOS2020 = paste0(site_re, ".*\\.csv$"),
+    SHUTTLE = paste0("_", site_re, "_.*FLUXMET_(HH|HR)_.*\\.csv$"),
     stop("unknown product: ", product)
   )
-  files <- list.files(file.path(base_dir, raw_product_dirs[[product]]), pattern = pattern, full.names = TRUE)
+  root <- if (product %in% update_products) path_raw("flux") else base_dir
+  files <- list.files(file.path(root, raw_product_dirs[[product]]), pattern = pattern, full.names = TRUE)
   if (length(files) != 1) {
     stop("expected one ", product, " file for ", site_id, ", found ", length(files), ": ", paste(basename(files), collapse = ", "))
   }
@@ -48,12 +70,21 @@ read_fluxnet <- function(site_id, product, base_dir = path_original("SiteData"))
   utils::read.csv(raw_product_file(site_id, product, base_dir))
 }
 
-# A site's FLUXNET-format record from the products in `sources` (in order,
-# e.g. c("FLUXNET2025", "ICOS2025")). Each later product only adds the
-# records after the end of the record so far: those after its row for the
-# record's last TIMESTAMP_START, or all of its rows if it has no such row.
-read_fluxnet_sources <- function(site_id, sources, base_dir = path_original("SiteData")) {
-  stitch_products(lapply(sources, function(product) read_fluxnet(site_id, product, base_dir)))
+# A site's FLUXNET-format record from its source (see above).
+read_fluxnet_record <- function(site_id, source, base_dir = path_original("SiteData")) {
+  tables <- lapply(source_products(source), function(product) read_fluxnet(site_id, product, base_dir))
+  if (grepl("+", source, fixed = TRUE)) splice_products(tables) else stitch_products(tables)
+}
+
+# The first table's records, plus each later table's records before the
+# start or after the end of the record so far; sorted by time.
+splice_products <- function(tables) {
+  a <- tables[[1]]
+  for (next_table in tables[-1]) {
+    outside <- next_table$TIMESTAMP_START < min(a$TIMESTAMP_START) | next_table$TIMESTAMP_START > max(a$TIMESTAMP_START)
+    a <- dplyr::bind_rows(a, next_table[outside, , drop = FALSE])
+  }
+  a[order(a$TIMESTAMP_START), , drop = FALSE]
 }
 
 stitch_products <- function(tables) {

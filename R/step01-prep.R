@@ -88,7 +88,7 @@ estimate_ts_site <- function(site, base_dir = path_original("SiteData")) {
       data$NETRAD <- a$NETRAD_2_1_1
     }
   } else {
-    a <- read_fluxnet_sources(name_site, unlist(strsplit(site$source, "_")), base_dir)
+    a <- read_fluxnet_record(name_site, site$source, base_dir)
     # -9999 means missing information.
     a[a==-9999] <- NA
 
@@ -151,7 +151,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   name_site <- site$site_ID
 
   # connecting multiple data sources
-  a <- read_fluxnet_sources(name_site, unlist(strsplit(data_source, "_")), base_dir)
+  a <- read_fluxnet_record(name_site, data_source, base_dir)
   # -9999 means missing information.
   a[a==-9999] <- NA
 
