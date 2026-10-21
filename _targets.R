@@ -57,7 +57,12 @@ inputs <- list(
   if (data_version == "update") list(
     # ERA5-Land soil water after 2024 (scripts/download-era5-swc.py)
     tar_target(era5_update_file, path_raw("era5", "ERA5_daily_swc_update.csv"), format = "file"),
-    tar_target(era5_swc, extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file)))
+    tar_target(era5_swc, extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file))),
+    tar_target(era5_offsets_file, {
+      path <- path_proc("era5_extension_offsets.csv")
+      utils::write.csv(attr(era5_swc, "offsets"), path, row.names = FALSE)
+      path
+    }, format = "file")
   ) else tar_target(era5_swc, read_era5_swc(era5_file)),
   # The published random-forest soil temperatures (01_01) are an input:
   # regenerating them does not reproduce them exactly (see refactor-v2-log.md).

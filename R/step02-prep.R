@@ -59,17 +59,33 @@ read_era5_swc <- function(path = path_original("ERA5_daily_swc_1990_2024_allsite
 #' Extend ERA5-Land soil water with a later extraction
 #'
 #' ERA5-Land soil water extended with a later extraction (scripts/download-era5-swc.py): its
-#' days after the end of `swc_ERA5`. Stops unless both cover the same sites.
+#' days after the end of `swc_ERA5`. The later extraction does not reproduce the published
+#' series exactly (same dynamics, r ~ 0.999 at most sites, but level offsets of up to several
+#' percent at some, from a differently processed ERA5-Land product), so each site's extension is
+#' shifted by its mean difference from `swc_ERA5` over the days both cover, keeping the series
+#' continuous. Only sites in both are extended (the published file has a few sites the
+#' extraction lacks, and the reverse); stops unless the extraction overlaps each of them.
 #'
 #' @param swc_ERA5 ERA5-Land daily soil water (read_era5_swc()).
-#' @param extension The later extraction (name, date, ...).
-#' @return `swc_ERA5` with the extension's later rows (their columns shared with `swc_ERA5`)
-#'   appended.
+#' @param extension The later extraction (name, date, SWC, ...), overlapping `swc_ERA5`.
+#' @return `swc_ERA5` with the extension's later rows (their columns shared with `swc_ERA5`,
+#'   offset-corrected) appended, and attribute "offsets": a data frame of site (`name`), the
+#'   number of overlapping days and the offset added (% soil water).
 #' @noRd
 extend_era5_swc <- function(swc_ERA5, extension) {
-  stopifnot(setequal(unique(extension$name), unique(swc_ERA5$name)))
+  extension <- extension[extension$name %in% swc_ERA5$name, ]
+  both <- merge(swc_ERA5[, c("name", "date", "SWC")], extension[, c("name", "date", "SWC")], by = c("name", "date"),
+                suffixes = c("", "_new"))
+  offsets <- both |> dplyr::group_by(.data$name) |>
+    dplyr::summarise(n_days = sum(!is.na(.data$SWC) & !is.na(.data$SWC_new)), offset = mean(.data$SWC - .data$SWC_new, na.rm = TRUE)) |>
+    as.data.frame()
+  missing <- setdiff(unique(extension$name), offsets$name[offsets$n_days > 0])
+  if (length(missing)) stop("the ERA5 extension does not overlap the published series at ", paste(missing, collapse = ", "))
   later <- extension[extension$date > max(swc_ERA5$date), intersect(names(swc_ERA5), names(extension))]
-  dplyr::bind_rows(swc_ERA5, later)
+  later$SWC <- later$SWC + offsets$offset[match(later$name, offsets$name)]
+  out <- dplyr::bind_rows(swc_ERA5, later)
+  attr(out, "offsets") <- offsets
+  out
 }
 
 #' Prepare a site's TAS-fit inputs (step 02, part 1)
