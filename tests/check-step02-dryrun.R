@@ -43,7 +43,7 @@ outputs <- list(
   direct = c("outcome_temp_water_gpp.csv", "outcome_siteyear_temp_water_gpp.csv")
 )
 repo <- normalizePath(".")
-dry_run <- file.path(repo, "R", "dry-run.R")
+dry_run <- file.path(repo, "tests", "dry-run.R")
 original_data <- normalizePath(file.path("..", "original-data"))
 work <- file.path(repo, "data-proc", "checks", paste0("dryrun-", format(Sys.time(), "%Y%m%d-%H%M%S")))
 dir.create(work, recursive = TRUE)
