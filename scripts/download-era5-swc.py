@@ -111,20 +111,19 @@ def main():
     if float(swc.longitude.max()) > 180:  # store on 0..360
         lon = lon % 360
     chosen = land_cells(swc, sites, lon)
-    cells = swc.sel(latitude=xr.DataArray([c[0] for c in chosen], dims="site"),
-                    longitude=xr.DataArray([c[1] for c in chosen], dims="site"))
-    daily = cells.sel(time=slice(pd.Timestamp(a.start), end + pd.Timedelta(hours=23))).resample(time="1D").mean()
-    values = daily.compute()
-
-    out = values.to_dataframe(name="SWC").reset_index()
-    out["name"] = sites.site_ID.to_numpy()[out["site"].to_numpy()]
-    out["date"] = out["time"].dt.strftime("%Y-%m-%d")
-    out["SWC"] = out["SWC"] * 100
+    # one site at a time: the store is chunked by location, so each site's
+    # read covers long time series; all at once does not fit in memory
+    frames = []
+    for (site, (la, lo)) in zip(sites.site_ID, chosen):
+        cell = swc.sel(latitude=la, longitude=lo).sel(time=slice(pd.Timestamp(a.start), end + pd.Timedelta(hours=23)))
+        daily = cell.resample(time="1D").mean().compute()
+        frames.append(pd.DataFrame({"date": pd.to_datetime(daily.time.values).strftime("%Y-%m-%d"),
+                                    "name": site, "SWC": daily.values * 100}))
+        print(f"{site}: {len(daily.time)} days", flush=True)
+    out = pd.concat(frames, ignore_index=True)
     empty = out.groupby("name")["SWC"].apply(lambda v: v.isna().all())
     if empty.any():
         print(f"WARNING: no land value (sea cell?) at {', '.join(empty[empty].index)}", file=sys.stderr)
-    order = {s: i for i, s in enumerate(sites.site_ID)}
-    out = out.sort_values(["name", "date"], key=lambda c: c.map(order) if c.name == "name" else c)
     pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     out[["date", "name", "SWC"]].to_csv(a.out, index=False)
     print(f"{len(sites)} sites, {a.start} to {end.date()}: {a.out}")
