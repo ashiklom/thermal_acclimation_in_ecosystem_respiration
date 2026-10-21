@@ -20,10 +20,12 @@
 #   TS_<estimator>    the other estimators (ts_estimators()), trained on
 #                     the sensor and predicted over the whole record
 #
-# Estimators are trained only on real sensor data (ts_truth()): present,
-# measured rather than gap-filled where the source flags it (quality flag 0),
-# and from ts_sensor_first_year on. A site without a sensor, or with too few
-# such records, has all-NA estimator columns. Their predictors (air
+# Estimators are trained only on real sensor data (ts_truth()): the column
+# of real readings (site_settings ts_sensor_truth: the sensor, or the
+# non-filled counterpart of a PI gap-filled one), measured rather than
+# gap-filled where the source flags it (quality flag 0), and from
+# ts_sensor_first_year on. A site without such data, or with too few
+# records of it, has all-NA estimator columns. Their predictors (air
 # temperature, net radiation) are gap-filled first with the day-of-year x
 # time-of-day mean, as 01_01 did.
 #
@@ -35,7 +37,8 @@
 # Minimum number of sensor records to train an estimator on.
 TS_MIN_TRAIN <- 1000
 
-# The site's sensor and net radiation, by timestamp, from the raw record.
+# The site's sensor, its real readings and net radiation, by timestamp,
+# from the raw record.
 read_ts_sensor <- function(site, settings, base_dir = path_original("SiteData")) {
   if (site$source == "AmeriFlux_BASE") {
     a <- read_ameriflux_base(site$site_ID, base_dir)
@@ -53,13 +56,14 @@ read_ts_sensor <- function(site, settings, base_dir = path_original("SiteData"))
     TIMESTAMP = timestamp,
     TS_sensor = if (settings$ts_sensor != "") a[[settings$ts_sensor]] else NA_real_,
     TS_sensor_QC = qc,
+    TS_real = if (settings$ts_sensor_truth != "") a[[settings$ts_sensor_truth]] else NA_real_,
     NETRAD = if (settings$netrad != "") a[[settings$netrad]] else NA_real_
   )
 }
 
 # Which records of the sensor are real measurements to train on.
 ts_truth <- function(sensor, year, first_year) {
-  ok <- !is.na(sensor$TS_sensor) & (is.na(sensor$TS_sensor_QC) | sensor$TS_sensor_QC == 0)
+  ok <- !is.na(sensor$TS_real) & (is.na(sensor$TS_sensor_QC) | sensor$TS_sensor_QC == 0)
   if (!is.na(first_year)) ok <- ok & year >= first_year
   ok
 }
@@ -128,7 +132,8 @@ ts_estimators <- function() {
 
 # Train an estimator on the records in `train` (rows of `dat` with sensor
 # truth) and predict every row of `dat`; all NA if there are too few
-# complete training records. Forests: 200 trees on at most 60,000 records.
+# complete training records. Forests: 200 trees on at most est$max_train
+# (default 60,000) records.
 ts_fit_predict <- function(est, dat, train, seed) {
   rows <- train & stats::complete.cases(dat[, est$predictors, drop = FALSE])
   if (!is.null(est$subset)) rows <- rows & est$subset(dat)
@@ -141,7 +146,8 @@ ts_fit_predict <- function(est, dat, train, seed) {
     out[ok] <- stats::predict(mod, newdata = dat[ok, est$predictors, drop = FALSE])
   } else {
     set.seed(seed)
-    if (nrow(d) > 60000) d <- d[sort(sample.int(nrow(d), 60000)), , drop = FALSE]
+    max_train <- if (is.null(est$max_train)) 60000 else est$max_train
+    if (nrow(d) > max_train) d <- d[sort(sample.int(nrow(d), max_train)), , drop = FALSE]
     mod <- ranger::ranger(x = d[, est$predictors, drop = FALSE], y = d$TS, num.trees = 200, num.threads = 1, seed = seed)
     out[ok] <- stats::predict(mod, data = dat[ok, est$predictors, drop = FALSE], num.threads = 1)$predictions
   }
@@ -185,14 +191,14 @@ ts_candidates <- function(step01, sensor, settings, manuscript_inputs) {
   dat <- ts_memory_features(data.frame(YEAR = base$YEAR, MONTH = base$MONTH, DAY = base$DAY, HOUR = base$HOUR, MINUTE = base$MINUTE, TA = ta))
   dat$NETRAD <- ts_gapfill_doy(s$NETRAD, base$DOY, base$HOUR, base$MINUTE)
   dat$YEAR <- base$YEAR
-  dat$TS <- s$TS_sensor
+  dat$TS <- s$TS_real
   estimators <- ts_estimators()
   for (name in names(estimators)) {
     column <- paste0("TS_", name)
     values[[column]] <- ts_fit_predict(estimators[[name]], dat, truth, seed = tas_seed(params$site_ID, "ts", name))
     ok[[column]] <- !is.na(values[[column]])
   }
-  list(values = values, ok = ok, truth = truth)
+  list(values = values, ok = ok, truth = truth, real = s$TS_real)
 }
 
 # The TAS inputs (as prepare_tas_inputs() returns them) with soil
@@ -208,19 +214,21 @@ ts_column_inputs <- function(column, site, settings, step01, candidates, swc_ERA
   prepare_tas_inputs(site, settings, tables$feature, tables$night, tables$ac, swc_ERA5, tables$climatology)
 }
 
-# A site's candidates as one table: the record's time stamp, then for every
-# candidate its value and <column>_keep, whether the record is in that
-# column's nighttime fit input (`inputs`: ts_column_inputs() by column), and
-# TS_truth (real sensor data).
+# A site's candidates as one table: the record's time stamp and air
+# temperature, then for every candidate its value and <column>_keep, whether
+# the record is in that column's nighttime fit input (`inputs`:
+# ts_column_inputs() by column), and the sensor's real readings (TS_real,
+# where TS_truth).
 ts_columns_table <- function(step01, candidates, inputs) {
   base <- step01$ts_base
   key <- function(d) paste(d$YEAR, d$MONTH, d$DAY, d$HOUR, d$MINUTE)
-  out <- base[, c("TIMESTAMP", "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE")]
+  out <- base[, c("TIMESTAMP", "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "TA")]
   for (column in names(candidates$values)) {
     out[[column]] <- candidates$values[[column]]
     out[[paste0(column, "_keep")]] <- if (is.null(inputs[[column]])) FALSE else key(base) %in% key(inputs[[column]]$night)
   }
   out$TS_truth <- candidates$truth
+  out$TS_real <- ifelse(candidates$truth, candidates$real, NA_real_)
   out
 }
 

@@ -7,6 +7,14 @@
 #                         soil temperature); FLUXNET-format sites' TS_F_MDS_1,
 #                         or TS_F_MDS_2 where the manuscript took the second
 #                         layer (CZ-Stn, DE-Hte)
+#   ts_sensor_truth       the column holding the sensor's real readings, on which
+#                         estimators are trained and scored ("" if none):
+#                         ts_sensor itself, unless it is a PI gap-filled
+#                         product (TS_PI_F_*), whose filled values cannot be
+#                         told apart; then its non-filled counterpart
+#                         (TS_PI_<position> or TS_1_1_1) if one exists and
+#                         agrees with it wherever both are present (|diff| <
+#                         0.05 deg C at 95% of those records), else none
 #   ts_sensor_first_year  first year the sensor is trusted (NA: all): the
 #                         manuscript replaced or discarded the earlier data at
 #                         FI-Sod (sensor moved; before 2006), FR-Bil (before
@@ -56,20 +64,33 @@ derived <- do.call(rbind, lapply(site_info$site_ID, function(s) {
     ts_sensor <- if (s %in% c("CZ-Stn", "DE-Hte")) "TS_F_MDS_2" else "TS_F_MDS_1"
   }
   stopifnot(ts_sensor == "" || ts_sensor %in% cols)
+  ts_sensor_truth <- ts_sensor
+  if (grepl("^TS_PI_F_", ts_sensor)) {
+    candidates <- intersect(c(sub("^TS_PI_F_", "TS_PI_", ts_sensor), "TS_1_1_1"), cols)
+    a <- if (length(candidates)) read_ameriflux_base(s) else NULL
+    agrees <- function(x) {
+      both <- !is.na(a[[ts_sensor]]) & !is.na(a[[x]]) & a[[ts_sensor]] != -9999 & a[[x]] != -9999
+      sum(both) > 1000 && mean(abs(a[[ts_sensor]][both] - a[[x]][both]) < 0.05) >= 0.95
+    }
+    ok <- Filter(agrees, candidates)
+    ts_sensor_truth <- if (length(ok)) ok[[1]] else ""
+    message(s, ": ", ts_sensor, " is gap-filled; real readings: ", if (ts_sensor_truth == "") "none" else ts_sensor_truth)
+  }
   netrad <- if (s %in% names(manuscript_netrad)) manuscript_netrad[[s]] else {
     preferred <- intersect(c("NETRAD", "NETRAD_PI_F", "NETRAD_1_1_1", "NETRAD_PI_F_1_1_1"), cols)
     others <- grep("^NETRAD_", cols, value = TRUE)
     c(preferred, others, "")[1]
   }
   stopifnot(netrad == "" || netrad %in% cols)
-  data.frame(site_ID = s, ts_sensor = ts_sensor,
+  data.frame(site_ID = s, ts_sensor = ts_sensor, ts_sensor_truth = ts_sensor_truth,
              ts_sensor_first_year = if (s %in% names(first_year)) first_year[[s]] else NA_integer_,
              netrad = netrad)
 }))
 
-settings <- settings[, setdiff(names(settings), c("ts_sensor", "ts_sensor_first_year", "netrad"))]
+settings <- settings[, setdiff(names(settings), c("ts_sensor", "ts_sensor_truth", "ts_sensor_first_year", "netrad"))]
 settings <- merge(settings, derived, by = "site_ID", sort = FALSE)
 settings <- settings[match(site_info$site_ID, settings$site_ID), ]
 utils::write.csv(settings, file.path("data", "site_settings.csv"), row.names = FALSE)
 message("sites without a soil-temperature sensor: ", paste(settings$site_ID[settings$ts_sensor == ""], collapse = ", "))
+message("sites without its real readings: ", paste(settings$site_ID[settings$ts_sensor_truth == ""], collapse = ", "))
 message("sites without net radiation: ", paste(settings$site_ID[settings$netrad == ""], collapse = ", "))
