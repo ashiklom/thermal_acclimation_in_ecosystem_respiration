@@ -50,7 +50,7 @@ async function draw() {
   const flat = z.flat().filter((v) => v !== null);
   const vmax = Math.max(...flat.map(Math.abs), 1e-9);
   Plotly.newPlot("heat", [{ type: "heatmap", x: columns, y: sites, z, hoverongaps: false,
-    colorscale: kind === "diverging" ? "RdBu" : "Viridis", reversescale: kind === "diverging" || kind === false,
+    colorscale: kind === "diverging" ? "RdBu" : "Viridis", reversescale: kind === false,
     zmin: kind === "diverging" ? -vmax : undefined, zmax: kind === "diverging" ? vmax : undefined,
     colorbar: { title: { text: METRICS[metric][0] }, thickness: 12 } }],
   baseLayout({ margin: { l: 80, r: 20, t: 20, b: 140 }, xaxis: { tickangle: -45 }, yaxis: { autorange: "reversed", tickfont: { size: 9 } },

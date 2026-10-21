@@ -19,7 +19,8 @@ Writes analysis-website/data/:
   stages.json                the method stages with a saved run, each with the run it is
                              compared with and the sites whose TAS inputs changed
   ts/<id>.json               soil-temperature columns of a run: per-site summary and quality,
-                             estimator ranking, the selected columns
+                             estimator ranking, the selected columns, and (fit matrix) every
+                             column's TAS
   drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
@@ -195,7 +196,8 @@ def build_ts(sets):
     out = []
     for s in sets:
         d = ROOT / "results" / s["id"]
-        paths = {k: d / f"ts_{k}.csv" for k in ("columns_summary", "quality", "ranking", "methods_selected")}
+        paths = {k: d / f"ts_{k}.csv" for k in ("columns_summary", "quality", "ranking", "methods_selected",
+                                                 "outcome_total", "outcome_direct")}
         if not paths["columns_summary"].exists():
             continue
         data = {k: records(pd.read_csv(p)) for k, p in paths.items() if p.exists()}
@@ -214,10 +216,11 @@ def build_drivers(sets):
     them (results/<id>/step03-04/<fit set>/)."""
     entries = [{"id": "published", "label": "Published (original/data)", "dir": ROOT / "data"}]
     for s in sets:
-        d = ROOT / "results" / s["id"] / "step03-04"
-        if d.exists():
-            for fs in sorted(p.name for p in d.iterdir() if p.is_dir()):
-                entries.append({"id": f"{s['id']}--{fs}", "label": f"{s['label']}: TAS {fs}", "dir": d / fs})
+        for sub, what in (("step03-04", "TAS"), ("step03-04-ts", "soil temperature")):
+            d = ROOT / "results" / s["id"] / sub
+            if d.exists():
+                for fs in sorted(p.name for p in d.iterdir() if p.is_dir()):
+                    entries.append({"id": f"{s['id']}--{fs}", "label": f"{s['label']}: {what} {fs}", "dir": d / fs})
     index = []
     for e in entries:
         tables = {k: records(pd.read_csv(e["dir"] / f)) for k, f in STEP0304_FILES.items() if (e["dir"] / f).exists()}

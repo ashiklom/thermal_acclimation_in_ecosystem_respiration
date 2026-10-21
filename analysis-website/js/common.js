@@ -7,6 +7,7 @@ export const PAGES = [
   ["stages.html", "Method stages"],
   ["drivers.html", "Drivers & scenario"],
   ["ts.html", "Soil temperature"],
+  ["matrix.html", "TAS by column"],
   ["site.html", "Site explorer"],
 ];
 
@@ -113,7 +114,7 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, label 
   if (value) {
     const v = sites.map(value);
     const vmax = Math.max(...v.filter((x) => x !== null && !Number.isNaN(x)).map(Math.abs), 1e-9);
-    marker = { color: v, colorscale, reversescale: true, cmin: symmetric ? -vmax : undefined, cmax: symmetric ? vmax : undefined,
+    marker = { color: v, colorscale, cmin: symmetric ? -vmax : undefined, cmax: symmetric ? vmax : undefined,
       size: 9, line: { width: 0.5, color: "#333" }, colorbar: { title: { text: label }, thickness: 12 } };
   } else {
     const cats = sites.map(category);

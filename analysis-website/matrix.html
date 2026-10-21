@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TAS by soil-temperature column · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>TAS by soil-temperature column</h1>
+  <p class="lead">The TAS fits of every site, run with every selected soil-temperature column (each qualified as step
+    01 qualifies its own; see <a href="ts.html">Soil temperature</a>). The reference is <code>TS_manuscript</code>,
+    what the published fits used. Sites whose significance class changes with the column, above all where it flips
+    between significantly negative and significantly positive, are listed first.</p>
+  <div class="controls">
+    <label>Run <select id="run"></select></label>
+    <label>Model <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+    <label>Reference column <select id="ref"></select></label>
+  </div>
+  <div id="stats" class="stats"></div>
+  <div id="interpretation"></div>
+  <h2>Site × column</h2>
+  <p class="small">Colour: TAS. Marker: ▲ significantly positive, ▼ significantly negative (p &lt; 0.05); a red box marks
+    a significant sign flip against the reference column. Click a cell to open the site.</p>
+  <div id="heat" class="plot" style="min-height:900px"></div>
+  <h2>Each column against the reference</h2>
+  <div id="pairs"></div>
+  <h2>Sites</h2>
+  <div id="table"></div>
+</main>
+<script type="module" src="js/matrix.js"></script>
+</body>
+</html>
