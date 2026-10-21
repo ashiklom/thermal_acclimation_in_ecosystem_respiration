@@ -103,8 +103,13 @@ aiohttp = "*"
 r-base = ">=4.4"
 r-rcpptoml = "*"
 r-remotes = "*"
+# amerifluxr's imports, so that installing it compiles nothing
+r-heatmaply = "*"
 r-httr = "*"
 r-jsonlite = "*"
+r-memoise = "*"
+r-rcurl = "*"
+r-readxl = "*"
 
 [feature.download.pypi-dependencies]
 fluxnet-shuttle = { git = "https://github.com/fluxnet/shuttle.git" }
