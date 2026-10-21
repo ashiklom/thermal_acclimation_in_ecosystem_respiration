@@ -7,7 +7,8 @@
 # Usage (from the repository root):
 #   Rscript scripts/download-flux-update.R [--sites=SITE1,SITE2]
 # Writes data-raw/flux/download_manifest.csv: site, product, file, bytes,
-# md5, downloaded (UTC time), or the error.
+# md5, downloaded (UTC time), or the error (rows of sites not downloaded
+# this time are kept).
 
 source(file.path("R", "paths.R"))
 source(file.path("R", "download-flux.R"))
@@ -42,5 +43,12 @@ rows <- lapply(sites, function(s) {
              md5 = unname(tools::md5sum(file)), downloaded = format(Sys.time(), tz = "UTC", usetz = TRUE), error = NA)
 })
 manifest <- do.call(rbind, rows)
-utils::write.csv(manifest, path_raw("flux", "download_manifest.csv"), row.names = FALSE)
+# keep the other sites' rows of an earlier run
+path <- path_raw("flux", "download_manifest.csv")
+if (file.exists(path)) {
+  earlier <- utils::read.csv(path)
+  manifest <- rbind(earlier[!earlier$site_ID %in% manifest$site_ID, ], manifest)
+  manifest <- manifest[order(match(manifest$site_ID, site_info$site_ID)), ]
+}
+utils::write.csv(manifest, path, row.names = FALSE)
 message(sum(!is.na(manifest$file)), " of ", nrow(manifest), " sites downloaded")
