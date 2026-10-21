@@ -11,7 +11,10 @@
 # feature = <its row of the growing-season features>, climatology = <the
 # half-hourly DOY, TA and TS from which step 01 takes tStart/tEnd, over the
 # whole record, with `season` marking the days of year whose mean NEE marks
-# the growing season>). `site` is the site's
+# the growing season>, ts_base and ts_params = <the record and settings
+# that do not depend on soil temperature, from which ts_column_tables() in
+# R/ts-qualify.R makes the other four, as it does here from the site's soil
+# temperature>). `site` is the site's
 # row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R);
 # `ts_rf` is the site's 01_01 table (needed where soil temperature is
 # estimated); `coordinates` holds the AmeriFlux sites' coordinates
@@ -222,16 +225,16 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
     SWC <- FALSE
   }
   #
-  # we decided to relax the SWC constrains
-  a_measure_night_complete <- a |> dplyr::filter(!is.na(.data$TA_F_MDS)) |> dplyr::filter(.data$TS_F_MDS_1_QC %in% c(0, 1, 2)) |> dplyr::filter(.data$NEE_VUT_REF_QC == 0) |> dplyr::filter(.data$NIGHT == 1) |> dplyr::filter(.data$NEE_VUT_REF > -5 & .data$NEE_VUT_REF < 30)
+  # we decided to relax the SWC constrains: the nighttime filters that do
+  # not involve soil temperature (whose own filter, a quality flag of 0-2, is
+  # in ts_column_tables() below)
+  night_ok <- !is.na(a$TA_F_MDS) & a$NEE_VUT_REF_QC %in% 0 & a$NIGHT %in% 1 & a$NEE_VUT_REF > -5 & a$NEE_VUT_REF < 30
+  night_ok[is.na(night_ok)] <- FALSE
   # |> dplyr::filter(SWC_F_MDS_1_QC %in% c(0, 1, 2))
-
-  yStart <- min(a_measure_night_complete$YEAR)
-  yEnd   <- max(a_measure_night_complete$YEAR)
 
   # decide which years data to exclude: rule 1: maximum data gaps during growing season < 1 month; rule2: large disturbance years due to fire, insect breakout
   # estimate growing season DOY
-  NEE_yearly  <- a |> dplyr::group_by(.data$DOY) |> dplyr::summarise(NEE=mean(.data$NEE_VUT_REF, na.rm=T), TS=mean(.data$TS_F_MDS_1, na.rm=T)) |>
+  NEE_yearly  <- a |> dplyr::group_by(.data$DOY) |> dplyr::summarise(NEE=mean(.data$NEE_VUT_REF, na.rm=T)) |>
     dplyr::arrange(.data$DOY)
 
   # I will use the mean of the first three values, and the mean of the last three values
@@ -240,74 +243,11 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   } else {
     tmp <- NEE_yearly |> dplyr::filter(.data$NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
   }
-  climatology <- data.frame(DOY = a$DOY, TA = a$TA_F_MDS, TS = a$TS_F_MDS_1, season = a$DOY %in% tmp$DOY)
 
-  gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
-
-  # In general, growing-season temperature should be > 0 C: no earlier than
-  # the first day of year whose mean soil temperature is >= 0 C
-  gStart <- max(gStart, min(NEE_yearly$DOY[which(NEE_yearly$TS >= 0)]))
-  if (!is.na(site$gStart)) {
-    gStart <- as.numeric(site$gStart)
-  }
   if (!is.na(site$gEnd)) {
     gEnd <- as.numeric(site$gEnd)
   }
-
-  # temperature range of growing season
-  tStart <- quantile(tmp$TS, c(0.025), na.rm=T)
-  tEnd   <- quantile(tmp$TS, c(0.975), na.rm=T)
-
-  # some sites NEE measurements under TS < 2C was inaccurate, so for these sites tStart should be greater than 2C
-  if (name_site %in% c('CH-Dav')) {
-    tStart <- max(tStart, 2)
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(.data$TS_F_MDS_1 >= 2.0)
-  }
-
-  # max gap and total large gap threshold
-  if (name_site %in% c('ZA-Kru', 'FI-Sod', 'GF-Guy')) {
-    # use larger gap threshold because lack of data at these Tropical and Tundra sites.
-    gap_max_thresh <- 60
-    gap_total_thresh <- 0.7
-  } else {
-    gap_max_thresh <- max(31, (gEnd-gStart+1) * 0.225)
-    gap_total_thresh <- max(1/3, gap_max_thresh / (gEnd-gStart+1))
-  }
-
-  # find long gap years
-  # I need to check if this works for the southern hemisphere.
-  a_check_gaps <- a_measure_night_complete[, c("TIMESTAMP", "DOY")]
-
-  # adding the start and end of growing season date
-  if (southern_hemisphere) {
-    gStart_original <- ifelse(gStart > 366, gStart-366, gStart)
-    gEnd_original <- ifelse(gEnd > 366, gEnd-366, gEnd)
-    a_gs_dates <- data.frame(TIMESTAMP = c(as.POSIXct((gStart_original - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC"),
-                                           as.POSIXct((gEnd_original - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")),
-                             DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
-  } else {
-    a_gs_dates <- data.frame(TIMESTAMP = c(as.POSIXct((gStart - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC"),
-                                           as.POSIXct((gEnd - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")),
-                             DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
-  }
-  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> dplyr::arrange(.data$TIMESTAMP)
-
-  good_years <- a_check_gaps |>
-    dplyr::mutate(growing_year = dplyr::case_when(.data$DOY <= 366 ~ lubridate::year(.data$TIMESTAMP),
-                                    TRUE ~ lubridate::year(TIMESTAMP) - 1)) |>
-    dplyr::arrange(.data$growing_year, .data$TIMESTAMP) |>  # <-- Sort before lag
-    dplyr::group_by(.data$growing_year) |>
-    dplyr::filter(.data$DOY >= .env$gStart & .data$DOY <= .env$gEnd) |>
-    dplyr::mutate(lag_date = dplyr::lag(.data$TIMESTAMP)) |>
-    dplyr::mutate(gap = as.numeric(difftime(.data$TIMESTAMP, .data$lag_date, units = "days"))) |>
-    dplyr::mutate(gap_large = ifelse(.data$gap > 14, .data$gap, 0)) |>
-    dplyr::filter(!is.na(.data$gap)) |>
-    dplyr::summarise(gap_max = max(.data$gap, na.rm=T), gap_total = sum(.data$gap_large, na.rm=T) / (.env$gEnd - .env$gStart + 1)) |>
-    dplyr::filter(.data$gap_max < .env$gap_max_thresh &  .data$gap_total < .env$gap_total_thresh) |>
-    dplyr::distinct(.data$growing_year) |> dplyr::pull()
-
-  years2remove_automation <- setdiff(yStart:yEnd, good_years)
 
   # years to remove due to PI reported disturbances and bad data quality
   year_str <- site$year_removed
@@ -321,45 +261,24 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
     }
   }))
 
-  if (length(years2remove) >= 1) {
-    good_years <- setdiff(good_years, years2remove)
-  }
-
-
-  # select good_years based on growing year
-  a_measure_night_complete <- a_measure_night_complete  |>
-    dplyr::mutate(growing_year = dplyr::case_when(.data$DOY <= 366 ~ .data$YEAR,
-                                    TRUE ~ YEAR - 1)) |>
-    dplyr::filter(.data$growing_year %in% .env$good_years)
-  # change column names
-  a_measure_night_complete$TA <- a_measure_night_complete$TA_F_MDS
-  a_measure_night_complete$TS <- a_measure_night_complete$TS_F_MDS_1
-  a_measure_night_complete$SWC <- a_measure_night_complete$SWC_F_MDS_1
-  a_measure_night_complete$NEE <- a_measure_night_complete$NEE_VUT_REF
-
-  a_measure_night_complete <- a_measure_night_complete |> dplyr::select(dplyr::all_of(c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "NEE", "TA", "TS", "SWC")))
-
-  # select useful column and year to output
-  ac <- a[, c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE")]
-  ac$NEE <- a$NEE_VUT_REF
-  ac$NEE_QC  <- a$NEE_VUT_REF_QC
-  ac$TA  <- a$TA_F_MDS
-  ac$TS  <- a$TS_F_MDS_1
-  ac$SWC <- a$SWC_F_MDS_1
-  ac$NEE_uStar_f <- a$NEE_VUT_REF
-  ac$daytime <- a$NIGHT!=1
-  ac$SW_IN <- a$SW_IN_F_MDS
-  ac$GPP_DT <- a$GPP_DT_VUT_REF
-
-  # only keep years between start year and end year
-  iStart = min(a_measure_night_complete$YEAR)
-  iEnd   = max(a_measure_night_complete$YEAR)
-  ac <- ac |> dplyr::filter(dplyr::between(.data$YEAR, .env$iStart, .env$iEnd))
-
-
-  feature <- data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
-
-  list(ac = ac, night = a_measure_night_complete, feature = feature, climatology = climatology)
+  ts_base <- data.frame(TIMESTAMP = a$TIMESTAMP, YEAR = a$YEAR, MONTH = a$MONTH, DAY = a$DAY, DOY = a$DOY, HOUR = a$HOUR, MINUTE = a$MINUTE,
+                        NEE = a$NEE_VUT_REF, NEE_QC = a$NEE_VUT_REF_QC, TA = a$TA_F_MDS, SWC = a$SWC_F_MDS_1,
+                        NEE_uStar_f = a$NEE_VUT_REF, daytime = a$NIGHT != 1, SW_IN = a$SW_IN_F_MDS)
+  ts_base$GPP_DT <- a$GPP_DT_VUT_REF
+  ts_base$night_ok <- night_ok
+  ts_params <- list(
+    site_ID = name_site, source = "fluxnet", southern_hemisphere = southern_hemisphere,
+    dt_secs = as.numeric(dt, units = "secs"), uptake_doy = tmp$DOY,
+    # In general, growing-season temperature should be > 0 C (ts_season())
+    gStart_nee = as.integer(mean(tmp$DOY[7])) - 4, gStart_site = site$gStart, gEnd = gEnd,
+    # some sites NEE measurements under TS < 2C was inaccurate, so for these sites tStart should be greater than 2C
+    tstart_floor = if (name_site %in% c('CH-Dav')) 2 else NA, floor_before_gaps = TRUE,
+    # use larger gap threshold because lack of data at these Tropical and Tundra sites.
+    gap_fixed = if (name_site %in% c('ZA-Kru', 'FI-Sod', 'GF-Guy')) c(60, 0.7) else NULL,
+    years_removed = years2remove
+  )
+  out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, a$TS_F_MDS_1_QC %in% c(0, 1, 2))
+  list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params)
 }
 
 prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.csv(file.path("data", "ameriflux_coordinates.csv")),
@@ -601,7 +520,6 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 
   # I will use the mean of the first three values, and the mean of the last three values
   tmp    <- NEE_yearly |> dplyr::filter(.data$NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
-  climatology <- data.frame(DOY = ac$DOY, TA = ac$TA, TS = ac$TS, season = ac$DOY %in% tmp$DOY)
   #
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
@@ -615,10 +533,6 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
   if (!is.na(site$gEnd)) {
     gEnd <- as.numeric(site$gEnd)
   }
-  #
-  # temperature range of growing season
-  tStart <- quantile(tmp$TS, c(0.025), na.rm=T)
-  tEnd   <- quantile(tmp$TS, c(0.975), na.rm=T)
   #
   # Create seasonStarts with two columns: one is day, and the other is year!
   years  <- sort(unique(ac$YEAR))
@@ -677,65 +591,20 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 
   #
   #########################################end with Ustar filtering#######################################
+  # the nighttime filters that do not involve soil temperature (whose own,
+  # a value being present, is in ts_column_tables() below)
   if (site$SWC_use == 'YES') {
-    a_measure     <- ac |> dplyr::filter(!is.na(.data$NEE) & !is.na(.data$TS) & !is.na(.data$SWC) & !is.na(.data$USTAR)) |> dplyr::filter(.data$USTAR >= .data$uStarTh)
+    night_ok <- !is.na(ac$NEE) & !is.na(ac$SWC) & !is.na(ac$USTAR) & ac$USTAR >= ac$uStarTh
   } else {
-    a_measure     <- ac |> dplyr::filter(!is.na(.data$NEE) & !is.na(.data$TS) & !is.na(.data$USTAR)) |> dplyr::filter(.data$USTAR >= .data$uStarTh)
+    night_ok <- !is.na(ac$NEE) & !is.na(ac$USTAR) & ac$USTAR >= ac$uStarTh
   }
-  #
   if (name_site %in% c("US-ICh", "US-ICt", "US-ICs")) {
     # tundra sites take advantage of data with little light
-    a_measure_night_complete <- a_measure |> dplyr::filter(.data$SW_IN < 10 | !.data$daytime) |> dplyr::filter(.data$NEE > -5 & .data$NEE < 30)
+    night_ok <- night_ok & (ac$SW_IN < 10 | !ac$daytime) & ac$NEE > -5 & ac$NEE < 30
   } else {
-    a_measure_night_complete <- a_measure |> dplyr::filter(!.data$daytime) |> dplyr::filter(.data$NEE > -5 & .data$NEE < 30)
+    night_ok <- night_ok & !ac$daytime & ac$NEE > -5 & ac$NEE < 30
   }
-
-
-  #########################################remove years with big gaps#######################################
-  # max gap and total large gap threshold
-  if (name_site %in% c("US-ICt", "US-ICh", "US-ICs", "BR-Ma2", "BR-Sa1")) {
-    # use larger gap threshold because lack of data at these Tundra and tropical sites.
-    gap_max_thresh <- 60
-    gap_total_thresh <- 0.8
-  } else {
-    gap_max_thresh <- max(31, (gEnd-gStart+1) * 0.225)
-    gap_total_thresh <- max(1/3, gap_max_thresh / (gEnd-gStart+1))
-  }
-
-  # find long gap years
-  a_check_gaps <- a_measure_night_complete[, c("TIMESTAMP", "DOY")]
-  yStart <- min(a_measure_night_complete$YEAR)
-  yEnd   <- max(a_measure_night_complete$YEAR)
-
-  # adding the start and end of growing season date
-  if (southern_hemisphere) {
-    gStart_original <- ifelse(gStart > 366, gStart-366, gStart)
-    gEnd_original <- ifelse(gEnd > 366, gEnd-366, gEnd)
-    a_gs_dates <- data.frame(TIMESTAMP = c(as.POSIXct((gStart_original - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC"),
-                                           as.POSIXct((gEnd_original - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")),
-                             DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
-  } else {
-    a_gs_dates <- data.frame(TIMESTAMP = c(as.POSIXct((gStart - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC"),
-                                           as.POSIXct((gEnd - 1) * 86400 + as.numeric(dt/2, units = "secs"), origin = paste0(yStart:yEnd, "-01-01"), tz = "UTC")),
-                             DOY = c(rep(gStart, yEnd - yStart + 1), rep(gEnd, yEnd - yStart + 1)))
-  }
-  a_check_gaps <- a_check_gaps |> rbind(a_gs_dates) |> unique() |> dplyr::arrange(.data$TIMESTAMP)
-
-  good_years <- a_check_gaps |>
-    dplyr::mutate(growing_year = dplyr::case_when(.data$DOY <= 366 ~ lubridate::year(.data$TIMESTAMP),
-                                    TRUE ~ lubridate::year(TIMESTAMP) - 1)) |>
-    dplyr::arrange(.data$growing_year, .data$TIMESTAMP) |>  # <-- Sort before lag
-    dplyr::group_by(.data$growing_year) |>
-    dplyr::filter(.data$DOY >= .env$gStart & .data$DOY <= .env$gEnd) |>
-    dplyr::mutate(lag_date = dplyr::lag(.data$TIMESTAMP)) |>
-    dplyr::mutate(gap = as.numeric(difftime(.data$TIMESTAMP, .data$lag_date, units = "days"))) |>
-    dplyr::mutate(gap_large = ifelse(.data$gap > 14, .data$gap, 0)) |>
-    dplyr::filter(!is.na(.data$gap)) |>
-    dplyr::summarise(gap_max = max(.data$gap, na.rm=T), gap_total = sum(.data$gap_large, na.rm=T) / (.env$gEnd - .env$gStart + 1)) |>
-    dplyr::filter(.data$gap_max < .env$gap_max_thresh &  .data$gap_total < .env$gap_total_thresh) |>
-    dplyr::distinct(.data$growing_year) |> dplyr::pull()
-
-  years2remove_automation <- setdiff(min(ac$YEAR):max(ac$YEAR), good_years)
+  night_ok[is.na(night_ok)] <- FALSE
 
   # years to remove due to PI reported disturbances and bad data quality
   year_str <- site$year_removed
@@ -749,54 +618,21 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
     }
   }))
 
-  if (length(years2remove) >= 1) {
-    good_years <- setdiff(good_years, years2remove)
-  }
-
-  ############################prepare to output two datasets: a_measure_night_complete and ac#######################################
-  # we can only use TS > 2C for some sites, because data quality issue below TS < 2C
-  if (name_site %in% c("US-Ha1", "US-GLE")) {
-    tStart <- max(tStart, 2.0)
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::filter(.data$TS >= 2.0)
-  }
-
-  a_measure_night_complete <- a_measure_night_complete |>
-    dplyr::filter(.data$YEAR %in% .env$good_years) |>
-    dplyr::select(dplyr::all_of(c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "NEE", "TA", "TS", "SWC")))
-
-  iStart = min(a_measure_night_complete$YEAR)
-  iEnd   = max(a_measure_night_complete$YEAR)
-  ac <- ac |> dplyr::filter(dplyr::between(.data$YEAR, .env$iStart, .env$iEnd)) |> dplyr::select(dplyr::all_of(c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "NEE_uStar_f", "TA", "TS", "SWC", "SW_IN", "daytime")))
-
-  # I have to gap fill TA, TS, NEE;
-  T_gf <- ac |> dplyr::group_by(.data$DOY, .data$HOUR, .data$MINUTE) |> dplyr::summarise(TA_gf=mean(.data$TA, na.rm=T), TS_gf=mean(.data$TS, na.rm=T), NEE_gf=mean(.data$NEE_uStar_f, na.rm=T)) |>  # for gap fill only.
-    dplyr::arrange(.data$DOY, .data$HOUR, .data$MINUTE)
-  # ensure no NA values: use the same time of the previous day
-  for (i in c("TA_gf", "TS_gf", "NEE_gf")) {
-    na.gf <- which(is.na(T_gf[[i]]))
-    for (j in na.gf) {
-      T_gf[j, i] <- T_gf[max(j - 24/as.numeric(dt), 1), i]
-    }
-  }
-
-  if (!"TA_gf" %in% colnames(ac)) {
-    ac   <- ac |> dplyr::left_join(T_gf, by=c("DOY", "HOUR", "MINUTE"))
-  }
-
-  if (sum(is.na(ac$TA)) > 0) {
-    ac$TA[is.na(ac$TA)] <- ac$TA_gf[is.na(ac$TA)]
-  }
-  if (sum(is.na(ac$TS)) > 0) {
-    ac$TS[is.na(ac$TS)] <- ac$TS_gf[is.na(ac$TS)]
-  }
-  if (sum(is.na(ac$NEE_uStar_f)) > 0) {
-    ac$NEE_uStar_f[is.na(ac$NEE_uStar_f)] <- ac$NEE_gf[is.na(ac$NEE_uStar_f)]
-  }
-
-
-  feature <- data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
-
-  list(ac = ac, night = a_measure_night_complete, feature = feature, climatology = climatology)
+  ts_base <- ac[, c("TIMESTAMP", "YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "NEE", "TA", "SWC", "NEE_uStar_f", "SW_IN", "daytime")]
+  ts_base$night_ok <- night_ok
+  ts_params <- list(
+    site_ID = name_site, source = "ameriflux", southern_hemisphere = southern_hemisphere,
+    dt_secs = as.numeric(dt, units = "secs"), uptake_doy = tmp$DOY,
+    # In general, growing-season temperature should be > 0 C (ts_season())
+    gStart_nee = as.integer(mean(tmp$DOY[7])) - 4, gStart_site = site$gStart, gEnd = gEnd,
+    # we can only use TS > 2C for some sites, because data quality issue below TS < 2C
+    tstart_floor = if (name_site %in% c("US-Ha1", "US-GLE")) 2 else NA, floor_before_gaps = FALSE,
+    # use larger gap threshold because lack of data at these Tundra and tropical sites.
+    gap_fixed = if (name_site %in% c("US-ICt", "US-ICh", "US-ICs", "BR-Ma2", "BR-Sa1")) c(60, 0.8) else NULL,
+    years_removed = years2remove
+  )
+  out <- ts_column_tables(ts_base, ts_params, ac$TS, !is.na(ac$TS))
+  list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params)
 }
 
 # A site's 01_01 soil-temperature table, or NULL where soil temperature is not

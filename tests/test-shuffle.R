@@ -12,6 +12,7 @@ source(file.path("R", "io.R"))
 source(file.path("R", "read-raw.R"))
 source(file.path("R", "sun-times.R"))
 source(file.path("R", "step01-prep.R"))
+source(file.path("R", "ts-qualify.R"))
 source(file.path("R", "step02-prep.R"))
 
 args <- commandArgs(trailingOnly = TRUE)

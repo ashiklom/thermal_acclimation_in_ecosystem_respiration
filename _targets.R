@@ -13,7 +13,7 @@ library(targets)
 library(tarchetypes)
 
 tar_source(c(
-  "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R",
+  "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R", "R/ts-qualify.R",
   "R/step02-prep.R", "R/step02-tas.R", "R/step03-drivers.R", "R/step04-scenario.R",
   "R/download.R", "R/pipeline.R", "R/controllers.R"
 ))

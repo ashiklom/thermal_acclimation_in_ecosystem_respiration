@@ -13,6 +13,7 @@ source(file.path("R", "paths.R"))
 source(file.path("R", "io.R"))
 source(file.path("R", "read-raw.R"))
 source(file.path("R", "step01-prep.R"))
+source(file.path("R", "ts-qualify.R"))
 
 # Usage: Rscript workflows/01_02a_filter_high_quality_night_respiration_EuroFlux.R [--sites=SITE1,SITE2 | --combine-only] [--ts-rf=published|regenerated]
 #
