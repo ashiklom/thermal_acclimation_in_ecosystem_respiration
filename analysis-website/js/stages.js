@@ -42,7 +42,8 @@ async function draw() {
     const flips = ["total", "direct"].flatMap((m) => summarise(byModel[m]).flips.map((x) => `${x} (${m})`));
     if (flips.length) sec.insertAdjacentHTML("beforeend", `<div class="note"><span class="flip">Significant sign flips:</span> ${flips.join(", ")}</div>`);
     const unexpected = ["total", "direct"].flatMap((m) => byModel[m].filter((r) => r.changed && st.inputs && !affected.has(r.site_ID)).map((r) => `${r.site_ID} (${m})`));
-    if (unexpected.length) sec.insertAdjacentHTML("beforeend", `<div class="note">TAS changed although the inputs did not: ${unexpected.join(", ")}</div>`);
+    // (a stage that changes no input changes the fits themselves: every site may move)
+    if (unexpected.length && affected.size) sec.insertAdjacentHTML("beforeend", `<div class="note">TAS changed although the inputs did not: ${unexpected.join(", ")}</div>`);
 
     // one row per site whose inputs or TAS changed
     const tas = (m, site) => byModel[m].find((r) => r.site_ID === site) || {};
