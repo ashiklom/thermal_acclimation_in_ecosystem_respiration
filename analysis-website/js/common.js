@@ -5,6 +5,7 @@ export const PAGES = [
   ["index.html", "Overview"],
   ["compare.html", "Compare runs"],
   ["stages.html", "Method stages"],
+  ["ts.html", "Soil temperature"],
   ["site.html", "Site explorer"],
 ];
 

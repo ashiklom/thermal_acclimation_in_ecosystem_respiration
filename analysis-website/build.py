@@ -8,6 +8,8 @@ Reads (paths relative to the repository root):
   results/<id>/tas_inputs_summary.csv   (optional) each site's fit settings and input hashes
   data-proc/RespirationData/*_ac.parquet   (optional) for mean annual air temperature
   analysis-website/stages/<stage>.html     what each method stage changes and why
+  results/<id>/ts_{columns_summary,quality,ranking,methods_selected}.csv  (optional)
+                                       the soil-temperature columns of a run and their quality
 
 Writes analysis-website/data/:
   sites.json                 one record per site
@@ -16,6 +18,8 @@ Writes analysis-website/data/:
   siteyear/<id>.json         site-year table, per model
   stages.json                the method stages with a saved run, each with the run it is
                              compared with and the sites whose TAS inputs changed
+  ts/<id>.json               soil-temperature columns of a run: per-site summary and quality,
+                             estimator ranking, the selected columns
 
 Run with `pixi run -e website website-build`.
 """
@@ -183,6 +187,21 @@ def build_stages(sets):
     return stages
 
 
+def build_ts(sets):
+    """Soil-temperature column tables of the runs that have them."""
+    out = []
+    for s in sets:
+        d = ROOT / "results" / s["id"]
+        paths = {k: d / f"ts_{k}.csv" for k in ("columns_summary", "quality", "ranking", "methods_selected")}
+        if not paths["columns_summary"].exists():
+            continue
+        data = {k: records(pd.read_csv(p)) for k, p in paths.items() if p.exists()}
+        write_json(data, OUT / "ts" / f"{s['id']}.json")
+        out.append(s["id"])
+    write_json(out, OUT / "ts_runs.json")
+    return out
+
+
 def copy_plotly():
     try:
         import plotly
@@ -199,6 +218,7 @@ def main():
     sites = build_sites()
     sets = build_resultsets()
     stages = build_stages(sets)
+    build_ts(sets)
     copy_plotly()
     print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages -> {OUT}")
 

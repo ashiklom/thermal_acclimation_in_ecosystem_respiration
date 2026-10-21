@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Soil-temperature columns · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Soil-temperature columns</h1>
+  <p class="lead">Every site gets every candidate soil temperature: the sensor as recorded (<code>TS_original</code>),
+    step 01's repaired or reconstructed column (<code>TS_reconstructed</code>), what the manuscript's fits used
+    (<code>TS_manuscript</code>: the regression on air temperature at 35 sites), <code>TS_linear</code> (TS ~ TA above
+    freezing, fitted to the sensor) and other estimators trained only on real sensor data. Each column is qualified
+    as step 01 qualifies its own: its growing-season start, temperature range, years kept and nighttime fit
+    records. Estimators are scored against the sensor out of fold (each year predicted by a model trained on
+    the others) and for plausibility against air temperature.</p>
+  <div class="controls">
+    <label>Run <select id="run"></select></label>
+    <label>Metric <select id="metric"></select></label>
+  </div>
+  <div id="selected"></div>
+  <h2>Where each estimator is best or close to the top 3</h2>
+  <p class="small">Number of sites at which the estimator is best, or within 10% of the third best (r²: 0.01),
+    under each metric. An estimator that is "top" anywhere is carried forward to the fits.</p>
+  <div id="tops" class="plot"></div>
+  <h2>Site × column</h2>
+  <p class="small">The selected metric for every site and column (grey: not available). Click a cell to open the site.</p>
+  <div id="heat" class="plot" style="min-height:900px"></div>
+  <h2>Table</h2>
+  <div id="table"></div>
+</main>
+<script type="module" src="js/ts.js"></script>
+</body>
+</html>
