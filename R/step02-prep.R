@@ -98,22 +98,32 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
   # the hour (e.g. 15 and 45), hourly records one
   dt <- 60 / length(unique(ac$MINUTE))
   stopifnot(dt %in% c(30, 60))
-  # calculate daily daytime NEE and rolling average
-  # unit is umol / m2 / s
-  ac_day <- ac |> dplyr::filter(.data$daytime) |> dplyr::group_by(.data$YEAR, .data$DOY) |>
-    dplyr::summarise(NEE_daytime1 = max(-sum(.data$NEE_uStar_f, na.rm=T) * .env$dt * 60 / 86400, 0.0), .groups = "drop") |>
-    dplyr::arrange(.data$YEAR, .data$DOY)
-  # get rolling average of the prior three days
-  ac_day$NEE_daytime <- zoo::rollapply(ac_day$NEE_daytime1, width = 3, FUN = mean,
-                                  align = "right", fill = ac_day$NEE_daytime1[1])
-
-  # attach it to nighttime data
-  if (!"NEE_daytime1" %in% names(a_measure_night_complete)) {
-    a_measure_night_complete <- a_measure_night_complete |> dplyr::mutate(DOY_gpp = dplyr::case_when(.data$HOUR >= 12 ~ .data$DOY,
-                                                                                        .data$HOUR < 12 & .data$DOY == min(ac$DOY) ~ .data$DOY,
-                                                                                        .data$HOUR < 12 & .data$DOY != min(ac$DOY) ~ .data$DOY - 1)) |>
-      dplyr::left_join(ac_day, by = c("YEAR", "DOY_gpp"="DOY")) |> dplyr::select(-"DOY_gpp") |> dplyr::filter(!is.na(.data$NEE_daytime1))
+  # daily daytime NEE (umol / m2 / s) on every calendar day of the record, in
+  # date order: NA on days without daytime NEE
+  ac_day <- ac |> dplyr::filter(.data$daytime, !is.na(.data$NEE_uStar_f)) |>
+    dplyr::mutate(date = lubridate::make_date(.data$YEAR, .data$MONTH, .data$DAY)) |>
+    dplyr::group_by(.data$date) |>
+    dplyr::summarise(NEE_daytime1 = max(-sum(.data$NEE_uStar_f) * .env$dt * 60 / 86400, 0.0))
+  calendar <- seq(min(lubridate::make_date(ac$YEAR, ac$MONTH, ac$DAY)), max(lubridate::make_date(ac$YEAR, ac$MONTH, ac$DAY)), by = "day")
+  ac_day <- data.frame(date = calendar) |> dplyr::left_join(ac_day, by = "date") |> dplyr::arrange(.data$date)
+  # day of year as step 01 numbers it: southern-hemisphere sites, whose
+  # growing season spans New Year, count January to June on from 366
+  ac_day$YEAR <- lubridate::year(ac_day$date)
+  ac_day$DOY <- lubridate::yday(ac_day$date)
+  if (any(ac$DOY > 366)) {
+    ac_day$DOY[ac_day$DOY < 183] <- ac_day$DOY[ac_day$DOY < 183] + 366
   }
+  # mean of the day and the two before it, over the days with data (NA only
+  # if none of the three has any)
+  ac_day$NEE_daytime <- zoo::rollapply(ac_day$NEE_daytime1, width = 3, align = "right", partial = TRUE,
+                                       FUN = function(x) if (all(is.na(x))) NA_real_ else mean(x, na.rm = TRUE))
+
+  # attach it to nighttime data: a night belongs to the day before it, so
+  # records before noon take the previous calendar day's daytime NEE
+  a_measure_night_complete <- a_measure_night_complete |>
+    dplyr::mutate(date = lubridate::make_date(.data$YEAR, .data$MONTH, .data$DAY) - (.data$HOUR < 12)) |>
+    dplyr::left_join(ac_day[, c("date", "NEE_daytime1", "NEE_daytime")], by = "date") |>
+    dplyr::select(-"date") |> dplyr::filter(!is.na(.data$NEE_daytime))
 
   # Deal with sites in southern hemisphere
   # add growing_year
