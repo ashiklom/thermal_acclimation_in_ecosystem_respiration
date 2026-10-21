@@ -5,6 +5,7 @@
 
 stopifnot(requireNamespace("dplyr"), requireNamespace("lubridate"), requireNamespace("zoo"))
 source(file.path("R", "paths.R"))
+source(file.path("R", "io.R"))
 source(file.path("R", "step02-prep.R"))
 
 # Usage: Rscript workflows/02_00_prepare_TAS_inputs.R [--sites=SITE1,SITE2]
@@ -17,9 +18,7 @@ sites_arg <- grep("^--sites=", args, value = TRUE)
 
 site_info <- read.csv(file.path('data', 'site_info.csv'))
 site_settings <- read_site_settings()
-feature_gs <- read.csv(path_proc('growing_season_feature_EuropFlux.csv'))
-feature_gs_AmeriFlux <- read.csv(path_proc('growing_season_feature_AmeriFlux.csv'))
-feature_gs <- rbind(feature_gs, feature_gs_AmeriFlux)
+feature_gs <- read_growing_season_features()
 swc_ERA5 <- read_era5_swc()
 
 sites <- if (length(sites_arg) > 0) strsplit(sub("^--sites=", "", sites_arg), ",")[[1]] else site_info$site_ID
@@ -27,8 +26,8 @@ stopifnot(all(sites %in% site_info$site_ID), setequal(site_settings$site_ID, sit
 
 for (name_site in sites) {
   print(name_site)
-  a_measure_night_complete <- read.csv(path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')))
-  ac <- read.csv(path_proc("RespirationData", paste0(name_site, '_ac.csv')))
+  a_measure_night_complete <- read_step01_table(name_site, "nightNEE")
+  ac <- read_step01_table(name_site, "ac")
   inputs <- prepare_tas_inputs(site_info[site_info$site_ID == name_site, ], site_settings[site_settings$site_ID == name_site, ],
                                feature_gs, a_measure_night_complete, ac, swc_ERA5)
   saveRDS(inputs, path_proc("TAS_inputs", paste0(name_site, ".rds")))

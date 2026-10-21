@@ -1,8 +1,12 @@
 # Compare step-01 outputs in a data-proc root against the published ones:
 #
-#   <root>/RespirationData/*.csv          vs ../original-data/RespirationData/
-#   <root>/TS_RandomForest/*.csv          vs ../original-data/TS_RandomForest/
-#   <root>/growing_season_feature_*.csv   vs data/growing_season_feature_*.csv
+#   <root>/RespirationData/*.{parquet,csv}         vs ../original-data/RespirationData/
+#   <root>/TS_RandomForest/*.{parquet,csv}         vs ../original-data/TS_RandomForest/
+#   <root>/growing_season_feature_*.{parquet,csv}  vs data/growing_season_feature_*.csv
+#
+# Newer code writes parquet, older code CSV; the parquet file is used when
+# both exist. Parquet tables are compared by value (types and full-precision
+# doubles differ from the CSV text by design).
 #
 # Usage: Rscript tests/compare-step01-outputs.R [ROOT] [--out=summary.csv]
 # ROOT defaults to data-proc. Byte-identical files are reported as such; for
@@ -10,6 +14,7 @@
 # names, number of differing values, max absolute difference).
 
 source(file.path("R", "paths.R"))
+source(file.path("R", "io.R"))
 
 args <- commandArgs(trailingOnly = TRUE)
 root <- if (length(args) > 0 && !startsWith(args[1], "--")) args[1] else "data-proc"
@@ -35,11 +40,16 @@ pairs <- rbind(
 )
 
 compare_pair <- function(new, old) {
-  if (!file.exists(new)) return(data.frame(status = "missing", detail = ""))
-  if (identical(unname(tools::md5sum(new)), unname(tools::md5sum(old)))) {
+  parquet <- sub("\\.csv$", ".parquet", new)
+  if (file.exists(parquet)) {
+    new <- parquet
+  } else if (!file.exists(new)) {
+    return(data.frame(status = "missing", detail = ""))
+  } else if (identical(unname(tools::md5sum(new)), unname(tools::md5sum(old)))) {
     return(data.frame(status = "identical", detail = ""))
   }
-  a <- utils::read.csv(new)
+  a <- if (grepl("\\.parquet$", new)) read_table(new) else utils::read.csv(new)
+  if ("TIMESTAMP" %in% names(a) && inherits(a$TIMESTAMP, "POSIXct")) a$TIMESTAMP <- format(a$TIMESTAMP, "%Y-%m-%d %H:%M:%S", tz = "UTC")
   b <- utils::read.csv(old)
   if (!identical(names(a), names(b))) {
     return(data.frame(status = "columns", detail = paste0(

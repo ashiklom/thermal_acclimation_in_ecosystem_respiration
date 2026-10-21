@@ -4,7 +4,7 @@
 # Usage (from the repository root):
 #   Rscript tests/check-step02-dryrun.R [REF] [--sites=US-Kon,FI-Sod] [--jobs=8]
 #
-# Both versions run 02_01a and 02_01b in dry-run mode (R/dry-run.R from the
+# Both versions run 02_01a and 02_01b in dry-run mode (tests/dry-run.R from the
 # working tree): every brms::brm() call is recorded instead of sampled. Each
 # version runs from its own source tree (REF via `git archive`) against a
 # scratch data-proc root whose step-01 inputs are symlinked from data-proc/,
@@ -61,7 +61,8 @@ source_tree <- function(version) {
 proc_root <- function(version, model) {
   root <- file.path(work, version, model, "proc")
   dir.create(root, recursive = TRUE)
-  for (f in c("RespirationData", "TS_RandomForest", "growing_season_feature_EuropFlux.csv", "growing_season_feature_AmeriFlux.csv")) {
+  for (f in c("RespirationData", "TS_RandomForest", paste0("growing_season_feature_", rep(c("EuropFlux", "AmeriFlux"), 2), rep(c(".csv", ".parquet"), each = 2)))) {
+    if (!file.exists(file.path(repo, "data-proc", f))) next
     file.symlink(file.path(repo, "data-proc", f), file.path(root, f))
   }
   root

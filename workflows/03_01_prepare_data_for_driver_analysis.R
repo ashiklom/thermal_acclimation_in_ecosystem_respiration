@@ -11,6 +11,7 @@ library(librarian)
 shelf(dplyr, lubridate, ggpubr, ggplot2, zoo, terra, corrplot, mblm, boot)
 rm(list=ls())
 source(file.path("R", "paths.R"))
+source(file.path("R", "io.R"))
 
 ####################Attention: change this directory based on your own directory of raw data
 ####################End Attention
@@ -91,16 +92,16 @@ mblm_slope_test <- function(x, y, R_boot = 1000, R_perm = 1000, seed = 123) {
 #------------------
 #
 # Read ac data
-files <- list.files(path_proc("RespirationData"), pattern = '_ac.csv$', full.names = TRUE)
+files <- list.files(path_proc("RespirationData"), pattern = '_ac.parquet$', full.names = TRUE)
 for (i in 1:length(files)) {
   # i = 67
-  name_site <- substring(files[i], nchar(files[i])-12, nchar(files[i])-7)
+  name_site <- sub("_ac\\.parquet$", "", basename(files[i]))
   print(paste0(i, name_site))
   stat.climate[i, 1] <- name_site        # the last value
-  ac <- read.csv(files[i])
+  ac <- read_table(files[i])
   
   # use only the years with qualified data
-  a_measure_night_complete <- read.csv(path_proc("RespirationData", paste0(name_site, '_nightNEE.csv')))
+  a_measure_night_complete <- read_step01_table(name_site, "nightNEE")
   good_years <- unique(a_measure_night_complete$YEAR)
   
   # I have to gap fill TA, TS, and NEE, if needed.

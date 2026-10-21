@@ -7,10 +7,11 @@
 #   Rscript tests/test-stan-code.R
 
 source(file.path("R", "paths.R"))
+source(file.path("R", "io.R"))
 source(file.path("R", "step02-tas.R"))
 
 site_data <- function(name_site) {
-  d <- utils::read.csv(path_proc("RespirationData", paste0(name_site, "_nightNEE.csv")))
+  d <- read_step01_table(name_site, "nightNEE")
   # Only the code is compared, so placeholder covariates will do.
   d$NEE_daytime <- abs(stats::rnorm(nrow(d), 3, 1))
   d$SWC <- stats::runif(nrow(d), 10, 40)

@@ -10,6 +10,7 @@
 
 stopifnot(requireNamespace("amerifluxr"), requireNamespace("caret"), requireNamespace("dplyr"), requireNamespace("lubridate"), requireNamespace("randomForest"))
 source(file.path("R", "paths.R"))
+source(file.path("R", "io.R"))
 source(file.path("R", "read-raw.R"))
 source(file.path("R", "step01-prep.R"))
 
@@ -17,7 +18,7 @@ source(file.path("R", "step01-prep.R"))
 #
 # Estimates soil temperature for each requested site (default: every site
 # with estimate_Ts == "YES" in data/site_info.csv) and writes
-# data-proc/TS_RandomForest/<site>_TS_rfp.csv. Sites are independent.
+# data-proc/TS_RandomForest/<site>_TS_rfp.parquet. Sites are independent.
 
 args <- commandArgs(trailingOnly = TRUE)
 sites_arg <- grep("^--sites=", args, value = TRUE)
@@ -30,5 +31,5 @@ stopifnot(all(sites %in% site_info$site_ID[site_info$estimate_Ts == 'YES']))
 for (name_site in sites) {
   print(name_site)
   data <- estimate_ts_site(site_info[site_info$site_ID == name_site, ])
-  write.csv(data, file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')), row.names = F)
+  write_table(data, path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.parquet')))
 }

@@ -8,6 +8,7 @@
 #   Rscript tests/test-shuffle.R [--steps=01,02] [--sites01=FI-Sod,US-Jo2] [--sites02=AU-Tum,US-Tw1]
 
 source(file.path("R", "paths.R"))
+source(file.path("R", "io.R"))
 source(file.path("R", "read-raw.R"))
 source(file.path("R", "sun-times.R"))
 source(file.path("R", "step01-prep.R"))
@@ -74,12 +75,11 @@ if ("01" %in% steps) {
 
 if ("02" %in% steps) {
   settings <- read_site_settings()
-  feature_gs <- rbind(utils::read.csv(path_proc("growing_season_feature_EuropFlux.csv")),
-                      utils::read.csv(path_proc("growing_season_feature_AmeriFlux.csv")))
+  feature_gs <- read_growing_season_features()
   swc_ERA5 <- read_era5_swc()
   for (s in sites02) {
-    night <- utils::read.csv(path_proc("RespirationData", paste0(s, "_nightNEE.csv")))
-    ac <- utils::read.csv(path_proc("RespirationData", paste0(s, "_ac.csv")))
+    night <- read_step01_table(s, "nightNEE")
+    ac <- read_step01_table(s, "ac")
     args_plain <- list(site_info[site_info$site_ID == s, ], settings[settings$site_ID == s, ], feature_gs, night, ac, swc_ERA5)
     args_shuffled <- list(args_plain[[1]], args_plain[[2]], shuffle(feature_gs), shuffle(night), shuffle(ac), shuffle(swc_ERA5))
     check(paste("step 02 inputs", s), do.call(prepare_tas_inputs, args_plain), do.call(prepare_tas_inputs, args_shuffled))

@@ -800,7 +800,9 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 read_ts_rf <- function(site, source = c("published", "regenerated")) {
   source <- match.arg(source)
   if (site$estimate_Ts != "YES") return(NULL)
-  file <- paste0(site$site_ID, "_TS_rfp.csv")
-  path <- if (source == "published") path_original("TS_RandomForest", file) else path_proc("TS_RandomForest", file)
-  utils::read.csv(path)
+  if (source == "published") {
+    utils::read.csv(path_original("TS_RandomForest", paste0(site$site_ID, "_TS_rfp.csv")))
+  } else {
+    read_table(path_proc("TS_RandomForest", paste0(site$site_ID, "_TS_rfp.parquet")))
+  }
 }

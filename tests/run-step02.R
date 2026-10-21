@@ -44,8 +44,8 @@ src <- if (ref == "worktree") repo else {
   stopifnot(system(sprintf("git archive %s | tar -x -C %s", shQuote(ref), shQuote(dir))) == 0)
   dir
 }
-for (f in c("RespirationData", "growing_season_feature_EuropFlux.csv", "growing_season_feature_AmeriFlux.csv")) {
-  if (!file.exists(file.path(root, f))) file.symlink(file.path(inputs, f), file.path(root, f))
+for (f in c("RespirationData", paste0("growing_season_feature_", rep(c("EuropFlux", "AmeriFlux"), 2), rep(c(".csv", ".parquet"), each = 2)))) {
+  if (file.exists(file.path(inputs, f)) && !file.exists(file.path(root, f))) file.symlink(file.path(inputs, f), file.path(root, f))
 }
 dir.create(file.path(repo, "data-proc", "stan-cache"), recursive = TRUE, showWarnings = FALSE)
 if (!file.exists(file.path(root, "stan-cache"))) {
