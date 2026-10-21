@@ -113,6 +113,9 @@ new_outcome <- function() {
 # nonlinear parameters whose prior means are re-centred window by window.
 tas_model <- function(model_type = c("direct", "total"), swc = TRUE) {
   model_type <- match.arg(model_type)
+  # The priors below are combined with brms's `+` method, which only exists
+  # once brms is loaded (not yet the case in a fresh pipeline worker).
+  loadNamespace("brms")
   if (model_type == "total") {
     list(
       # for brm models
