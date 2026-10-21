@@ -66,6 +66,12 @@ r-rcpptoml = "*"
 python = ">=3.12,<3.14"
 pandas = "*"
 requests = "*"
+# ERA5-Land soil water from ECMWF's zarr store (scripts/download-era5-swc.py)
+xarray = "*"
+zarr = "*"
+dask = "*"
+fsspec = "*"
+aiohttp = "*"
 
 # Flux-data downloads (R/download-flux.R): FLUXNET-archive shuttle, ICOS
 # carbon portal, TERN
