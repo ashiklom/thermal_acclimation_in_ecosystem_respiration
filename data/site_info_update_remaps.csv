@@ -1,0 +1,6 @@
+"site_ID","field","published","update","reason"
+"US-Uaf","NEE","FC + SC_PI_F","FC_1_1_1 + SC_PI_1","FC and SC_PI_F renamed in BASE 15-5: FC_1_1_1 and SC_PI_1 equal them wherever both are present"
+"US-Uaf","USTAR","USTAR","USTAR_1_1_1","USTAR renamed in BASE 15-5: USTAR_1_1_1 equals it wherever both are present"
+"US-Ho1","RH","RH_PI_F_2_1_1","RH_PI_2_1_A","RH_PI_F_2_1_1 dropped in BASE 16-5: RH_PI_2_1_A equals it wherever both are present"
+"US-Ho2","RH","RH_PI_F_2_1_1","RH_PI_2_1_A","RH_PI_F_2_1_1 dropped in the new BASE release: RH_PI_2_1_A equals it wherever both are present"
+"US-CMW","SWC","SWC_PI_1_1_A","SWC_1_6_1","SWC_PI_1_1_A dropped in the new BASE release; no column matches it (SWC_1_6_1 r = 0.41, SWC_1_7_1 r = 0.22 over the published years): SWC_1_6_1, the closer, is a different sensor"

@@ -51,7 +51,8 @@ declared <- function(row) {
   cols <- unlist(lapply(fields, function(f) trimws(strsplit(row[[f]], "\\+")[[1]])))
   cols <- cols[cols != ""]
   b <- built[[row$site_ID]]
-  unique(c(setdiff(cols, names(b)), unlist(strsplit(b[intersect(cols, names(b))], " "))))
+  if (is.null(b)) return(unique(cols))
+  unique(c(setdiff(cols, names(b)), unlist(strsplit(unname(b[intersect(cols, names(b))]), " "))))
 }
 problems <- character()
 for (s in update$site_ID[update$source == "AmeriFlux_BASE"]) {
