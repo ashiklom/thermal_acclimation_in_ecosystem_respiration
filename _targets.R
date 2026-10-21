@@ -14,7 +14,7 @@ library(tarchetypes)
 
 tar_source(c(
   "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R", "R/ts-qualify.R",
-  "R/step02-prep.R", "R/step02-tas.R", "R/step03-drivers.R", "R/step04-scenario.R",
+  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/step03-drivers.R", "R/step04-scenario.R",
   "R/download.R", "R/pipeline.R", "R/controllers.R"
 ))
 
@@ -103,6 +103,21 @@ per_site <- tar_map(
     fit_tas_target(tas_inputs, "direct", sampler)
   }),
   tar_target(tas_inputs_summary, summarise_tas_inputs(tas_inputs)),
+  # candidate soil-temperature columns (R/ts-columns.R)
+  tar_target(ts_sensor, {
+    raw_files
+    read_ts_sensor(site, site_settings[site_settings$site_ID == site_id, ])
+  }),
+  tar_target(ts_candidate_values, ts_candidates(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ], tas_inputs)),
+  tar_target(ts_columns, {
+    settings <- site_settings[site_settings$site_ID == site_id, ]
+    columns <- names(ts_candidate_values$values)
+    inputs <- stats::setNames(lapply(columns, ts_column_inputs, site = site, settings = settings, step01 = step01,
+                                     candidates = ts_candidate_values, swc_ERA5 = era5_swc, manuscript_inputs = tas_inputs), columns)
+    list(table = ts_columns_table(step01, ts_candidate_values, inputs), summary = ts_columns_summary(ts_candidate_values, inputs))
+  }),
+  tar_target(ts_columns_file, write_table(ts_columns[["table"]], path_proc("ts-columns", paste0(site_id, ".parquet"))), format = "file"),
+  tar_target(ts_summary, ts_columns[["summary"]]),
   # steps 03-04: what does not depend on TAS
   tar_target(climate_stats, site_climate_stats(site_id, step01_ac, step01_night)),
   tar_target(scenario, {
@@ -118,6 +133,12 @@ combined <- list(
   tar_combine(tas_total_all, per_site[["tas_total"]], command = combine_tas_sites(list(!!!.x))),
   tar_combine(tas_direct_all, per_site[["tas_direct"]], command = combine_tas_sites(list(!!!.x))),
   tar_combine(tas_inputs_summary_all, per_site[["tas_inputs_summary"]], command = dplyr::bind_rows(!!!.x)),
+  tar_combine(ts_columns_summary_all, per_site[["ts_summary"]], command = dplyr::bind_rows(!!!.x)),
+  tar_target(ts_columns_summary_file, {
+    path <- file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "ts_columns_summary.csv")
+    utils::write.csv(ts_columns_summary_all, path, row.names = FALSE)
+    path
+  }, format = "file"),
   tar_target(output_files, write_pipeline_outputs(features, tas_total_all, tas_direct_all, tas_inputs_summary_all), format = "file"),
   tar_combine(climate_all, per_site[["climate_stats"]], command = dplyr::bind_rows(!!!.x)),
   tar_combine(scenario_all, per_site[["scenario"]], command = dplyr::bind_rows(!!!.x)),

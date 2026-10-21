@@ -14,7 +14,7 @@
 # the growing season>, ts_base and ts_params = <the record and settings
 # that do not depend on soil temperature, from which ts_column_tables() in
 # R/ts-qualify.R makes the other four, as it does here from the site's soil
-# temperature>). `site` is the site's
+# temperature (climatology$TS), usable where ts_ok>). `site` is the site's
 # row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R);
 # `ts_rf` is the site's 01_01 table (needed where soil temperature is
 # estimated); `coordinates` holds the AmeriFlux sites' coordinates
@@ -277,8 +277,9 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
     gap_fixed = if (name_site %in% c('ZA-Kru', 'FI-Sod', 'GF-Guy')) c(60, 0.7) else NULL,
     years_removed = years2remove
   )
-  out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, a$TS_F_MDS_1_QC %in% c(0, 1, 2))
-  list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params)
+  ts_ok <- a$TS_F_MDS_1_QC %in% c(0, 1, 2)
+  out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, ts_ok)
+  list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)
 }
 
 prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.csv(file.path("data", "ameriflux_coordinates.csv")),
@@ -631,8 +632,9 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
     gap_fixed = if (name_site %in% c("US-ICt", "US-ICh", "US-ICs", "BR-Ma2", "BR-Sa1")) c(60, 0.8) else NULL,
     years_removed = years2remove
   )
-  out <- ts_column_tables(ts_base, ts_params, ac$TS, !is.na(ac$TS))
-  list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params)
+  ts_ok <- !is.na(ac$TS)
+  out <- ts_column_tables(ts_base, ts_params, ac$TS, ts_ok)
+  list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)
 }
 
 # A site's 01_01 soil-temperature table, or NULL where soil temperature is not
