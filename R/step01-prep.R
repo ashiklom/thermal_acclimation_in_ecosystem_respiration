@@ -245,8 +245,9 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
 
-  # In general, growing-season temperature should be > 0 C
-  gStart <- max(gStart, min(which(NEE_yearly$TS >= 0)))
+  # In general, growing-season temperature should be > 0 C: no earlier than
+  # the first day of year whose mean soil temperature is >= 0 C
+  gStart <- max(gStart, min(NEE_yearly$DOY[which(NEE_yearly$TS >= 0)]))
   if (!is.na(site$gStart)) {
     gStart <- as.numeric(site$gStart)
   }
@@ -605,8 +606,9 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
 
-  # In general, growing-season temperature should be > 0 C.
-  gStart <- max(gStart, min(which(NEE_yearly$TS >= 0)))
+  # In general, growing-season temperature should be > 0 C: no earlier than
+  # the first day of year whose mean soil temperature is >= 0 C
+  gStart <- max(gStart, min(NEE_yearly$DOY[which(NEE_yearly$TS >= 0)]))
   if (!is.na(site$gStart)) {
     gStart <- as.numeric(site$gStart)
   }
