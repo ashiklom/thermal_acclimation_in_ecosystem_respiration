@@ -1,0 +1,11 @@
+<p><strong>BREAKING.</strong> tStart and tEnd bound the soil temperatures over which TAS is estimated: a
+  14-day window is skipped when its mean soil temperature falls outside [max(tStart, 2 °C), tEnd]. Step 01
+  sets them from the site's climatology: the 2.5% and 97.5% quantiles of the day-of-year mean soil
+  temperature over the days whose mean NEE marks the growing season (floored at 0 °C, and at 2 °C at
+  CH-Dav, US-Ha1 and US-GLE). At the 35 sites whose soil temperature step 02 replaces by a regression on
+  air temperature, step 02 then recomputed them differently: 2.5/97.5% quantiles of the <em>half-hourly</em>
+  regressed TS within gStart..gEnd. That range is wider than the climatology's, and it dropped US-GLE's
+  2 °C floor.</p>
+<p>Now every site uses step 01's rule, applied to the soil temperature the fits use: at the regression
+  sites, the regression applied to the climatology record's air temperature. The non-regression sites'
+  inputs are unchanged.</p>

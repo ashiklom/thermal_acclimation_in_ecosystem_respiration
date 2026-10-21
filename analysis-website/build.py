@@ -5,13 +5,17 @@ Reads (paths relative to the repository root):
   data/outcome_*.csv                   the published TAS estimates ("published")
   results/<id>/manifest.json           each saved result set (scripts/save-results.R)
   results/<id>/{outcome,siteyear}_{total,direct}.csv
+  results/<id>/tas_inputs_summary.csv   (optional) each site's fit settings and input hashes
   data-proc/RespirationData/*_ac.parquet   (optional) for mean annual air temperature
+  analysis-website/stages/<stage>.html     what each method stage changes and why
 
 Writes analysis-website/data/:
   sites.json                 one record per site
   resultsets.json            the result sets, published first, then by stage
   tas/<id>.json              site-level TAS, per model
   siteyear/<id>.json         site-year table, per model
+  stages.json                the method stages with a saved run, each with the run it is
+                             compared with and the sites whose TAS inputs changed
 
 Run with `pixi run -e website website-build`.
 """
@@ -119,6 +123,66 @@ def build_resultsets():
     return index
 
 
+# Method stages (one section each on stages.html), in order.
+STAGES = [
+    ("S11", "tStart/tEnd from the climatology rule at every site"),
+    ("S12", "gStart bounded by a day of year, not a row number"),
+    ("S13", "Daily daytime NEE keyed by calendar date"),
+    ("S14", "14-day non-overlapping windows"),
+]
+# Fields of tas_inputs_summary.csv compared between runs.
+INPUT_FIELDS = ["gStart", "gEnd", "tStart", "tEnd", "control_year", "n_night", "n_years",
+                "nwindow", "NEE_daytime_mean", "night_hash", "ac_hash", "ac_day_hash"]
+
+
+def input_changes(ref_dir, new_dir):
+    """Sites whose TAS inputs differ between two runs: one row per site, with the changed
+    fields and the reference and new values of the numeric ones."""
+    paths = [ref_dir / "tas_inputs_summary.csv", new_dir / "tas_inputs_summary.csv"]
+    if not all(p.exists() for p in paths):
+        return None
+    ref, new = (pd.read_csv(p).set_index("site_ID") for p in paths)
+    rows = []
+    for site in sorted(set(ref.index) | set(new.index)):
+        if site not in ref.index or site not in new.index:
+            rows.append({"site_ID": site, "changed": "site added" if site in new.index else "site dropped"})
+            continue
+        changed = []
+        for f in INPUT_FIELDS:
+            a, b = ref.at[site, f], new.at[site, f]
+            same = (pd.isna(a) and pd.isna(b)) or (
+                abs(a - b) <= 1e-9 * max(1.0, abs(a)) if isinstance(a, float) and isinstance(b, float) else a == b)
+            if not same:
+                changed.append(f)
+        if changed:
+            row = {"site_ID": site, "changed": ", ".join(f.replace("_hash", " data") for f in changed)}
+            for f in INPUT_FIELDS:
+                if not f.endswith("_hash"):
+                    row[f + "_ref"], row[f + "_new"] = ref.at[site, f], new.at[site, f]
+            rows.append(row)
+    return records(pd.DataFrame(rows))
+
+
+def build_stages(sets):
+    """For each method stage with a saved run: that run, the run before it (the latest saved
+    run of an earlier stage) and the sites whose inputs changed."""
+    order = {s["id"]: i for i, s in enumerate(sets)}
+    stages = []
+    for stage, title in STAGES:
+        runs = [s for s in sets if s.get("stage") == stage]
+        if not runs:
+            continue
+        run = runs[-1]
+        earlier = [s for s in sets[:order[run["id"]]] if s.get("stage") not in (stage, "published")]
+        ref = earlier[-1] if earlier else sets[0]
+        stages.append({
+            "stage": stage, "title": title, "run": run["id"], "reference": ref["id"],
+            "inputs": input_changes(ROOT / "results" / ref["id"], ROOT / "results" / run["id"]),
+        })
+    write_json(stages, OUT / "stages.json")
+    return stages
+
+
 def copy_plotly():
     try:
         import plotly
@@ -134,8 +198,9 @@ def main():
     OUT.mkdir(exist_ok=True)
     sites = build_sites()
     sets = build_resultsets()
+    stages = build_stages(sets)
     copy_plotly()
-    print(f"{len(sites)} sites, {len(sets)} result sets -> {OUT}")
+    print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages -> {OUT}")
 
 
 if __name__ == "__main__":

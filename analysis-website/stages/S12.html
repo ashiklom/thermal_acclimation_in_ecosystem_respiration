@@ -1,0 +1,5 @@
+<p><strong>BUGFIX.</strong> Step 01 keeps gStart no earlier than the first day of year whose mean soil
+  temperature is ≥ 0 °C, but <code>min(which(TS &gt;= 0))</code> returned that day's <em>row</em> in the
+  day-of-year climatology. Row and day of year differ where the climatology does not start at day 1
+  (southern-hemisphere sites, whose day of year runs from 183) or has missing days. gStart also bounds
+  the step-04 scenario windows.</p>

@@ -1,0 +1,7 @@
+<p><strong>BREAKING.</strong> Step 02 says it uses non-overlapping 14-day windows, but window k ran from
+  gStart + 14(k−1) to gStart + 14k: consecutive windows shared their boundary day, and every window but
+  the last had 15 days. Window k now covers gStart + 14(k−1) … gStart + 14k − 1 (at most gEnd), in the TAS
+  fits and in the step-04 scenario fits (whose last window still runs to gEnd). The number of windows and
+  the per-year widening of sparse windows (in steps of 3 days, up to 24) are unchanged, so the change is
+  one boundary day per window: the windows' nighttime data, reference temperatures and the
+  site-years kept change slightly.</p>

@@ -1,0 +1,11 @@
+<p><strong>BREAKING.</strong> The direct model uses the daytime NEE of the day before each night (a
+  3-day running mean). It was joined by (year, DOY − 1 before noon), with three flaws: (1) every
+  1 January's pre-noon records took the same day's value (the rule exempted the first DOY of the
+  record from the shift, which is DOY 1 every year); (2) at southern-hemisphere sites, whose DOY runs
+  183…548, the daily table was sorted by calendar year then wrapped DOY, so the running mean jumped
+  across New Year; (3) the running mean ran over table rows, spanning gaps, and days without daytime
+  data counted as 0.</p>
+<p>Now the daily table is keyed by calendar date over the complete, sorted calendar of the record;
+  records before noon take the previous date at every site and on every day; the 3-day mean is over the
+  days with data (NA only if none of the three has any). Nighttime records without a value are dropped
+  before both models, as before.</p>
