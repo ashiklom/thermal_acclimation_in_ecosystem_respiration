@@ -177,7 +177,9 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
 
   years <- sort(unique(a_measure_night_complete$growing_year))
 
-  # use non-overlapping windows and determine number of windows for growing season
+  # use non-overlapping windows and determine number of windows for growing season:
+  # window k covers days gStart + window_size*(k-1) to gStart + window_size*k - 1
+  # (at most gEnd)
   nwindow <- max(round((gEnd - gStart + 1) / window_size), 1)
 
   #------------------------------------PREPARE FOR formula, stprm, priors of ER models---------------------------------
@@ -197,7 +199,7 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
   icount = 0
   for (iwindow in 1:nwindow) {
     window_start = gStart + window_size*(iwindow-1)
-    window_end = min(gStart + window_size*iwindow, gEnd)
+    window_end = min(gStart + window_size*iwindow - 1, gEnd)
 
     ac_yearly_window <- ac |> dplyr::filter(dplyr::between(.data$DOY, .env$window_start, .env$window_end)) |> dplyr::group_by(.data$growing_year) |>
       dplyr::summarise(TS=mean(.data$TS, na.rm=T)) |> dplyr::arrange(.data$growing_year)

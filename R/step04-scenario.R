@@ -115,13 +115,14 @@ scenario_site <- function(site_id, ac, a_measure_night_complete, gStart, gEnd, t
     night_pattern$NEEp <- NA
     night_pattern$NEEf <- NA
 
-    # use uniform window size: 2 weeks
+    # use uniform window size: 2 weeks, on step 02's grid of non-overlapping
+    # windows, except that the last one runs to gEnd
     window_size <- 14
     nwindow <- max(round((gEnd - gStart + 1) / window_size), 1)
 
     for (iwindow in 1:nwindow) {
       window_start = gStart + window_size*(iwindow-1)
-      window_end = min(gStart + window_size*iwindow, gEnd)
+      window_end = min(gStart + window_size*iwindow - 1, gEnd)
       if (iwindow == nwindow & window_end != gEnd) {
         window_end <- gEnd
       }
