@@ -14,7 +14,7 @@ library(tarchetypes)
 
 tar_source(c(
   "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R", "R/ts-qualify.R",
-  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/step03-drivers.R", "R/step04-scenario.R",
+  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/ts-ranking.R", "R/step03-drivers.R", "R/step04-scenario.R",
   "R/download.R", "R/pipeline.R", "R/controllers.R"
 ))
 
@@ -118,6 +118,9 @@ per_site <- tar_map(
   }),
   tar_target(ts_columns_file, write_table(ts_columns[["table"]], path_proc("ts-columns", paste0(site_id, ".parquet"))), format = "file"),
   tar_target(ts_summary, ts_columns[["summary"]]),
+  # their quality (R/ts-ranking.R): estimators scored out of fold
+  tar_target(ts_cv, ts_cv_metrics(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ])),
+  tar_target(ts_site_quality, ts_quality(site_id, ts_columns[["table"]], ts_columns[["summary"]], ts_cv, gs_feature)),
   # steps 03-04: what does not depend on TAS
   tar_target(climate_stats, site_climate_stats(site_id, step01_ac, step01_night)),
   tar_target(scenario, {
@@ -138,6 +141,18 @@ combined <- list(
     path <- file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "ts_columns_summary.csv")
     utils::write.csv(ts_columns_summary_all, path, row.names = FALSE)
     path
+  }, format = "file"),
+  tar_combine(ts_quality_all, per_site[["ts_site_quality"]], command = dplyr::bind_rows(!!!.x)),
+  tar_target(ts_ranking, rank_ts_columns(ts_quality_all)),
+  # the soil-temperature columns the fits are run with
+  tar_target(ts_methods_selected, select_ts_methods(ts_ranking)),
+  tar_target(ts_quality_files, {
+    dir <- Sys.getenv("THERMAL_DATA_PROC", "data-proc")
+    paths <- file.path(dir, c("ts_quality.csv", "ts_ranking.csv", "ts_methods_selected.csv"))
+    utils::write.csv(ts_quality_all, paths[1], row.names = FALSE)
+    utils::write.csv(ts_ranking, paths[2], row.names = FALSE)
+    utils::write.csv(data.frame(column = ts_methods_selected), paths[3], row.names = FALSE)
+    paths
   }, format = "file"),
   tar_target(output_files, write_pipeline_outputs(features, tas_total_all, tas_direct_all, tas_inputs_summary_all), format = "file"),
   tar_combine(climate_all, per_site[["climate_stats"]], command = dplyr::bind_rows(!!!.x)),

@@ -5,8 +5,9 @@
 #   results/<id>/manifest.json         what produced them
 #
 # and, where the run wrote them, its TAS input summary and growing-season
-# features (tas_inputs_summary.csv, growing_season_feature.csv) and its step
-# 03-04 tables (step03-04/<fit set>/).
+# features (tas_inputs_summary.csv, growing_season_feature.csv), the
+# soil-temperature column summary, quality, ranking and selection
+# (ts_*.csv), and its step 03-04 tables (step03-04/<fit set>/).
 #
 # Usage (from the repository root):
 #   Rscript scripts/save-results.R --from=DIR --id=ID --label=LABEL --stage=S9
@@ -51,7 +52,8 @@ for (model in c("total", "direct")) {
   sites <- union(sites, combined$outcome$site_ID)
 }
 
-for (f in c("tas_inputs_summary.csv", "growing_season_feature.csv")) {
+for (f in c("tas_inputs_summary.csv", "growing_season_feature.csv", "ts_columns_summary.csv", "ts_quality.csv",
+            "ts_ranking.csv", "ts_methods_selected.csv")) {
   if (file.exists(file.path(from, f))) file.copy(file.path(from, f), file.path(out, f), overwrite = TRUE)
 }
 if (dir.exists(file.path(from, "step03-04"))) {
