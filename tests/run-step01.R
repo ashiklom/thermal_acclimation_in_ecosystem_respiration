@@ -7,9 +7,10 @@
 #
 # REF is a git ref, or "worktree" for the working tree. The scripts run from
 # REF's source tree (git archive) with THERMAL_DATA_PROC=ROOT. Unless 01_01
-# is among --steps, ROOT/TS_RandomForest links to the published random-forest
-# soil temperatures: 01_01's random forests do not reproduce exactly on
-# current package versions (see refactor-v2-log.md, S2), and 01_02 reads them.
+# is among --steps, 01_02 uses the published random-forest soil temperatures
+# (01_01's random forests do not reproduce exactly on current package
+# versions; see refactor-v2-log.md, S2): through a ROOT/TS_RandomForest link
+# for versions that read data-proc, by default for versions with --ts-rf.
 # Steps written as one loop over sites run as a single process; per-site
 # runner scripts (with a --sites option) are spread over --jobs processes.
 
@@ -65,7 +66,8 @@ run_step <- function(step) {
     system(sprintf(
       "cd %s && THERMAL_DATA_PROC=%s THERMAL_ORIGINAL_DATA=%s Rscript %s %s > %s 2>&1",
       shQuote(src), shQuote(root), shQuote(original_data), shQuote(script),
-      if (is.null(site_sets[[i]])) "" else shQuote(paste0("--sites=", paste(site_sets[[i]], collapse = ","))),
+      paste(if (is.null(site_sets[[i]])) "" else shQuote(paste0("--sites=", paste(site_sets[[i]], collapse = ","))),
+            if (per_site && step != "01_01" && "01_01" %in% steps) "--ts-rf=regenerated" else ""),
       shQuote(log)
     ))
   }, mc.cores = jobs)

@@ -9,7 +9,10 @@
 # sites) and 01_02b (AmeriFlux BASE sites); each returns list(ac = <the
 # site's half-hourly table>, night = <its filtered nighttime table>,
 # feature = <its row of the growing-season features>). `site` is the site's
-# row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R).
+# row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R);
+# `ts_rf` is the site's 01_01 table (needed where soil temperature is
+# estimated); `coordinates` holds the AmeriFlux sites' coordinates
+# (data/ameriflux_coordinates.csv).
 
 # The growing-season feature table: per-site rows bound in site order onto
 # the typed empty table the loops started from.
@@ -137,7 +140,7 @@ estimate_ts_site <- function(site, base_dir = path_original("SiteData")) {
   data
 }
 
-prep_site_euroflux <- function(site, base_dir = path_original("SiteData")) {
+prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("SiteData")) {
   data_source <- site$source
   name_site <- site$site_ID
 
@@ -161,8 +164,9 @@ prep_site_euroflux <- function(site, base_dir = path_original("SiteData")) {
     a$TS_F_MDS_1 <- a$TS_F_MDS_2  # use TS of second layer because the first layer is incomplete
     a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
   } else if (name_site %in% c("FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")) {
-    df_TS <- read.csv(file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')))
-    df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
+    stopifnot(!is.null(ts_rf))
+    df_TS <- ts_rf
+    if (!inherits(df_TS$TIMESTAMP, "POSIXct")) df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
     df_TS <- dplyr::left_join(data.frame(TIMESTAMP=a$TIMESTAMP), df_TS, by = "TIMESTAMP")
     a$TS_F_MDS_1 <- df_TS$TS_pred
     a$TS_F_MDS_1_QC[is.na(a$TS_F_MDS_1_QC) | a$TS_F_MDS_1_QC == 3] <- 2
@@ -185,8 +189,8 @@ prep_site_euroflux <- function(site, base_dir = path_original("SiteData")) {
 
   # FLUXNET data do not include soil data for Site FR-Pue, but site PI provided the SWC data
   if (name_site == 'FR-Pue') {
-    swc_2003_2015 <- read.table(path_original("SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2003-2015.csv"), sep=';', header=T)
-    swc_2016_2020 <- read.table(path_original("SiteData", "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2016-2020.csv"), sep=';', header=T)
+    swc_2003_2015 <- read.table(file.path(base_dir, "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2003-2015.csv"), sep=';', header=T)
+    swc_2016_2020 <- read.table(file.path(base_dir, "soil_water_content_FR-Pue", "FR-Pue_SWC_Control_Corrected_2016-2020.csv"), sep=';', header=T)
     swc_2003_2020 <- dplyr::bind_rows(swc_2003_2015, swc_2016_2020)
     swc_2003_2020$TIMESTAMP_START <- lubridate::dmy_hm(swc_2003_2020$date_time)
 
@@ -353,7 +357,8 @@ prep_site_euroflux <- function(site, base_dir = path_original("SiteData")) {
   list(ac = ac, night = a_measure_night_complete, feature = feature)
 }
 
-prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
+prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.csv(file.path("data", "ameriflux_coordinates.csv")),
+                                base_dir = path_original("SiteData")) {
   data_source <- site$source
   name_site <- site$site_ID
 
@@ -375,9 +380,9 @@ prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
   # get site long and lat
   # site coordinates as used for the published outputs (see
   # scripts/snapshot-ameriflux-coordinates.R), not the live AmeriFlux API
-  sites <- utils::read.csv(file.path("data", "ameriflux_coordinates.csv"))
-  long_site  <- sites$LONG[sites$site_ID==name_site]
-  lat_site   <- sites$LAT[sites$site_ID==name_site]
+  long_site  <- coordinates$LONG[coordinates$site_ID==name_site]
+  lat_site   <- coordinates$LAT[coordinates$site_ID==name_site]
+  stopifnot(length(long_site) == 1, length(lat_site) == 1)
 
   # get the exact time zone, not using daylight saving so choose a winter date
   tz <- lutz::tz_offset(as.Date("2000-01-01"), lutz::tz_lookup_coords(lat=lat_site, lon=long_site, method='accurate'))
@@ -502,8 +507,9 @@ prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
 
   # soil temperature TS
   if (site$estimate_Ts == 'YES') {
-    df_TS <- read.csv(file=path_proc("TS_RandomForest", paste0(name_site, '_TS_rfp.csv')))
-    df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
+    stopifnot(!is.null(ts_rf))
+    df_TS <- ts_rf
+    if (!inherits(df_TS$TIMESTAMP, "POSIXct")) df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
     df_TS <- dplyr::left_join(data.frame(TIMESTAMP=ac$TIMESTAMP), df_TS, by = "TIMESTAMP")
     ac$TS <- df_TS$TS_pred
     rm(df_TS)
@@ -784,4 +790,17 @@ prep_site_ameriflux <- function(site, base_dir = path_original("SiteData")) {
   feature <- data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
 
   list(ac = ac, night = a_measure_night_complete, feature = feature)
+}
+
+# A site's 01_01 soil-temperature table, or NULL where soil temperature is not
+# estimated. "published": the outputs that came with the manuscript
+# (original-data/TS_RandomForest; 01_01's random forests do not reproduce
+# them exactly on current package versions); "regenerated": 01_01's output in
+# data-proc/TS_RandomForest.
+read_ts_rf <- function(site, source = c("published", "regenerated")) {
+  source <- match.arg(source)
+  if (site$estimate_Ts != "YES") return(NULL)
+  file <- paste0(site$site_ID, "_TS_rfp.csv")
+  path <- if (source == "published") path_original("TS_RandomForest", file) else path_proc("TS_RandomForest", file)
+  utils::read.csv(path)
 }
