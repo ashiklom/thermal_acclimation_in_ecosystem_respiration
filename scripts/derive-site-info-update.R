@@ -1,8 +1,10 @@
 # data/site_info_update.csv: data/site_info.csv for the data update
 # (refactor-v2 stage S18), with
-#   - `source`: FLUXNET-format sites with a FLUXNET-archive shuttle product
-#     read it first and splice their published products around it
-#     ("SHUTTLE+<products>", R/read-raw.R); others unchanged
+#   - `source`: FLUXNET-format sites with a usable FLUXNET-archive shuttle
+#     product read it first and splice their published products around it
+#     ("SHUTTLE+<products>", R/read-raw.R); others unchanged. Usable: it has
+#     every column step 01 reads (e.g. TERN's lacks NEE_VUT_REF: only the
+#     constant-u* NEE_CUT_*) and the published record's time step
 #   - the columns of the AmeriFlux BASE releases that were renamed or
 #     dropped since the published ones, from data/site_info_update_remaps.csv
 #     (site_ID, field, published, update, reason)
@@ -21,8 +23,30 @@ manifest <- utils::read.csv(path_raw("flux", "download_manifest.csv"))
 update <- site_info
 
 # sources
-shuttle_sites <- manifest$site_ID[manifest$product == "SHUTTLE" & !is.na(manifest$file)]
-fluxnet <- update$source != "AmeriFlux_BASE" & update$site_ID %in% shuttle_sites
+fluxnet_columns <- c("TIMESTAMP_START", "NEE_VUT_REF", "NEE_VUT_REF_QC", "TA_F_MDS", "TS_F_MDS_1", "TS_F_MDS_1_QC",
+                     "NIGHT", "SW_IN_F_MDS")
+first_rows <- function(path) utils::read.csv(path, nrows = 3)
+time_step <- function(x) diff(as.numeric(as.POSIXct(as.character(x$TIMESTAMP_START[1:2]), format = "%Y%m%d%H%M", tz = "UTC"))) / 60
+usable_shuttle <- function(s) {
+  if (!s %in% manifest$site_ID[manifest$product == "SHUTTLE" & !is.na(manifest$file)]) return(FALSE)
+  new <- first_rows(raw_product_file(s, "SHUTTLE"))
+  published <- first_rows(raw_product_file(s, source_products(site_info$source[site_info$site_ID == s])[1]))
+  sensor <- if (s %in% c("CZ-Stn", "DE-Hte")) c("TS_F_MDS_2", "TS_F_MDS_2_QC") else character()
+  missing <- setdiff(c(fluxnet_columns, sensor), names(new))
+  if (length(missing)) {
+    message(s, ": shuttle product not used, it lacks ", paste(missing, collapse = ", "))
+    return(FALSE)
+  }
+  if (time_step(new) != time_step(published)) {
+    message(s, ": shuttle product not used, its time step (", time_step(new), " min) is not the published record's (",
+            time_step(published), " min)")
+    return(FALSE)
+  }
+  TRUE
+}
+fluxnet <- update$source != "AmeriFlux_BASE" & vapply(update$site_ID, function(s) {
+  site_info$source[site_info$site_ID == s] != "AmeriFlux_BASE" && usable_shuttle(s)
+}, logical(1))
 update$source[fluxnet] <- paste("SHUTTLE", gsub("_", "+", update$source[fluxnet]), sep = "+")
 
 # renamed columns
