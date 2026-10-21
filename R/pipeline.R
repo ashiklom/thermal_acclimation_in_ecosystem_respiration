@@ -26,9 +26,10 @@ prepare_site <- function(site, ts_rf, coordinates, base_dir = path_original("Sit
 # Write a site's step-01 tables as parquet files; returns their paths.
 write_step01_outputs <- function(prepared, site_id, dir = path_proc("RespirationData")) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  paths <- file.path(dir, paste0(site_id, c("_ac.parquet", "_nightNEE.parquet")))
+  paths <- file.path(dir, paste0(site_id, c("_ac.parquet", "_nightNEE.parquet", "_climatology.parquet")))
   arrow::write_parquet(prepared$ac, paths[1])
   arrow::write_parquet(prepared$night, paths[2])
+  arrow::write_parquet(prepared$climatology, paths[3])
   paths
 }
 

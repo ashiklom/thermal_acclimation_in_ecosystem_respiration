@@ -8,7 +8,10 @@
 # prep_site_ameriflux() are the per-site bodies of 01_02a (FLUXNET/ICOS
 # sites) and 01_02b (AmeriFlux BASE sites); each returns list(ac = <the
 # site's half-hourly table>, night = <its filtered nighttime table>,
-# feature = <its row of the growing-season features>). `site` is the site's
+# feature = <its row of the growing-season features>, climatology = <the
+# half-hourly DOY, TA and TS from which step 01 takes tStart/tEnd, over the
+# whole record, with `season` marking the days of year whose mean NEE marks
+# the growing season>). `site` is the site's
 # row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R);
 # `ts_rf` is the site's 01_01 table (needed where soil temperature is
 # estimated); `coordinates` holds the AmeriFlux sites' coordinates
@@ -237,6 +240,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   } else {
     tmp <- NEE_yearly |> dplyr::filter(.data$NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
   }
+  climatology <- data.frame(DOY = a$DOY, TA = a$TA_F_MDS, TS = a$TS_F_MDS_1, season = a$DOY %in% tmp$DOY)
 
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
@@ -354,7 +358,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
 
   feature <- data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
 
-  list(ac = ac, night = a_measure_night_complete, feature = feature)
+  list(ac = ac, night = a_measure_night_complete, feature = feature, climatology = climatology)
 }
 
 prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.csv(file.path("data", "ameriflux_coordinates.csv")),
@@ -596,6 +600,7 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 
   # I will use the mean of the first three values, and the mean of the last three values
   tmp    <- NEE_yearly |> dplyr::filter(.data$NEE < min(NEE_yearly$NEE, na.rm=T) * 0.2)
+  climatology <- data.frame(DOY = ac$DOY, TA = ac$TA, TS = ac$TS, season = ac$DOY %in% tmp$DOY)
   #
   gStart <- as.integer(mean(tmp$DOY[7])) - 4
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
@@ -789,7 +794,7 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 
   feature <- data.frame(site_ID=name_site, gStart=gStart, gEnd=gEnd, tStart=max(tStart, 0.0), tEnd=tEnd, nyear=length(good_years))
 
-  list(ac = ac, night = a_measure_night_complete, feature = feature)
+  list(ac = ac, night = a_measure_night_complete, feature = feature, climatology = climatology)
 }
 
 # A site's 01_01 soil-temperature table, or NULL where soil temperature is not

@@ -29,6 +29,6 @@ for (name_site in sites) {
   a_measure_night_complete <- read_step01_table(name_site, "nightNEE")
   ac <- read_step01_table(name_site, "ac")
   inputs <- prepare_tas_inputs(site_info[site_info$site_ID == name_site, ], site_settings[site_settings$site_ID == name_site, ],
-                               feature_gs, a_measure_night_complete, ac, swc_ERA5)
+                               feature_gs, a_measure_night_complete, ac, swc_ERA5, read_step01_table(name_site, "climatology"))
   saveRDS(inputs, path_proc("TAS_inputs", paste0(name_site, ".rds")))
 }

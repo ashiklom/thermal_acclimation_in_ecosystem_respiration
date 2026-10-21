@@ -91,8 +91,9 @@ per_site <- tar_map(
   tar_target(gs_feature, step01[["feature"]]),
   tar_target(step01_ac, step01[["ac"]]),
   tar_target(step01_night, step01[["night"]]),
+  tar_target(step01_climatology, step01[["climatology"]]),
   tar_target(tas_inputs, prepare_tas_inputs(site, site_settings[site_settings$site_ID == site_id, ], gs_feature,
-                                            step01_night, step01_ac, era5_swc)),
+                                            step01_night, step01_ac, era5_swc, step01_climatology)),
   tar_target(tas_total, {
     stan_models
     fit_tas_target(tas_inputs, "total", sampler)

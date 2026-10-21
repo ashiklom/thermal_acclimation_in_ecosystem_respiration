@@ -80,8 +80,11 @@ if ("02" %in% steps) {
   for (s in sites02) {
     night <- read_step01_table(s, "nightNEE")
     ac <- read_step01_table(s, "ac")
-    args_plain <- list(site_info[site_info$site_ID == s, ], settings[settings$site_ID == s, ], feature_gs, night, ac, swc_ERA5)
-    args_shuffled <- list(args_plain[[1]], args_plain[[2]], shuffle(feature_gs), shuffle(night), shuffle(ac), shuffle(swc_ERA5))
+    site <- site_info[site_info$site_ID == s, ]
+    prep <- if (site$source == "AmeriFlux_BASE") prep_site_ameriflux else prep_site_euroflux
+    climatology <- prep(site, ts_rf = read_ts_rf(site, "published"))$climatology
+    args_plain <- list(site, settings[settings$site_ID == s, ], feature_gs, night, ac, swc_ERA5, climatology)
+    args_shuffled <- list(site, args_plain[[2]], shuffle(feature_gs), shuffle(night), shuffle(ac), shuffle(swc_ERA5), shuffle(climatology))
     check(paste("step 02 inputs", s), do.call(prepare_tas_inputs, args_plain), do.call(prepare_tas_inputs, args_shuffled))
   }
 }

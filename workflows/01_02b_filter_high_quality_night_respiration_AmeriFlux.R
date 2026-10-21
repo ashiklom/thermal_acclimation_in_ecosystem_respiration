@@ -18,8 +18,8 @@ source(file.path("R", "step01-prep.R"))
 # Usage: Rscript workflows/01_02b_filter_high_quality_night_respiration_AmeriFlux.R [--sites=SITE1,SITE2 | --combine-only] [--ts-rf=published|regenerated]
 #
 # Prepares each requested site (default: every site with site_info$source == 'AmeriFlux_BASE' in
-# data/site_info.csv), writing data-proc/RespirationData/<site>_ac.parquet and
-# <site>_nightNEE.parquet and the site's growing-season features to
+# data/site_info.csv), writing data-proc/RespirationData/<site>_ac.parquet,
+# <site>_nightNEE.parquet and <site>_climatology.parquet and the site's growing-season features to
 # data-proc/growing_season_feature_sites/<site>.rds. Sites are independent;
 # after per-site runs, --combine-only (or a run over every site) writes data-proc/growing_season_feature_AmeriFlux.parquet.
 
@@ -43,6 +43,7 @@ for (name_site in sites) {
   result <- prep_site_ameriflux(site, ts_rf = read_ts_rf(site, ts_rf_source), coordinates = coordinates)
   write_table(result$ac, path_proc("RespirationData", paste0(name_site, '_ac.parquet')))
   write_table(result$night, path_proc("RespirationData", paste0(name_site, '_nightNEE.parquet')))
+  write_table(result$climatology, path_proc("RespirationData", paste0(name_site, '_climatology.parquet')))
   saveRDS(result$feature, path_proc("growing_season_feature_sites", paste0(name_site, ".rds")))
 }
 

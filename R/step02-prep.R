@@ -8,10 +8,9 @@
 #                          follow TA); "night_all": the same, fitted to the
 #                          nighttime table (US-Tw1, a (sub)tropical wetland,
 #                          where the half-hourly fit gives too low a slope)
-#   ts_bounds_method       "step01": tStart/tEnd from step 01's growing-season
-#                          features; "halfhourly_growing_season": 2.5/97.5%
-#                          quantiles of the half-hourly TS within gStart..gEnd
-#                          (the regression sites, after the regression)
+#   tstart_floor           lower bound on tStart (deg C): 2 where nighttime
+#                          NEE below 2 deg C soil temperature is unreliable
+#                          (step 01 drops those records), 0 elsewhere
 #   trim_last_growing_year southern-hemisphere sites whose growing season
 #                          spans New Year lose the last, incomplete one
 #
@@ -20,6 +19,14 @@
 # water the fits use and a growing_year column; daily daytime NEE (ac_day);
 # and a one-row data frame of the site's fit settings (gStart, gEnd, tStart,
 # tEnd, ts_bounds_method, dt, nobs_threshold, control_year).
+#
+# tStart and tEnd, the range of soil temperature over which TAS is estimated,
+# follow step 01's rule at every site: the 2.5% and 97.5% quantiles of the
+# day-of-year mean soil temperature of step 01's climatology record over its
+# growing-season days, at least tstart_floor. The soil temperature is the one
+# the fits use, so at the regression sites the regressed TS (the regression
+# applied to the record's TA). ts_bounds_method records which it is:
+# "step01" (step 01's own) or "regressed".
 
 read_site_settings <- function(path = file.path("data", "site_settings.csv")) {
   utils::read.csv(path)
@@ -35,7 +42,7 @@ read_era5_swc <- function(path = path_original("ERA5_daily_swc_1990_2024_allsite
   swc_ERA5
 }
 
-prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_complete, ac, swc_ERA5) {
+prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_complete, ac, swc_ERA5, climatology) {
   name_site <- site$site_ID
   stopifnot(identical(settings$site_ID, name_site))
 
@@ -77,7 +84,15 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
     a_measure_night_complete$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
     TS_pred <- predict(mod_lm, newdata = data.frame(TA = ac$TA), na.action = na.pass)
     ac$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
+    TS_pred <- predict(mod_lm, newdata = data.frame(TA = climatology$TA), na.action = na.pass)
+    climatology$TS[!is.na(TS_pred)] <- TS_pred[!is.na(TS_pred)]
   }
+
+  # temperature range of the growing season, from the site's climatology
+  TS_yearly <- climatology |> dplyr::group_by(.data$DOY) |> dplyr::summarise(TS = mean(.data$TS, na.rm=T), season = all(.data$season)) |>
+    dplyr::filter(.data$season)
+  tStart <- max(quantile(TS_yearly$TS, c(0.025), na.rm=T), 0.0, settings$tstart_floor)
+  tEnd   <- quantile(TS_yearly$TS, c(0.975), na.rm=T)
 
   # time step (minutes): half-hourly records have two distinct minutes past
   # the hour (e.g. 15 and 45), hourly records one
@@ -122,16 +137,6 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
   # get start and end dates of growing season
   gStart <- feature_gs$gStart[feature_gs$site_ID == name_site]
   gEnd <- feature_gs$gEnd[feature_gs$site_ID == name_site]
-  tStart <- feature_gs$tStart[feature_gs$site_ID == name_site]
-  tEnd <- feature_gs$tEnd[feature_gs$site_ID == name_site]
-
-  # Correct tStart and tEnd for sites with newly regressed TS
-  if (settings$ts_bounds_method == "halfhourly_growing_season") {
-    tStart <- quantile(ac$TS[dplyr::between(ac$DOY, gStart, gEnd)], c(0.025), na.rm=T)
-    tEnd <- quantile(ac$TS[dplyr::between(ac$DOY, gStart, gEnd)], c(0.975), na.rm=T)
-  } else {
-    stopifnot(settings$ts_bounds_method == "step01")
-  }
 
   # decide control year: the year with growing-season TS closest to long-term mean.
   ac_yearly_gs <- ac |> dplyr::filter(dplyr::between(.data$DOY, .env$gStart, .env$gEnd)) |> dplyr::filter(.data$growing_year %in% .env$years) |>
@@ -151,7 +156,8 @@ prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_compl
     ac_day = ac_day,
     settings = data.frame(
       site_ID = name_site, gStart = gStart, gEnd = gEnd, tStart = unname(tStart), tEnd = unname(tEnd),
-      ts_bounds_method = settings$ts_bounds_method, dt = dt, nobs_threshold = nobs_threshold,
+      ts_bounds_method = if (settings$ts_regression == "none") "step01" else "regressed",
+      dt = dt, nobs_threshold = nobs_threshold,
       control_year = control_year
     )
   )

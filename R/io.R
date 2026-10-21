@@ -12,8 +12,9 @@ read_table <- function(path) {
   as.data.frame(arrow::read_parquet(path))
 }
 
-# A site's step-01 half-hourly ("ac") or nighttime ("nightNEE") table.
-read_step01_table <- function(site_id, kind = c("ac", "nightNEE"), dir = path_proc("RespirationData")) {
+# A site's step-01 half-hourly ("ac") or nighttime ("nightNEE") table, or
+# its growing-season climatology days ("climatology").
+read_step01_table <- function(site_id, kind = c("ac", "nightNEE", "climatology"), dir = path_proc("RespirationData")) {
   kind <- match.arg(kind)
   read_table(file.path(dir, paste0(site_id, "_", kind, ".parquet")))
 }
