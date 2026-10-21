@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Overview · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Thermal acclimation of ecosystem respiration: refactor-v2</h1>
+  <p class="lead">Results of the staged refactor of workflow steps 01–02 (site data preparation and the
+    total/direct TAS fits). Every stage is recorded in <code>refactor-v2-log.md</code>; this site shows
+    the TAS estimates each saved run produced and how they differ.</p>
+
+  <h2>Result sets</h2>
+  <p class="small">Each row is one saved run. "Changed" counts sites whose TAS moved by at least the
+    significance threshold relative to the published estimates; "flips" are sites whose estimate went
+    from significantly negative to significantly positive or back (p &lt; 0.05).</p>
+  <div id="sets"></div>
+
+  <h2>Sites</h2>
+  <div class="controls">
+    <label>Result set <select id="set"></select></label>
+    <label>Model <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+    <label>Colour by <select id="colour">
+      <option value="tas">TAS</option>
+      <option value="delta">change vs published</option>
+      <option value="class">significance class</option>
+    </select></label>
+  </div>
+  <div class="grid2">
+    <div id="geo" class="plot"></div>
+    <div id="clim" class="plot"></div>
+  </div>
+  <p class="small">Click a site to open it in the site explorer.</p>
+</main>
+<script type="module" src="js/index.js"></script>
+</body>
+</html>

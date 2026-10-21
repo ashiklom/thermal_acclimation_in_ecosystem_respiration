@@ -48,3 +48,4 @@ scripts/.DS_Store
 .pixi/
 /analysis-website/data/
 !/analysis-website/**/*.html
+/analysis-website/vendor/plotly.min.js

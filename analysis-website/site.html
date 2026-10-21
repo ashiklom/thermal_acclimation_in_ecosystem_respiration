@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Site explorer · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <div class="controls">
+    <label>Site <select id="site"></select></label>
+    <label>Run (window detail) <select id="set"></select></label>
+    <label>Model <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+  </div>
+  <h1 id="title"></h1>
+  <p id="meta" class="lead"></p>
+  <h2>TAS in each run</h2>
+  <div id="tas" class="plot" style="min-height:360px"></div>
+  <h2>Window-level response</h2>
+  <p class="small">Each point is one window-year: the log ratio of reference respiration to the control year's, against the
+    window-year's mean soil temperature. TAS is the common slope across windows (AR(1) GLS).</p>
+  <div id="windows" class="plot"></div>
+  <div id="siteyears"></div>
+</main>
+<script type="module" src="js/site.js"></script>
+</body>
+</html>

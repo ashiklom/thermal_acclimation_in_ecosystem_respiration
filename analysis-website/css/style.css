@@ -1,0 +1,32 @@
+:root {
+  --ink: #1f2328; --muted: #656d76; --line: #d0d7de; --bg: #ffffff; --panel: #f6f8fa;
+  --accent: #0969da; --neg: #2166ac; --pos: #b2182b; --ns: #8c959f; --warn: #9a6700;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+header { position: sticky; top: 0; z-index: 10; background: var(--panel); border-bottom: 1px solid var(--line); padding: 0.5rem 1.5rem; display: flex; gap: 1.5rem; align-items: baseline; flex-wrap: wrap; }
+header .title { font-weight: 600; }
+header nav a { margin-right: 1rem; color: var(--muted); text-decoration: none; }
+header nav a.active { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--accent); }
+main { max-width: 1400px; margin: 0 auto; padding: 1rem 1.5rem 4rem; }
+h1 { font-size: 1.6rem; margin: 0.5rem 0 0.25rem; }
+h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; border-bottom: 1px solid var(--line); padding-bottom: 0.25rem; }
+h3 { font-size: 1.05rem; margin: 1.25rem 0 0.4rem; }
+p.lead { color: var(--muted); margin-top: 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
+.plot { width: 100%; min-height: 420px; }
+.controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin: 0.5rem 0; padding: 0.5rem 0.75rem; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.controls label { font-size: 0.9rem; color: var(--muted); }
+.controls select { margin-left: 0.25rem; }
+.stats { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.75rem 0; }
+.stat { border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem 0.9rem; min-width: 9rem; }
+.stat .v { font-size: 1.35rem; font-weight: 600; }
+.stat .k { font-size: 0.8rem; color: var(--muted); }
+.note { background: #fff8c5; border: 1px solid #d4a72c66; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+.flip { color: var(--pos); font-weight: 600; }
+.small { font-size: 0.85rem; color: var(--muted); }
+table.plain { border-collapse: collapse; margin: 0.5rem 0; }
+table.plain th, table.plain td { border: 1px solid var(--line); padding: 0.25rem 0.6rem; text-align: left; vertical-align: top; }
+table.plain th { background: var(--panel); }
+code { background: var(--panel); padding: 0 0.25rem; border-radius: 3px; }

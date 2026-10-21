@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Compare runs · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Compare two runs</h1>
+  <p class="lead">Site-level TAS of a run against a reference run. Points on the dashed line are unchanged; the
+    grey band is the significance threshold (|ΔTAS| below it is treated as sampling noise). Significant sign
+    flips (significantly negative ↔ significantly positive) are listed first.</p>
+  <div class="controls">
+    <label>Reference <select id="a"></select></label>
+    <label>Run <select id="b"></select></label>
+    <label>Model <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+    <label>Threshold <input id="threshold" type="number" step="0.0001" value="0.001" style="width:6rem"></label>
+  </div>
+  <div id="stats" class="stats"></div>
+  <div id="flipnote"></div>
+  <div class="grid2">
+    <div id="scatter" class="plot"></div>
+    <div id="hist" class="plot"></div>
+  </div>
+  <h2>Sites</h2>
+  <div id="table"></div>
+</main>
+<script type="module" src="js/compare.js"></script>
+</body>
+</html>

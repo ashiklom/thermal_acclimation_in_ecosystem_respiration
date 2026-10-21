@@ -1,0 +1,12 @@
+# Serves the analysis website on this machine only (run from the repository
+# root: `pixi run -e website website-serve`, then open http://127.0.0.1:8770).
+{
+	admin off
+	auto_https off
+}
+
+http://127.0.0.1:{$PORT:8770} {
+	root * analysis-website
+	header Cache-Control no-cache
+	file_server
+}
