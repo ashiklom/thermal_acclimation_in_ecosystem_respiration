@@ -4,3 +4,5 @@ main:
   store: _targets
 update:
   store: _targets_update
+update_era5_nearest:
+  store: _targets_update_era5_nearest

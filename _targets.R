@@ -11,7 +11,10 @@
 #   TAR_PROJECT      "main" (default; the published input data) or "update"
 #                    (the latest flux releases, data/site_info_update.csv;
 #                    its own store, _targets.yaml; set THERMAL_DATA_PROC too,
-#                    e.g. data-proc-update, to keep its outputs apart)
+#                    e.g. data-proc-update, to keep its outputs apart);
+#                    "update_era5_nearest": the same, with the ERA5 soil-water
+#                    extension as extracted rather than shifted to the
+#                    published series' level (a sensitivity test)
 
 library(targets)
 library(tarchetypes)
@@ -31,7 +34,8 @@ tar_option_set(
 )
 
 # input data version (refactor-v2 stage S18)
-data_version <- if (Sys.getenv("TAR_PROJECT") == "update") "update" else "published"
+data_version <- if (startsWith(Sys.getenv("TAR_PROJECT"), "update")) "update" else "published"
+era5_offset_correction <- Sys.getenv("TAR_PROJECT") != "update_era5_nearest"
 
 all_sites <- utils::read.csv(file.path("data", "site_info.csv"))$site_ID
 selected <- Sys.getenv("TAS_SITES", "all")
@@ -57,7 +61,7 @@ inputs <- list(
   if (data_version == "update") list(
     # ERA5-Land soil water after 2024 (scripts/download-era5-swc.py)
     tar_target(era5_update_file, path_raw("era5", "ERA5_daily_swc_update.csv"), format = "file"),
-    tar_target(era5_swc, extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file))),
+    tar_target(era5_swc, extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file), era5_offset_correction)),
     tar_target(era5_offsets_file, {
       path <- path_proc("era5_extension_offsets.csv")
       utils::write.csv(attr(era5_swc, "offsets"), path, row.names = FALSE)
@@ -184,8 +188,14 @@ per_site <- tar_map(
     use_stan_cache()
     ts_tables_column(ts_methods_selected, ts_table_key, scenario,
                      function() ts_step01_tables(ts_methods_selected, step01, ts_candidate_values),
-                     function(t) scenario_site(site_id, t$ac, t$night, t$feature[["gStart"]], t$feature[["gEnd"]],
-                                               tmin_month[tmin_month$site_ID == site_id, ], sampler))
+                     # a column whose control year has no records for a window drops the
+                     # site from that column's scenario (with a warning), as failed TAS fits do
+                     function(t) tryCatch(scenario_site(site_id, t$ac, t$night, t$feature[["gStart"]], t$feature[["gEnd"]],
+                                                        tmin_month[tmin_month$site_ID == site_id, ], sampler),
+                                          error = function(e) {
+                                            warning(site_id, ", ", ts_methods_selected, ": no scenario: ", conditionMessage(e), call. = FALSE)
+                                            NULL
+                                          }))
   }, pattern = map(ts_methods_selected), iteration = "list"),
   # steps 03-04: what does not depend on TAS
   tar_target(climate_stats, site_climate_stats(site_id, step01_ac, step01_night)),

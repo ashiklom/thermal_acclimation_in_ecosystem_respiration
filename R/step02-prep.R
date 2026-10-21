@@ -68,11 +68,13 @@ read_era5_swc <- function(path = path_original("ERA5_daily_swc_1990_2024_allsite
 #'
 #' @param swc_ERA5 ERA5-Land daily soil water (read_era5_swc()).
 #' @param extension The later extraction (name, date, SWC, ...), overlapping `swc_ERA5`.
+#' @param correct Whether to shift the extension by the offsets (FALSE: as extracted, the
+#'   offsets still reported).
 #' @return `swc_ERA5` with the extension's later rows (their columns shared with `swc_ERA5`,
 #'   offset-corrected) appended, and attribute "offsets": a data frame of site (`name`), the
 #'   number of overlapping days and the offset added (% soil water).
 #' @noRd
-extend_era5_swc <- function(swc_ERA5, extension) {
+extend_era5_swc <- function(swc_ERA5, extension, correct = TRUE) {
   extension <- extension[extension$name %in% swc_ERA5$name, ]
   both <- merge(swc_ERA5[, c("name", "date", "SWC")], extension[, c("name", "date", "SWC")], by = c("name", "date"),
                 suffixes = c("", "_new"))
@@ -82,7 +84,7 @@ extend_era5_swc <- function(swc_ERA5, extension) {
   missing <- setdiff(unique(extension$name), offsets$name[offsets$n_days > 0])
   if (length(missing)) stop("the ERA5 extension does not overlap the published series at ", paste(missing, collapse = ", "))
   later <- extension[extension$date > max(swc_ERA5$date), intersect(names(swc_ERA5), names(extension))]
-  later$SWC <- later$SWC + offsets$offset[match(later$name, offsets$name)]
+  if (correct) later$SWC <- later$SWC + offsets$offset[match(later$name, offsets$name)]
   out <- dplyr::bind_rows(swc_ERA5, later)
   attr(out, "offsets") <- offsets
   out
