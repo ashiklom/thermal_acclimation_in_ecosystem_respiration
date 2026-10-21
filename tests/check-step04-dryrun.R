@@ -31,7 +31,7 @@ writeLines(c(
   'tmin <- read.csv(path_proc("Tmin_month_ssp245_wc.csv"))',
   'files <- list.files(path = path_proc("RespirationData"), pattern = "_ac.parquet$")',
   'rows <- do.call(rbind, lapply(substring(files, 1, 6), function(s) scenario_site(s, read_step01_table(s, "ac"), read_step01_table(s, "nightNEE"),',
-  '  feature_gs$gStart[feature_gs$site_ID == s], feature_gs$gEnd[feature_gs$site_ID == s], tmin[tmin$site_ID == s, ], acclimation$TAS_tot[acclimation$site_ID == s])))',
+  '  feature_gs$gStart[feature_gs$site_ID == s], feature_gs$gEnd[feature_gs$site_ID == s], tmin[tmin$site_ID == s, ])))',
   'write.csv(scenario_data(acclimation, tmin, rows), path_proc("acclimation_data_future_ssp245.csv"), row.names = FALSE)'
 ), driver)
 

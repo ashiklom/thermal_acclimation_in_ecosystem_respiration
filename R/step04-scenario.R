@@ -58,13 +58,13 @@ compile_scenario_model <- function() {
   invisible(NULL)
 }
 
-# 04_02 for one site. tmin_change: the site's row of future_tmin_change();
-# tas_total: the site's total TAS. Returns one row: TS_TA (slope of soil on
-# air temperature), TSmin_c and TSmin_c_gs (minimum soil temperature change,
-# year and growing season), and growing-season mean nighttime respiration at
-# present (NEE_night_mod_p), in the future without (NEE_night_mod_f) and with
-# (NEE_night_mod_fa) the thermal response.
-scenario_site <- function(site_id, ac, a_measure_night_complete, gStart, gEnd, tmin_change, tas_total,
+# 04_02 for one site. tmin_change: the site's row of future_tmin_change().
+# Returns one row: TS_TA (slope of soil on air temperature), TSmin_c and
+# TSmin_c_gs (minimum soil temperature change, year and growing season), and
+# growing-season mean nighttime respiration at present (NEE_night_mod_p) and
+# in the future without thermal response (NEE_night_mod_f). None of it
+# depends on TAS: scenario_data() applies a set of TAS estimates.
+scenario_site <- function(site_id, ac, a_measure_night_complete, gStart, gEnd, tmin_change,
                           sampler = tas_fit_settings()) {
   name_site <- site_id
   ac <- ac[order(ac$YEAR, ac$DOY, ac$HOUR, ac$MINUTE), ]
@@ -168,14 +168,18 @@ scenario_site <- function(site_id, ac, a_measure_night_complete, gStart, gEnd, t
   out$NEE_night_mod_f  <- mean(df_NEE_p_f$NEE_f[-which.min(df_NEE_p_f$ratio)])
   out$TSmin_c <- mean(temp_change$TAmnc) * out$TS_TA
   out$TSmin_c_gs <- mean(night_pattern$TAmnc[night_pattern$DOY >= gStart & night_pattern$DOY <= gEnd], na.rm=T) * out$TS_TA
-  out$NEE_night_mod_fa <- out$NEE_night_mod_f * exp(tas_total * out$TSmin_c_gs)
   out
 }
 
-# 04_02's output table: the driver table with the monthly minimum-temperature
-# changes and each site's scenario results, in the published column order.
+# 04_02's output table for one set of TAS estimates: the driver table (with
+# its total TAS, TAS_tot) joined to the monthly minimum-temperature changes and
+# each site's scenario results, plus future respiration with the site's total
+# thermal response, NEE_night_mod_fa = NEE_night_mod_f * exp(TAS_tot *
+# TSmin_c_gs); in the published column order.
 scenario_data <- function(acclimation, tmin_month, scenario_rows) {
-  acclimation |>
+  out <- acclimation |>
     dplyr::left_join(tmin_month, by = "site_ID") |>
-    dplyr::left_join(scenario_rows[, c("site_ID", "TS_TA", "TSmin_c", "TSmin_c_gs", "NEE_night_mod_p", "NEE_night_mod_f", "NEE_night_mod_fa")], by = "site_ID")
+    dplyr::left_join(scenario_rows[, c("site_ID", "TS_TA", "TSmin_c", "TSmin_c_gs", "NEE_night_mod_p", "NEE_night_mod_f")], by = "site_ID")
+  out$NEE_night_mod_fa <- out$NEE_night_mod_f * exp(out$TAS_tot * out$TSmin_c_gs)
+  out
 }
