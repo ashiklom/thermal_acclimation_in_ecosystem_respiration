@@ -14,7 +14,7 @@ library(tarchetypes)
 
 tar_source(c(
   "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R", "R/ts-qualify.R",
-  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/ts-ranking.R", "R/step03-drivers.R", "R/step04-scenario.R",
+  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/ts-ranking.R", "R/ts-fits.R", "R/step03-drivers.R", "R/step04-scenario.R",
   "R/download.R", "R/pipeline.R", "R/controllers.R"
 ))
 
@@ -121,6 +121,42 @@ per_site <- tar_map(
   # their quality (R/ts-ranking.R): estimators scored out of fold
   tar_target(ts_cv, ts_cv_metrics(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ])),
   tar_target(ts_site_quality, ts_quality(site_id, ts_columns[["table"]], ts_columns[["summary"]], ts_cv, gs_feature)),
+  # the fit matrix over the selected columns (R/ts-fits.R): one branch per
+  # column; columns with the manuscript's input reuse its results
+  tar_target(ts_fit_key, {
+    settings <- site_settings[site_settings$site_ID == site_id, ]
+    data.frame(column = ts_methods_selected,
+               key = ts_inputs_key(ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5_swc, tas_inputs)))
+  }, pattern = map(ts_methods_selected)),
+  tar_target(ts_tas_total, {
+    stan_models
+    settings <- site_settings[site_settings$site_ID == site_id, ]
+    ts_fit_column(ts_methods_selected, "total", ts_fit_key, tas_total, function() {
+      ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5_swc, tas_inputs)
+    }, sampler)
+  }, pattern = map(ts_methods_selected), iteration = "list"),
+  tar_target(ts_tas_direct, {
+    stan_models
+    settings <- site_settings[site_settings$site_ID == site_id, ]
+    ts_fit_column(ts_methods_selected, "direct", ts_fit_key, tas_direct, function() {
+      ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5_swc, tas_inputs)
+    }, sampler)
+  }, pattern = map(ts_methods_selected), iteration = "list"),
+  tar_target(ts_table_key, data.frame(column = ts_methods_selected,
+                                      key = ts_tables_key(ts_step01_tables(ts_methods_selected, step01, ts_candidate_values))),
+             pattern = map(ts_methods_selected)),
+  tar_target(ts_climate_stats, ts_tables_column(ts_methods_selected, ts_table_key, climate_stats,
+                                                function() ts_step01_tables(ts_methods_selected, step01, ts_candidate_values),
+                                                function(t) site_climate_stats(site_id, t$ac, t$night)),
+             pattern = map(ts_methods_selected), iteration = "list"),
+  tar_target(ts_scenario, {
+    scenario_model
+    use_stan_cache()
+    ts_tables_column(ts_methods_selected, ts_table_key, scenario,
+                     function() ts_step01_tables(ts_methods_selected, step01, ts_candidate_values),
+                     function(t) scenario_site(site_id, t$ac, t$night, t$feature[["gStart"]], t$feature[["gEnd"]],
+                                               tmin_month[tmin_month$site_ID == site_id, ], sampler))
+  }, pattern = map(ts_methods_selected), iteration = "list"),
   # steps 03-04: what does not depend on TAS
   tar_target(climate_stats, site_climate_stats(site_id, step01_ac, step01_night)),
   tar_target(scenario, {
@@ -146,6 +182,32 @@ combined <- list(
   tar_target(ts_ranking, rank_ts_columns(ts_quality_all)),
   # the soil-temperature columns the fits are run with
   tar_target(ts_methods_selected, select_ts_methods(ts_ranking)),
+  # every selected column's TAS estimates, climate statistics and scenario
+  tar_combine(ts_fit_sets_total, per_site[["ts_tas_total"]], command = combine_ts_fits(list(!!!.x), ts_methods_selected)),
+  tar_combine(ts_fit_sets_direct, per_site[["ts_tas_direct"]], command = combine_ts_fits(list(!!!.x), ts_methods_selected)),
+  tar_combine(ts_climate_all, per_site[["ts_climate_stats"]], command = combine_ts_rows(list(!!!.x), ts_methods_selected)),
+  tar_combine(ts_scenario_all, per_site[["ts_scenario"]], command = combine_ts_rows(list(!!!.x), ts_methods_selected)),
+  tar_target(ts_outcome_files, {
+    dir <- Sys.getenv("THERMAL_DATA_PROC", "data-proc")
+    paths <- file.path(dir, c("ts_outcome_total.csv", "ts_outcome_direct.csv", "ts_siteyear_total.csv", "ts_siteyear_direct.csv"))
+    utils::write.csv(ts_outcome_table(ts_fit_sets_total), paths[1], row.names = FALSE)
+    utils::write.csv(ts_outcome_table(ts_fit_sets_direct), paths[2], row.names = FALSE)
+    utils::write.csv(ts_outcome_table(ts_fit_sets_total, "siteyear"), paths[3], row.names = FALSE)
+    utils::write.csv(ts_outcome_table(ts_fit_sets_direct, "siteyear"), paths[4], row.names = FALSE)
+    paths
+  }, format = "file"),
+  # steps 03-04 for every column's TAS estimates (the driver analysis over
+  # the sites where the column has both)
+  tar_target(ts_drivers, driver_data(pipeline_site_info, ts_climate_all[[ts_methods_selected]], spectral, soil,
+                                     ts_fit_sets_total[[ts_methods_selected]]$outcome, ts_fit_sets_direct[[ts_methods_selected]]$outcome),
+             pattern = map(ts_methods_selected), iteration = "list"),
+  tar_target(ts_driver_results, driver_analysis(ts_drivers[!is.na(ts_drivers$TAS) & !is.na(ts_drivers$TAS_tot), ]),
+             pattern = map(ts_drivers), iteration = "list"),
+  tar_target(ts_future, scenario_data(ts_drivers, tmin_month, ts_scenario_all[[ts_methods_selected]]),
+             pattern = map(ts_drivers, ts_methods_selected), iteration = "list"),
+  tar_target(ts_step0304_files, write_step0304_outputs(ts_methods_selected, ts_drivers, ts_driver_results, ts_future, tmin_month,
+                                                       dir = file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "step03-04-ts", ts_methods_selected)),
+             pattern = map(ts_methods_selected, ts_drivers, ts_driver_results, ts_future), format = "file"),
   tar_target(ts_quality_files, {
     dir <- Sys.getenv("THERMAL_DATA_PROC", "data-proc")
     paths <- file.path(dir, c("ts_quality.csv", "ts_ranking.csv", "ts_methods_selected.csv"))
