@@ -40,6 +40,26 @@ fit_tas_target <- function(inputs, model_type, sampler = tas_fit_settings()) {
                s$nobs_threshold, s$control_year, model_type = model_type, sampler = sampler)
 }
 
+# One row describing a site's prepared TAS inputs: its fit settings, the
+# size of the nighttime table, the number of 14-day windows (as in
+# estimate_tas()), and hashes of the tables, so that the inputs of two runs
+# can be compared without keeping them.
+summarise_tas_inputs <- function(inputs, window_size = 14) {
+  s <- inputs$settings
+  data.frame(
+    s,
+    n_night = nrow(inputs$night),
+    n_years = length(unique(inputs$night$growing_year)),
+    first_year = min(inputs$night$growing_year),
+    last_year = max(inputs$night$growing_year),
+    nwindow = max(round((s$gEnd - s$gStart + 1) / window_size), 1),
+    NEE_daytime_mean = mean(inputs$night$NEE_daytime),
+    night_hash = digest::digest(inputs$night),
+    ac_hash = digest::digest(inputs$ac),
+    ac_day_hash = digest::digest(inputs$ac_day)
+  )
+}
+
 # A site's published random-forest soil temperatures (01_01), or NULL if the
 # site does not estimate soil temperature.
 read_published_ts_rf <- function(site, files) {
@@ -51,19 +71,22 @@ read_published_ts_rf <- function(site, files) {
 
 # Write the combined tables under the published file names in data-proc/:
 # growing-season features (one table for all sites) and the total and direct
-# outcome tables. Returns the paths.
-write_pipeline_outputs <- function(features, total, direct, dir = Sys.getenv("THERMAL_DATA_PROC", "data-proc")) {
+# outcome tables; and the summary of every site's TAS inputs. Returns the
+# paths.
+write_pipeline_outputs <- function(features, total, direct, inputs_summary, dir = Sys.getenv("THERMAL_DATA_PROC", "data-proc")) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   paths <- file.path(dir, c(
     "growing_season_feature.csv",
     "outcome_temp.csv", "outcome_siteyear_temp.csv",
-    "outcome_temp_water_gpp.csv", "outcome_siteyear_temp_water_gpp.csv"
+    "outcome_temp_water_gpp.csv", "outcome_siteyear_temp_water_gpp.csv",
+    "tas_inputs_summary.csv"
   ))
   utils::write.csv(features, paths[1], row.names = FALSE)
   utils::write.csv(total$outcome, paths[2], row.names = FALSE)
   utils::write.csv(total$siteyear, paths[3], row.names = FALSE)
   utils::write.csv(direct$outcome, paths[4], row.names = FALSE)
   utils::write.csv(direct$siteyear, paths[5], row.names = FALSE)
+  utils::write.csv(inputs_summary, paths[6], row.names = FALSE)
   paths
 }
 

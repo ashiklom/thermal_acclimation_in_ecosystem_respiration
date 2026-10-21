@@ -85,10 +85,14 @@ per_site <- tar_map(
     prepare_site(site, ts_rf, coordinates)
   }),
   tar_target(step01_files, write_step01_outputs(step01, site_id), format = "file"),
-  # (string indexing: tar_map() renames symbols that match target names)
+  # step 01's tables as targets of their own, so that what uses one table
+  # reruns only when that table changes (string indexing: tar_map() renames
+  # symbols that match target names)
   tar_target(gs_feature, step01[["feature"]]),
+  tar_target(step01_ac, step01[["ac"]]),
+  tar_target(step01_night, step01[["night"]]),
   tar_target(tas_inputs, prepare_tas_inputs(site, site_settings[site_settings$site_ID == site_id, ], gs_feature,
-                                            step01[["night"]], step01[["ac"]], era5_swc)),
+                                            step01_night, step01_ac, era5_swc)),
   tar_target(tas_total, {
     stan_models
     fit_tas_target(tas_inputs, "total", sampler)
@@ -97,12 +101,13 @@ per_site <- tar_map(
     stan_models
     fit_tas_target(tas_inputs, "direct", sampler)
   }),
+  tar_target(tas_inputs_summary, summarise_tas_inputs(tas_inputs)),
   # steps 03-04: what does not depend on TAS
-  tar_target(climate_stats, site_climate_stats(site_id, step01[["ac"]], step01[["night"]])),
+  tar_target(climate_stats, site_climate_stats(site_id, step01_ac, step01_night)),
   tar_target(scenario, {
     scenario_model
     use_stan_cache()
-    scenario_site(site_id, step01[["ac"]], step01[["night"]], gs_feature[["gStart"]], gs_feature[["gEnd"]],
+    scenario_site(site_id, step01_ac, step01_night, gs_feature[["gStart"]], gs_feature[["gEnd"]],
                   tmin_month[tmin_month$site_ID == site_id, ], sampler)
   })
 )
@@ -111,7 +116,8 @@ combined <- list(
   tar_combine(features, per_site[["gs_feature"]], command = combine_features(list(!!!.x))),
   tar_combine(tas_total_all, per_site[["tas_total"]], command = combine_tas_sites(list(!!!.x))),
   tar_combine(tas_direct_all, per_site[["tas_direct"]], command = combine_tas_sites(list(!!!.x))),
-  tar_target(output_files, write_pipeline_outputs(features, tas_total_all, tas_direct_all), format = "file"),
+  tar_combine(tas_inputs_summary_all, per_site[["tas_inputs_summary"]], command = dplyr::bind_rows(!!!.x)),
+  tar_target(output_files, write_pipeline_outputs(features, tas_total_all, tas_direct_all, tas_inputs_summary_all), format = "file"),
   tar_combine(climate_all, per_site[["climate_stats"]], command = dplyr::bind_rows(!!!.x)),
   tar_combine(scenario_all, per_site[["scenario"]], command = dplyr::bind_rows(!!!.x)),
   tar_target(soil, soil_carbon(site_info, bif_file, gsoc_file)),
