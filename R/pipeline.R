@@ -66,3 +66,18 @@ write_pipeline_outputs <- function(features, total, direct, dir = Sys.getenv("TH
   utils::write.csv(direct$siteyear, paths[5], row.names = FALSE)
   paths
 }
+
+# Write one fit set's step 03-04 tables under the published file names, in
+# data-proc/step03-04/<fit_set>/. Returns the paths.
+write_step0304_outputs <- function(fit_set, drivers, driver_results, future, tmin_month,
+                                   dir = file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "step03-04", fit_set)) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  paths <- file.path(dir, c("acclimation_data.csv", "varImp_plot.csv", "partial_plot.csv",
+                            "acclimation_data_future_ssp245.csv", "Tmin_month_ssp245_wc.csv"))
+  utils::write.csv(drivers, paths[1], row.names = FALSE)
+  utils::write.csv(driver_results$varImp, paths[2], row.names = FALSE)
+  utils::write.csv(driver_results$partial, paths[3], row.names = FALSE)
+  utils::write.csv(future, paths[4], row.names = FALSE)
+  utils::write.csv(tmin_month, paths[5], row.names = FALSE)
+  paths
+}

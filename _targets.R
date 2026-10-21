@@ -13,8 +13,9 @@ library(targets)
 library(tarchetypes)
 
 tar_source(c(
-  "R/paths.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R",
-  "R/step02-prep.R", "R/step02-tas.R", "R/pipeline.R", "R/controllers.R"
+  "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R",
+  "R/step02-prep.R", "R/step02-tas.R", "R/step03-drivers.R", "R/step04-scenario.R",
+  "R/download.R", "R/pipeline.R", "R/controllers.R"
 ))
 
 tar_option_set(
@@ -52,6 +53,20 @@ inputs <- list(
   tar_target(ts_rf_files, list.files(path_original("TS_RandomForest"), pattern = "\\.csv$", full.names = TRUE), format = "file"),
   # The sampler setting is a target, so changing the profile refits.
   tar_target(sampler, tas_fit_settings(), deployment = "main", cue = tar_cue(mode = "always")),
+  # step 03-04 inputs
+  tar_target(bif_file, path_original("AMF_AA-Net_BIF_CCBY4_20251017.csv"), format = "file"),
+  tar_target(gsoc_file, path_original("GSOCmap1.5.0.tif"), format = "file"),
+  tar_target(modis_files, path_original(c("towers-MOD13A2-061-results.csv", "towers-MOD15A2H-061-results.csv",
+                                          "towers-MYD17A2HGF-061-results.csv")), format = "file"),
+  tar_target(worldclim, download_worldclim()),
+  tar_target(worldclim_files, unlist(worldclim), format = "file"),
+  tar_target(published_tas_files, file.path("data", c("outcome_temp.csv", "outcome_temp_water_gpp.csv")), format = "file"),
+  tar_target(pipeline_site_info, site_info[site_info$site_ID %in% site_values$site_id, ]),
+  tar_target(scenario_model, {
+    use_stan_cache()
+    compile_scenario_model()
+    TRUE
+  }, deployment = "main"),
   tar_target(stan_models, {
     use_stan_cache()
     compile_tas_models()
@@ -81,6 +96,14 @@ per_site <- tar_map(
   tar_target(tas_direct, {
     stan_models
     fit_tas_target(tas_inputs, "direct", sampler)
+  }),
+  # steps 03-04: what does not depend on TAS
+  tar_target(climate_stats, site_climate_stats(site_id, step01[["ac"]], step01[["night"]])),
+  tar_target(scenario, {
+    scenario_model
+    use_stan_cache()
+    scenario_site(site_id, step01[["ac"]], step01[["night"]], gs_feature[["gStart"]], gs_feature[["gEnd"]],
+                  tmin_month[tmin_month$site_ID == site_id, ], sampler)
   })
 )
 
@@ -88,7 +111,25 @@ combined <- list(
   tar_combine(features, per_site[["gs_feature"]], command = combine_features(list(!!!.x))),
   tar_combine(tas_total_all, per_site[["tas_total"]], command = combine_tas_sites(list(!!!.x))),
   tar_combine(tas_direct_all, per_site[["tas_direct"]], command = combine_tas_sites(list(!!!.x))),
-  tar_target(output_files, write_pipeline_outputs(features, tas_total_all, tas_direct_all), format = "file")
+  tar_target(output_files, write_pipeline_outputs(features, tas_total_all, tas_direct_all), format = "file"),
+  tar_combine(climate_all, per_site[["climate_stats"]], command = dplyr::bind_rows(!!!.x)),
+  tar_combine(scenario_all, per_site[["scenario"]], command = dplyr::bind_rows(!!!.x)),
+  tar_target(soil, soil_carbon(site_info, bif_file, gsoc_file)),
+  tar_target(spectral, spectral_indices(modis_files[1], modis_files[2], modis_files[3])),
+  tar_target(tmin_month, future_tmin_change(site_info, worldclim$baseline, worldclim$future)),
+  # sets of TAS estimates the step 03-04 analyses are run for
+  tar_target(fits_published, list(total = utils::read.csv(published_tas_files[1]), direct = utils::read.csv(published_tas_files[2]))),
+  tar_target(fits_v2, list(total = tas_total_all$outcome, direct = tas_direct_all$outcome))
 )
 
-list(inputs, per_site, combined)
+# Steps 03-04 for each set of TAS estimates.
+by_fit_set <- tar_map(
+  values = list(fit_set = c("published", "v2"), fits = rlang::syms(c("fits_published", "fits_v2"))),
+  names = "fit_set",
+  tar_target(drivers, driver_data(pipeline_site_info, climate_all, spectral, soil, fits$total, fits$direct)),
+  tar_target(driver_results, driver_analysis(drivers)),
+  tar_target(future, scenario_data(drivers, tmin_month, scenario_all)),
+  tar_target(step0304_files, write_step0304_outputs(fit_set, drivers, driver_results, future, tmin_month), format = "file")
+)
+
+list(inputs, per_site, combined, by_fit_set)

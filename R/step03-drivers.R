@@ -227,17 +227,23 @@ rf_partial_bootstrap <- function(data_strat, response, pred_data, times = 200) {
   vars <- c(elev = "ELEV", mat = "MATA", lai = "LAI", soc = "SOC", warm_rate = "warm_rate")
   strat_bootstrap <- rsample::bootstraps(data_strat, times = times, strata = "climate_vegetation")
   x <- NULL
-  y <- matrix(0, nrow = 51 * length(vars), ncol = times)
+  n_x <- NULL
+  y <- vector("list", times)
   for (i in seq_len(times)) {
     data_sample <- rsample::analysis(strat_bootstrap$splits[[i]])[, 1:6]
     rf <- randomForest::randomForest(formula = formula, data = data_sample, do.trace = FALSE, mtry = 1, nodesize = 30, ntree = 500, importance = TRUE)
     # (do.call: partialPlot() takes the variable's name from substitute(x.var))
     pd <- lapply(vars, function(v) do.call(randomForest::partialPlot, list(rf, pred.data = pred_data, x.var = v, plot = FALSE)))
-    if (i == 1) x <- unlist(lapply(pd, `[[`, "x"), use.names = FALSE)
-    y[, i] <- unlist(lapply(pd, `[[`, "y"), use.names = FALSE)
+    if (i == 1) {
+      x <- unlist(lapply(pd, `[[`, "x"), use.names = FALSE)
+      # 51 grid points per predictor, or fewer with fewer distinct values
+      n_x <- vapply(pd, function(p) length(p$x), integer(1))
+    }
+    y[[i]] <- unlist(lapply(pd, `[[`, "y"), use.names = FALSE)
   }
+  y <- do.call(cbind, y)
   q <- t(apply(y, 1, stats::quantile, c(0.025, 0.05, 0.5, 0.95, 0.975)))
-  partial <- data.frame(var = rep(names(vars), each = 51), x = x,
+  partial <- data.frame(var = rep(names(vars), times = n_x), x = x,
                         y025 = q[, 1], y050 = q[, 2], y = q[, 3], y950 = q[, 4], y975 = q[, 5])
   partial$x_norm <- stats::ave(partial$x, partial$var, FUN = function(v) as.vector(scale(v)))
   partial
