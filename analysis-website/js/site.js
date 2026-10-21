@@ -1,4 +1,4 @@
-import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, tasClass, numberFormatter } from "./common.js";
+import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, tasClass, numberFormatter, siteMaps } from "./common.js";
 
 header("site.html");
 const sites = await loadJSON("data/sites.json");
@@ -30,6 +30,11 @@ async function draw() {
     `estimated TS: ${meta.estimate_Ts}`, `measured SWC: ${meta.SWC_use}`,
     meta.ts_regression && meta.ts_regression !== "none" ? `TS from TA regression (${meta.ts_regression})` : "",
   ].filter(Boolean).join(" · ");
+
+  // the site alone, on the map and in climate space
+  const runRow = (tas[set]?.[model] || []).find((r) => r.site_ID === site);
+  siteMaps("geo", "clim", [meta], { category: () => (runRow ? tasClass(runRow.TAS, runRow.TASp) : "NA"),
+    label: `TAS class (${model})`, focus: true });
 
   // TAS by run, both models.
   const traces = ["total", "direct"].map((m, i) => {

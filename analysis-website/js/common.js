@@ -106,8 +106,10 @@ export function baseLayout(extra = {}) {
 
 // Two site maps, geographic and climate space (mean annual temperature from
 // the flux record vs annual precipitation, over Whittaker biomes), with
-// points coloured by `value(site)` (numeric) or `category(site)`.
-export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick } = {}) {
+// points coloured by `value(site)` (numeric) or `category(site)`. With
+// `focus`, for one site: the map zoomed in and centred on it, and the site
+// labelled in both.
+export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick, focus = false } = {}) {
   const biomes = await loadJSON("static/whittaker_biomes.json");
   const text = sites.map((s) => `${s.site_ID}<br>${s.IGBP}, ${s.Climate_class}<br>${label}: ${value ? fmt(value(s)) : category(s)}`);
   let marker;
@@ -120,17 +122,23 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, label 
     const cats = sites.map(category);
     marker = { color: cats.map((c) => CLASS_COLORS[c] || "#8c959f"), size: 9, line: { width: 0.5, color: "#333" } };
   }
-  const geo = [{ type: "scattergeo", lon: sites.map((s) => s.LONG), lat: sites.map((s) => s.LAT), text, hoverinfo: "text",
-    customdata: sites.map((s) => s.site_ID), mode: "markers", marker }];
-  Plotly.newPlot(geoDiv, geo, baseLayout({
-    geo: { projection: { type: "natural earth" }, showland: true, landcolor: "#f0f0f0", showcountries: true, countrycolor: "#ccc" },
-    margin: { l: 0, r: 0, t: 10, b: 0 },
-  }), PLOT_CONFIG);
+  if (focus) Object.assign(marker, { size: 14, line: { width: 1.5, color: "#000" } });
+  const mode = focus ? "markers+text" : "markers";
+  const labels = { text: sites.map((s) => s.site_ID), textposition: "top center", textfont: { size: 12 } };
+  const geo = [{ type: "scattergeo", lon: sites.map((s) => s.LONG), lat: sites.map((s) => s.LAT), hovertext: text, hoverinfo: "text",
+    customdata: sites.map((s) => s.site_ID), mode, marker, ...(focus ? labels : {}) }];
+  const geoLayout = { projection: { type: "natural earth" }, showland: true, landcolor: "#f0f0f0", showcountries: true, countrycolor: "#ccc" };
+  if (focus && sites.length) {
+    Object.assign(geoLayout, { center: { lat: sites[0].LAT, lon: sites[0].LONG }, projection: { type: "natural earth", scale: 8,
+      rotation: { lon: sites[0].LONG } }, showcoastlines: true, coastlinecolor: "#999", showlakes: true, lakecolor: "#dbe9f6",
+      showrivers: true, rivercolor: "#dbe9f6", showsubunits: true, subunitcolor: "#ddd" });
+  }
+  Plotly.newPlot(geoDiv, geo, baseLayout({ geo: geoLayout, margin: { l: 0, r: 0, t: 10, b: 0 } }), PLOT_CONFIG);
   const shapes = biomes.map((b, i) => ({ type: "scatter", x: b.precp_cm.map((p) => p * 10), y: b.temp_c, fill: "toself",
     mode: "lines", line: { width: 0.5, color: "#999" }, fillcolor: `hsla(${(i * 47) % 360}, 35%, 85%, 0.45)`,
     name: b.biome, hoverinfo: "name", showlegend: false }));
-  const clim = shapes.concat([{ type: "scatter", mode: "markers", x: sites.map((s) => s.MAP), y: sites.map((s) => s.MAT), text,
-    hoverinfo: "text", customdata: sites.map((s) => s.site_ID), marker, showlegend: false }]);
+  const clim = shapes.concat([{ type: "scatter", mode, x: sites.map((s) => s.MAP), y: sites.map((s) => s.MAT), hovertext: text,
+    hoverinfo: "text", customdata: sites.map((s) => s.site_ID), marker, showlegend: false, ...(focus ? labels : {}) }]);
   Plotly.newPlot(climDiv, clim, baseLayout({
     xaxis: { title: "Mean annual precipitation (mm)" }, yaxis: { title: "Mean annual air temperature (°C)" },
   }), PLOT_CONFIG);
