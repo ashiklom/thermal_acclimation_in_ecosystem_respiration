@@ -12,37 +12,72 @@
 # combine_tas_sites() binds per-site results in site_info order into the
 # published output tables.
 
-# Priors of the respiration models. Their means are re-centred window by
-# window, so they are passed to Stan as data (see tas_stanvars()) instead of
-# being written into the model code as numbers: the Stan program is then the
-# same for every window, year and site, and is compiled once.
+#' Priors of the temperature parameters
+#'
+#' Priors of the respiration models. Their means are re-centred window by window, so they are
+#' passed to Stan as data (see tas_stanvars()) instead of being written into the model code as
+#' numbers: the Stan program is then the same for every window, year and site, and is compiled
+#' once. These are the priors of C0, alpha and beta, shared by both models.
+#' @noRd
 priors_temp <- brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
   brms::prior("normal(alpha_mu, alpha_sd)", nlpar = "alpha", lb = 0, ub = 0.2) +
   brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.01, ub = 0.0)
 
+#' Prior of the soil-water parameter
+#'
+#' Prior of Hs, the soil water at which the soil-water factor SWC / (Hs + SWC) is one half, in
+#' the direct model with soil water.
+#' @noRd
 priors_water <- brms::prior("normal(Hs_mu, Hs_sd)", nlpar = "Hs", lb = 0, ub = 1000)
 
+#' Prior of the daytime-uptake parameter
+#'
+#' Prior of k2, the coefficient of the preceding days' daytime uptake (NEE_daytime) in the
+#' direct model's base respiration, C0 + NEE_daytime * k2.
+#' @noRd
 priors_gpp <- brms::prior("normal(k2_mu, k2_sd)", nlpar = "k2", lb = 0, ub = 10)
 
-# brms's default prior for the residual SD, student_t(3, 0, s), writes a
-# data-dependent s into the model code; pass s as data as well.
+#' Prior of the residual SD
+#'
+#' brms's default prior for the residual SD, student_t(3, 0, s), writes a data-dependent s into
+#' the model code; pass s as data as well.
+#' @noRd
 prior_sigma <- brms::prior("student_t(3, 0, sigma_scale)", class = "sigma")
 
-# Initial prior means and SDs. The SDs never change; the means are replaced by
-# the gsl_nls and pooled-window estimates.
+#' Initial prior means and SDs
+#'
+#' Initial prior means and SDs. The SDs never change; the means are replaced by the gsl_nls and
+#' pooled-window estimates.
+#' @noRd
 prior_defaults <- c(C0_mu = 2, C0_sd = 5, alpha_mu = 0.1, alpha_sd = 1, beta_mu = -0.001, beta_sd = 0.1,
                     Hs_mu = 10, Hs_sd = 10, k2_mu = 0.5, k2_sd = 2)
 
-# The prior values of the parameters in `priors`, from `prior_values`, plus
-# brms's default residual-SD scale for `formula` and `data`, as stanvars.
+#' Prior values as Stan data
+#'
+#' The prior values of the parameters in `priors`, from `prior_values`, plus brms's default
+#' residual-SD scale for `formula` and `data`, as stanvars.
+#'
+#' @param prior_values Named prior means and SDs (<par>_mu, <par>_sd), as in prior_defaults.
+#' @param priors The priors of the nonlinear parameters (brmsprior).
+#' @param formula The model formula (brms::bf()).
+#' @param data The data the model is fitted to.
+#' @return A brms stanvars object.
+#' @noRd
 tas_stanvars <- function(prior_values, priors, formula, data) {
   names <- as.vector(outer(c("_mu", "_sd"), priors$nlpar[nzchar(priors$nlpar)], function(suffix, par) paste0(par, suffix)))
   values <- c(prior_values[names], sigma_scale = default_sigma_scale(formula, data))
   Reduce(`+`, Map(function(value, name) brms::stanvar(value, name = name), unname(values), names(values)))
 }
 
-# The scale brms would use for its default student_t(3, 0, scale) prior on
-# the residual SD of `formula` fitted to `data`.
+#' brms's default residual-SD scale
+#'
+#' The scale brms would use for its default student_t(3, 0, scale) prior on the residual SD of
+#' `formula` fitted to `data`.
+#'
+#' @param formula The model formula (brms::bf()).
+#' @param data The data the model is fitted to.
+#' @return A number.
+#' @noRd
 default_sigma_scale <- function(formula, data) {
   dp <- brms::default_prior(formula, data = data)
   scale <- sub("^student_t\\(3, 0, (.*)\\)$", "\\1", dp$prior[dp$class == "sigma" & !nzchar(dp$coef)])
@@ -50,9 +85,15 @@ default_sigma_scale <- function(formula, data) {
   as.numeric(scale)
 }
 
-# Sampler settings. "full" (the default) is the published setting; "fast"
-# (TAS_FIT_PROFILE=fast) is only for checking that the code runs end to end:
-# its TAS values are not results.
+#' Sampler settings
+#'
+#' Sampler settings. "full" (the default) is the published setting; "fast"
+#' (TAS_FIT_PROFILE=fast) is only for checking that the code runs end to end: its TAS values are
+#' not results.
+#'
+#' @param profile "full" or "fast".
+#' @return list(profile, chains, cores, pooled_iter, year_iter, retry, retry_iter).
+#' @noRd
 tas_fit_settings <- function(profile = Sys.getenv("TAS_FIT_PROFILE", "full")) {
   switch(profile,
     full = list(profile = "full", chains = 4, cores = 4, pooled_iter = 2000, year_iter = 1000, retry = TRUE, retry_iter = 4000),
@@ -61,35 +102,54 @@ tas_fit_settings <- function(profile = Sys.getenv("TAS_FIT_PROFILE", "full")) {
   )
 }
 
-# Sites to use for small local runs: together they exercise every
-# site-specific code path of steps 01-02 (southern-hemisphere wrap and hourly
-# data: AU-Tum; AmeriFlux with measured soil water: US-Uaf; TS ~ TA
-# regression, TS >= 2 floor and ERA5 soil water: US-GLE; estimated soil
-# temperature and TS >= 2 floor: CH-Dav; TS ~ TA regression and the NEE < 0
-# season rule: DE-RuC; the night-data regression domain: US-Tw1;
-# random-forest soil temperature and PI soil water: FR-Pue).
+#' Sites for small local runs
+#'
+#' Sites to use for small local runs: together they exercise every site-specific code path of
+#' steps 01-02 (southern-hemisphere wrap and hourly data: AU-Tum; AmeriFlux with measured soil
+#' water: US-Uaf; TS ~ TA regression, TS >= 2 floor and ERA5 soil water: US-GLE; estimated soil
+#' temperature and TS >= 2 floor: CH-Dav; TS ~ TA regression and the NEE < 0 season rule:
+#' DE-RuC; the night-data regression domain: US-Tw1; random-forest soil temperature and PI soil
+#' water: FR-Pue).
+#' @noRd
 DEV_SITES <- c("AU-Tum", "US-Uaf", "US-GLE", "CH-Dav", "DE-RuC", "US-Tw1", "FR-Pue")
 
-# A reproducible seed for one brm() fit, derived from what identifies the fit
-# (site, model, window, year or "pooled", retry), so a fit's result does not
-# depend on which fits ran before it or in which process.
+#' Reproducible seed of one fit
+#'
+#' A reproducible seed for one brm() fit, derived from what identifies the fit (site, model,
+#' window, year or "pooled", retry), so a fit's result does not depend on which fits ran before
+#' it or in which process.
+#'
+#' @param ... Values identifying the fit, pasted together with "|".
+#' @return An integer (from the first 7 hex digits of the key's xxhash32 hash).
+#' @noRd
 tas_seed <- function(...) {
   key <- paste(..., sep = "|")
   strtoi(substr(digest::digest(key, algo = "xxhash32", serialize = FALSE), 1, 7), 16L)
 }
 
-# Compile each model's Stan program once per machine. cmdstanr keys compiled
-# programs by a hash of their code in this directory, so once a program is
-# compiled every later brm() call, in this or any other R process, reuses the
-# executable (the code no longer depends on the data or the priors).
+#' Use the compiled-model cache
+#'
+#' Compile each model's Stan program once per machine. cmdstanr keys compiled programs by a
+#' hash of their code in this directory, so once a program is compiled every later brm() call,
+#' in this or any other R process, reuses the executable (the code no longer depends on the data
+#' or the priors).
+#'
+#' @param dir The cache directory (created if needed).
+#' @return The previous option values, invisibly (as options() returns them).
+#' @noRd
 use_stan_cache <- function(dir = path_proc("stan-cache")) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   options(cmdstanr_write_stan_file_dir = normalizePath(dir))
 }
 
-# Compile the total and direct models (brm() without sampling) into the
-# cache. Run this once before fitting sites in parallel processes, so they
-# never compile the same program at the same time.
+#' Compile the TAS models
+#'
+#' Compile the total and direct models (brm() without sampling) into the cache. Run this once
+#' before fitting sites in parallel processes, so they never compile the same program at the
+#' same time.
+#'
+#' @return NULL, invisibly.
+#' @noRd
 compile_tas_models <- function() {
   data <- data.frame(NEE = c(1, 2, 3, 2), TS = c(5, 10, 15, 20), SWC = c(20, 25, 30, 35), NEE_daytime = c(1, 2, 3, 4))
   models <- list(tas_model("total"), tas_model("direct", swc = TRUE))
@@ -101,16 +161,31 @@ compile_tas_models <- function() {
   invisible(NULL)
 }
 
+#' Empty outcome table
+#'
+#' The typed empty outcome table that estimate_tas() fills.
+#'
+#' @return A data frame with no rows: site_ID, RMSE, R2, control_year, window_size, nwindow,
+#'   TAS, TASp, TAS_se.
+#' @noRd
 new_outcome <- function() {
   data.frame(site_ID = character(), RMSE = double(), R2 = double(), control_year = double(), window_size = integer(),
              nwindow = integer(), TAS = double(), TASp = double(), TAS_se = double())
 }
 
-# The respiration model of each TAS type, as brms and gsl_nls formulas with
-# their priors and starting values. The total model relates nighttime NEE to
-# soil temperature only; the direct model also to soil water (where it is
-# available) and to the preceding days' daytime uptake. `pars` are the
-# nonlinear parameters whose prior means are re-centred window by window.
+#' Respiration model of a TAS type
+#'
+#' The respiration model of each TAS type, as brms and gsl_nls formulas with their priors and
+#' starting values. The total model relates nighttime NEE to soil temperature only; the direct
+#' model also to soil water (where it is available) and to the preceding days' daytime uptake.
+#' `pars` are the nonlinear parameters whose prior means are re-centred window by window.
+#'
+#' @param model_type "direct" or "total".
+#' @param swc Whether the direct model includes soil water.
+#' @return list(frmu, param, priors, frmu_nls, stprm, pars): the brms formula and the formula of
+#'   its nonlinear parameters, their priors, the gsl_nls formula (log-scale parameters) and its
+#'   starting values, and `pars`.
+#' @noRd
 tas_model <- function(model_type = c("direct", "total"), swc = TRUE) {
   model_type <- match.arg(model_type)
   # The priors below are combined with brms's `+` method, which only exists
@@ -150,8 +225,15 @@ tas_model <- function(model_type = c("direct", "total"), swc = TRUE) {
   }
 }
 
-# Prior mean for `par` from the log-scale gsl_nls estimates, capped at the
-# prior's bound (beta is negative).
+#' Prior mean from a gsl_nls estimate
+#'
+#' Prior mean for `par` from the log-scale gsl_nls estimates, capped at the prior's bound (beta
+#' is negative).
+#'
+#' @param coefs The gsl_nls coefficients (named <par>_ln).
+#' @param par Parameter: "alpha", "beta", "C0", "k2" or "Hs".
+#' @return A number (named, from `coefs`).
+#' @noRd
 nls_prior_mean <- function(coefs, par) {
   switch(par,
     alpha = min(exp(coefs["alpha_ln"]), 0.2),
@@ -162,6 +244,41 @@ nls_prior_mean <- function(coefs, par) {
   )
 }
 
+#' Estimate a site's TAS with moving windows (step 02)
+#'
+#' Estimates either TAS type for one site: "total" (02_01a; respiration as a function of soil
+#' temperature only) or "direct" (02_01b; soil temperature plus soil water and the preceding
+#' days' daytime uptake), which differ only in the respiration model (tas_model()). It has no
+#' site-specific logic: it takes the inputs prepared by prepare_tas_inputs() (R/step02-prep.R)
+#' as arguments.
+#'
+#' The growing season is split into non-overlapping windows of `window_size` days. In each
+#' window whose mean soil temperature is within max(tStart, 2)..tEnd (when there is more than
+#' one window), a model pooled over years (priors centred on a gsl_nls fit) gives the priors of
+#' a model per growing year (the window widened 3 days at a time, by at most 24, until it has
+#' `nobs_threshold` records whose 2.5-97.5% soil-temperature quantiles span the window's
+#' reference soil temperature; refitted once on failure or divergent transitions if
+#' sampler$retry). Each year's respiration at the window's reference
+#' conditions, relative to the control year's, gives lnRatio; extreme values are dropped. TAS
+#' is the soil-temperature slope of a GLS of lnRatio on TS and window with AR(1) errors across
+#' years.
+#'
+#' @param site_id Site ID.
+#' @param night The nighttime table (with growing_year).
+#' @param ac The half-hourly table (with growing_year).
+#' @param ac_day Daily daytime NEE (with DOY and NEE_daytime).
+#' @param gStart Growing-season start (day of year).
+#' @param gEnd Growing-season end (day of year).
+#' @param tStart Lower end of the soil-temperature range (deg C).
+#' @param tEnd Upper end of the soil-temperature range (deg C).
+#' @param nobs_threshold Minimum number of observations of a window-year before widening it.
+#' @param control_year The control growing year.
+#' @param model_type "direct" or "total".
+#' @param window_size Window length (days).
+#' @param sampler Sampler settings (tas_fit_settings()).
+#' @return list(outcome = <one row of outcome_*.csv>, siteyear = <the site's rows of
+#'   outcome_siteyear_*.csv>, fit_profile = <the sampler profile's name>).
+#' @noRd
 estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd, nobs_threshold, control_year,
                          model_type = c("direct", "total"), window_size = 14, sampler = tas_fit_settings()) {
   model_type <- match.arg(model_type)
@@ -358,8 +475,14 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
   list(outcome = outcome, siteyear = df_site_year_window, fit_profile = sampler$profile)
 }
 
-# Bind per-site results (list(outcome, siteyear)), given in site_info order,
-# into the two output tables.
+#' Combine per-site TAS results
+#'
+#' Bind per-site results (list(outcome, siteyear)), given in site_info order, into the two
+#' output tables.
+#'
+#' @param results A list of estimate_tas() results.
+#' @return list(outcome, siteyear) of data frames.
+#' @noRd
 combine_tas_sites <- function(results) {
   list(
     outcome = do.call(rbind, lapply(results, `[[`, "outcome")),

@@ -9,9 +9,21 @@
 #   driver_data()          the table 03_02 analyses (acclimation_data.csv),
 #                          for a given set of total and direct TAS estimates
 
-# Annual and diel NEE totals and air/soil temperature statistics of one site,
-# over the years kept in its nighttime table. Returns one row with the
-# columns 03_01's stat.climate table had.
+#' Climate statistics of one site (03_01)
+#'
+#' Annual and diel NEE totals and air/soil temperature statistics of one site, over the years
+#' kept in its nighttime table. Returns one row with the columns 03_01's stat.climate table had.
+#'
+#' @param site_id Site ID.
+#' @param ac The site's step-01 half-hourly table.
+#' @param a_measure_night_complete The site's step-01 nighttime table.
+#' @return A one-row data frame: site_ID; NEE, NEE_day, NEE_night (mean annual totals, g C m-2);
+#'   MATA, SSTA, IATA, DRTA, RSTA and MATS, SSTS, IATS, DRTS, RSTS (air and soil temperature: MA
+#'   mean annual, SS seasonal variation, IA inter-annual variation, DR daily range, RS seasonal
+#'   range); NEE2, NEE_day2, NEE_night2 (totals of the mean diel cycle of every day of year);
+#'   warm_rate and warm_ratep (linear trend of annual mean air temperature, deg C per year, and
+#'   its p-value; CH-Aws from 2015 on).
+#' @noRd
 site_climate_stats <- function(site_id, ac, a_measure_night_complete) {
   ac <- ac[order(ac$YEAR, ac$DOY, ac$HOUR, ac$MINUTE), ]
   good_years <- unique(a_measure_night_complete$YEAR)
@@ -96,9 +108,18 @@ site_climate_stats <- function(site_id, ac, a_measure_night_complete) {
   out
 }
 
-# Soil organic carbon per site: measured (AmeriFlux BIF, g C kg-1) where
-# available, otherwise the GSOC map (t/ha) corrected by its regression on the
-# measured values.
+#' Soil organic carbon per site
+#'
+#' Soil organic carbon per site: measured (AmeriFlux BIF, g C kg-1) where available, otherwise
+#' the GSOC map (t/ha) corrected by its regression on the measured values. As coded, SOC is the
+#' GSOC map value where there are no measurements and, where there are, the GSOC value predicted
+#' from the measurement by lm(GSOC ~ soc_obs).
+#'
+#' @param site_info data/site_info.csv (site_ID, LAT, LONG).
+#' @param bif_file The AmeriFlux BIF table (CSV).
+#' @param gsoc_file The GSOC map (raster).
+#' @return A data frame, one row per site: site_ID, GSOC, soc_obs, GSOC_obs, SOC.
+#' @noRd
 soil_carbon <- function(site_info, bif_file, gsoc_file) {
   BIF <- utils::read.csv(bif_file)
   BIF.site <- BIF |> dplyr::filter(.data$SITE_ID %in% site_info$site_ID) |> dplyr::filter(.data$VARIABLE == 'SOIL_CHEM_C_ORG') |>
@@ -115,9 +136,17 @@ soil_carbon <- function(site_info, bif_file, gsoc_file) {
                                                     !is.na(.data$GSOC_obs) ~ .data$GSOC_obs))
 }
 
-# Site means of MODIS EVI and NDVI (MOD13A2), Fpar and LAI (MOD15A2H) and GPP
-# (MYD17A2HGF, kg C m-2 yr-1): monthly means of good-quality values,
-# interpolated over months without any, then averaged.
+#' Site means of MODIS indices
+#'
+#' Site means of MODIS EVI and NDVI (MOD13A2), Fpar and LAI (MOD15A2H) and GPP (MYD17A2HGF, kg C
+#' m-2 yr-1): monthly means of good-quality values, interpolated over months without any, then
+#' averaged.
+#'
+#' @param mod13_file MOD13A2 extraction (CSV).
+#' @param mod15_file MOD15A2H extraction (CSV).
+#' @param myd17_file MYD17A2HGF extraction (CSV).
+#' @return A data frame, one row per site: ID, EVI, NDVI, Fpar, LAI, GPP.
+#' @noRd
 spectral_indices <- function(mod13_file, mod15_file, myd17_file) {
   file1    <- utils::read.csv(mod13_file)  ##EVI and NDVI
   good_vi <- file1$MOD13A2_061__1_km_16_days_VI_Quality_MODLAND_Description %in% c("VI produced, good quality", "VI produced, but check other QA")
@@ -155,9 +184,20 @@ spectral_indices <- function(mod13_file, mod15_file, myd17_file) {
   VI |> dplyr::left_join(LAI, by='ID') |> dplyr::left_join(GPP, by="ID")
 }
 
-# The driver-analysis table (03_01's acclimation_data.csv) for one set of TAS
-# estimates: site metadata, climate statistics, MODIS indices, soil carbon,
-# and total (TAS_tot) and direct (TAS) TAS with their p-values.
+#' The driver-analysis table
+#'
+#' The driver-analysis table (03_01's acclimation_data.csv) for one set of TAS estimates: site
+#' metadata, climate statistics, MODIS indices, soil carbon, and total (TAS_tot) and direct
+#' (TAS) TAS with their p-values.
+#'
+#' @param site_info data/site_info.csv.
+#' @param climate_stats site_climate_stats() rows of all sites.
+#' @param spectral spectral_indices()'s table.
+#' @param soil soil_carbon()'s table.
+#' @param tas_total The total model's outcome table (site_ID, TAS, TASp).
+#' @param tas_direct The direct model's outcome table (site_ID, TAS, TASp).
+#' @return A data frame, one row per site of `site_info`.
+#' @noRd
 driver_data <- function(site_info, climate_stats, spectral, soil, tas_total, tas_direct) {
   tas_total <- tas_total |> dplyr::rename("TAS_tot" = "TAS", "TAS_totp" = "TASp")
   site_info[, c("site_ID", "LAT", "LONG", "ELEV", "IGBP", "Climate_class", "MAP")] |>
@@ -168,15 +208,22 @@ driver_data <- function(site_info, climate_stats, spectral, soil, tas_total, tas
     dplyr::left_join(tas_direct[, c('site_ID', 'TAS', 'TASp')], by = "site_ID")
 }
 
-# Workflow step 03_02: random-forest attribution of thermal response strength
-# to its drivers (elevation, mean annual air temperature, LAI, soil carbon and
-# warming rate), for direct TAS, total TAS and apparent TAS (total - direct).
-# Returns list(varImp, partial): mean permutation importance (%) over 50
-# forests, and partial dependence with bootstrap quantiles (200 forests on
-# climate-and-vegetation-stratified bootstrap samples). Random numbers are
-# drawn in the published script's order from `seed` (985), so results are
-# reproducible; the caret tuning step is kept only because it draws from the
-# same random stream before the published forests.
+#' Random-forest attribution of TAS to its drivers (03_02)
+#'
+#' Workflow step 03_02: random-forest attribution of thermal response strength to its drivers
+#' (elevation, mean annual air temperature, LAI, soil carbon and warming rate), for direct TAS,
+#' total TAS and apparent TAS (total - direct). Returns list(varImp, partial): mean permutation
+#' importance (%) over 50 forests, and partial dependence with bootstrap quantiles (200 forests
+#' on climate-and-vegetation-stratified bootstrap samples). Random numbers are drawn in the
+#' published script's order from `seed` (985), so results are reproducible; the caret tuning
+#' step is kept only because it draws from the same random stream before the published forests.
+#'
+#' @param acclimation The driver table (driver_data()).
+#' @param seed Random seed.
+#' @return list(varImp, partial): rf_importance() and rf_partial_bootstrap() tables of the three
+#'   TAS types, with TRS_type ("TAS_direct", "TAS_tot" or "TAS_app" in varImp; "TAS_direct",
+#'   "TAS_total" or "TAS_app" in partial).
+#' @noRd
 driver_analysis <- function(acclimation, seed = 985) {
   acclimation$TAS_app <- acclimation$TAS_tot - acclimation$TAS
   acclimation$climate_vegetation <- paste0(acclimation$Climate_class, '_', acclimation$IGBP)
@@ -206,8 +253,16 @@ driver_analysis <- function(acclimation, seed = 985) {
   )
 }
 
-# Mean non-negative permutation importance (type 1, scaled), as % of the
-# total, over `times` forests of `response` on the other columns of `data`.
+#' Permutation importance over repeated forests
+#'
+#' Mean non-negative permutation importance (type 1, scaled), as % of the total, over `times`
+#' forests of `response` on the other columns of `data`.
+#'
+#' @param data The response and its predictors.
+#' @param response Name of the response column.
+#' @param times Number of forests.
+#' @return A data frame: var, varImp.
+#' @noRd
 rf_importance <- function(data, response, times = 50) {
   formula <- stats::as.formula(paste(response, "~ ."))
   ri_var <- matrix(NA_real_, nrow = times, ncol = ncol(data) - 1)
@@ -219,9 +274,20 @@ rf_importance <- function(data, response, times = 50) {
   data.frame(var = rownames(randomForest::importance(rf0, type = 1, scale = TRUE)), varImp = colMeans(ri_var, na.rm = TRUE))
 }
 
-# Partial dependence of `response` on each predictor, with 2.5/5/50/95/97.5%
-# quantiles over forests fitted to `times` bootstrap samples of `data_strat`
-# stratified by climate_vegetation, evaluated over `pred_data`.
+#' Partial dependence with bootstrap quantiles
+#'
+#' Partial dependence of `response` on each predictor, with 2.5/5/50/95/97.5% quantiles over
+#' forests fitted to `times` bootstrap samples of `data_strat` stratified by
+#' climate_vegetation, evaluated over `pred_data`.
+#'
+#' @param data_strat The response, the five predictors and climate_vegetation (forests are
+#'   fitted to the first six columns).
+#' @param response Name of the response column.
+#' @param pred_data Data over which partial dependence is evaluated.
+#' @param times Number of bootstrap samples.
+#' @return A data frame: var (elev, mat, lai, soc, warm_rate), x, y025, y050, y (median), y950,
+#'   y975, x_norm (x standardised within var).
+#' @noRd
 rf_partial_bootstrap <- function(data_strat, response, pred_data, times = 200) {
   formula <- stats::as.formula(paste(response, "~ ."))
   vars <- c(elev = "ELEV", mat = "MATA", lai = "LAI", soc = "SOC", warm_rate = "warm_rate")

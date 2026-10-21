@@ -28,11 +28,32 @@
 # some metric, are best or within a margin of the third best (TS_MARGIN), and
 # the four reference columns.
 
+#' Reference soil-temperature columns
+#'
+#' The columns always carried forward to the fits.
+#' @noRd
 TS_REFERENCE_COLUMNS <- c("TS_original", "TS_reconstructed", "TS_manuscript", "TS_linear")
-# a value counts as "close to the top 3" if within 10% of the third best
-# (lower-is-better metrics) or 0.01 of it (r2)
+#' Margin of the top estimators
+#'
+#' A value counts as "close to the top 3" if within 10% of the third best (lower-is-better
+#' metrics) or 0.01 of it (r2).
+#' @noRd
 TS_MARGIN <- list(relative = 0.10, r2 = 0.01)
 
+#' Error metrics against the sensor
+#'
+#' Agreement of predictions with observations: rmse, bias (prediction - observation), r2 (squared
+#' correlation), sd_ratio (sd prediction / sd observation), cell_sd (mean within day-of-year x
+#' hour sd of the error) and year_sd (sd of the yearly mean error); NA with fewer than two
+#' complete pairs.
+#'
+#' @param pred Predicted soil temperature.
+#' @param obs Observed soil temperature.
+#' @param doy Day of year of each value.
+#' @param hour Hour of each value.
+#' @param year Year of each value.
+#' @return A one-row data frame: n, rmse, bias, r2, sd_ratio, cell_sd, year_sd.
+#' @noRd
 ts_error_metrics <- function(pred, obs, doy, hour, year) {
   ok <- !is.na(pred) & !is.na(obs)
   if (sum(ok) < 2) {
@@ -47,9 +68,18 @@ ts_error_metrics <- function(pred, obs, doy, hour, year) {
              cell_sd = mean(cell_sd, na.rm = TRUE), year_sd = if (length(year_bias) > 1) stats::sd(year_bias) else NA_real_)
 }
 
-# Leave-one-year-out predictions of every estimator at the sensor's real
-# data, and their error metrics (one row per estimator). Forests are trained
-# on at most 20,000 records here (60,000 for the columns themselves).
+#' Out-of-fold error metrics of the estimators
+#'
+#' Leave-one-year-out predictions of every estimator at the sensor's real data, and their error
+#' metrics (one row per estimator). Forests are trained on at most 20,000 records here (60,000
+#' for the columns themselves).
+#'
+#' @param step01 The site's step-01 list.
+#' @param sensor read_ts_sensor()'s table.
+#' @param settings The site's row of data/site_settings.csv.
+#' @return A data frame: column, n_years_cv and ts_error_metrics()'s columns; metrics NA if
+#'   fewer than two years have real data.
+#' @noRd
 ts_cv_metrics <- function(step01, sensor, settings) {
   base <- step01$ts_base
   s <- sensor[match(base$TIMESTAMP, sensor$TIMESTAMP), ]
@@ -79,8 +109,14 @@ ts_cv_metrics <- function(step01, sensor, settings) {
   }))
 }
 
-# Agreement of the reference columns with the sensor's real readings (as
-# they are).
+#' Error metrics of the reference columns
+#'
+#' Agreement of the reference columns (TS_reconstructed and TS_manuscript) with the sensor's
+#' real readings (as they are).
+#'
+#' @param table The site's ts_columns table (ts_columns_table()).
+#' @return A data frame: column, n_years_cv (NA) and ts_error_metrics()'s columns.
+#' @noRd
 ts_reference_metrics <- function(table) {
   rows <- which(table$TS_truth)
   do.call(rbind, lapply(c("TS_reconstructed", "TS_manuscript"), function(column) {
@@ -89,8 +125,17 @@ ts_reference_metrics <- function(table) {
   }))
 }
 
-# Plausibility of each column against air temperature over the growing
-# season (rows of `table`, the site's ts_columns table, with TA).
+#' Plausibility of the columns against air temperature
+#'
+#' Plausibility of each column against air temperature over the growing season (rows of
+#' `table`, the site's ts_columns table, with TA); see the file header for the metrics.
+#'
+#' @param table The site's ts_columns table (ts_columns_table()).
+#' @param gStart Growing-season start (day of year).
+#' @param gEnd Growing-season end (day of year).
+#' @return A data frame, one row per column: column, amp_ratio, lag_h, offset, stuck, spikes,
+#'   d_amp, d_lag, d_offset.
+#' @noRd
 ts_plausibility <- function(table, gStart, gEnd) {
   gs <- dplyr::between(table$DOY, gStart, gEnd)
   date <- lubridate::make_date(table$YEAR, table$MONTH, table$DAY)
@@ -126,7 +171,18 @@ ts_plausibility <- function(table, gStart, gEnd) {
   out
 }
 
-# All quality metrics of a site's columns: one row per column.
+#' Quality metrics of a site's columns
+#'
+#' All quality metrics of a site's columns: one row per column.
+#'
+#' @param site_id Site ID.
+#' @param table The site's ts_columns table (ts_columns_table()).
+#' @param summary The site's columns summary (ts_columns_summary()).
+#' @param cv The estimators' out-of-fold metrics (ts_cv_metrics()).
+#' @param feature The site's step-01 growing-season features (gStart, gEnd).
+#' @return A data frame: site_ID, column, the coverage columns, and the agreement and
+#'   plausibility metrics.
+#' @noRd
 ts_quality <- function(site_id, table, summary, cv, feature) {
   agreement <- rbind(cv, ts_reference_metrics(table))
   plaus <- ts_plausibility(table, feature$gStart, feature$gEnd)
@@ -136,17 +192,26 @@ ts_quality <- function(site_id, table, summary, cv, feature) {
   cbind(site_ID = site_id, out)
 }
 
-# Metrics that rank the estimators (lower is better, except r2), as
-# functions of the quality table.
+#' Metrics that rank the estimators
+#'
+#' Metrics that rank the estimators (lower is better, except r2), as functions of the quality
+#' table.
+#' @noRd
 TS_RANK_METRICS <- list(
   rmse = function(q) q$rmse, abs_bias = function(q) abs(q$bias), r2 = function(q) q$r2,
   sd_ratio = function(q) abs(q$sd_ratio - 1), cell_sd = function(q) q$cell_sd, year_sd = function(q) q$year_sd,
   d_amp = function(q) q$d_amp, d_lag = function(q) q$d_lag, d_offset = function(q) q$d_offset
 )
 
-# Rank the estimators at every site under every metric: one row per site,
-# metric and estimator, with its value, rank, and whether it is best or
-# within the margin of the third best ("top").
+#' Rank the estimators
+#'
+#' Rank the estimators at every site under every metric: one row per site, metric and
+#' estimator, with its value, rank, and whether it is best or within the margin of the third
+#' best ("top").
+#'
+#' @param quality ts_quality() rows of all sites.
+#' @return A data frame: site_ID, metric, column, value, rank, top.
+#' @noRd
 rank_ts_columns <- function(quality) {
   estimators <- paste0("TS_", names(ts_estimators()))
   q <- quality[quality$column %in% estimators, ]
@@ -167,8 +232,14 @@ rank_ts_columns <- function(quality) {
   }))
 }
 
-# The columns the fits are run with: the reference columns and every
-# estimator that is "top" somewhere.
+#' Columns the fits are run with
+#'
+#' The columns the fits are run with: the reference columns and every estimator that is "top"
+#' somewhere.
+#'
+#' @param ranking rank_ts_columns()'s table.
+#' @return A character vector of column names.
+#' @noRd
 select_ts_methods <- function(ranking) {
   winners <- unique(ranking$column[ranking$top])
   estimators <- paste0("TS_", names(ts_estimators()))

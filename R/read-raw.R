@@ -19,6 +19,11 @@
 # its start or after its end; used for the data update, where the newest
 # release comes first).
 
+#' Directories of the raw site-data products
+#'
+#' Each product's directory below the raw-data root (see the file header for the file names in
+#' each), by product name.
+#' @noRd
 raw_product_dirs <- list(
   AmeriFlux_BASE = "AmeriFlux_BASE",
   FLUXNET2015 = file.path("FLUXNET2015", "unzip"),
@@ -29,15 +34,35 @@ raw_product_dirs <- list(
   SHUTTLE = file.path("SHUTTLE", "unzip")
 )
 
-# Products downloaded for the data update, read from path_raw("flux").
+#' Products of the data update
+#'
+#' Products downloaded for the data update, read from path_raw("flux") whatever `base_dir`.
+#' @noRd
 update_products <- c("SHUTTLE")
 
-# The products named by a site's source.
+#' Products named by a site's source
+#'
+#' The products named by a site's source: its parts split at "_" or "+", except that
+#' "AmeriFlux_BASE" is one product.
+#'
+#' @param source The site's `source` (data/site_info.csv).
+#' @return A character vector of product names, in the source's order.
+#' @noRd
 source_products <- function(source) {
   if (source == "AmeriFlux_BASE") "AmeriFlux_BASE" else strsplit(source, "[_+]")[[1]]
 }
 
-# Path of a site's file of one product.
+#' Path of a site's file of one product
+#'
+#' Matches the product's file-name pattern (see the file header) in the product's directory
+#' under `base_dir`, or under path_raw("flux") for the products of the data update
+#' (update_products). Stops unless exactly one file matches.
+#'
+#' @param site_id Site ID.
+#' @param product Product name, one of names(raw_product_dirs).
+#' @param base_dir Root of the raw site data (not used for the products of the data update).
+#' @return The file's path.
+#' @noRd
 raw_product_file <- function(site_id, product, base_dir = path_original("SiteData")) {
   site_re <- gsub("-", "\\\\-", site_id)
   pattern <- switch(product,
@@ -58,26 +83,56 @@ raw_product_file <- function(site_id, product, base_dir = path_original("SiteDat
   files
 }
 
-# A site's AmeriFlux BASE half-hourly table, with parsed timestamps
-# (TIMESTAMP, YEAR, MONTH, DAY, DOY, HOUR, MINUTE; local standard time).
+#' Read a site's AmeriFlux BASE table
+#'
+#' A site's AmeriFlux BASE half-hourly table, read from its zip with amerifluxr, with parsed
+#' timestamps (TIMESTAMP, YEAR, MONTH, DAY, DOY, HOUR, MINUTE; local standard time).
+#'
+#' @param site_id Site ID.
+#' @param base_dir Root of the raw site data.
+#' @return A data frame, one row per record.
+#' @noRd
 read_ameriflux_base <- function(site_id, base_dir = path_original("SiteData")) {
   amerifluxr::amf_read_base(raw_product_file(site_id, "AmeriFlux_BASE", base_dir), parse_timestamp = TRUE, unzip = TRUE)
 }
 
-# A site's table from one FLUXNET-format product (FLUXNET2015/2020/2025,
-# ICOS2025, ICOS2020), as read.csv() reads it.
+#' Read a site's table from one FLUXNET-format product
+#'
+#' A site's table from one FLUXNET-format product (FLUXNET2015/2020/2025, ICOS2025, ICOS2020,
+#' or SHUTTLE), as read.csv() reads it (missing values still coded -9999).
+#'
+#' @param site_id Site ID.
+#' @param product Product name.
+#' @param base_dir Root of the raw site data.
+#' @return A data frame, one row per record.
+#' @noRd
 read_fluxnet <- function(site_id, product, base_dir = path_original("SiteData")) {
   utils::read.csv(raw_product_file(site_id, product, base_dir))
 }
 
-# A site's FLUXNET-format record from its source (see above).
+#' Read a site's FLUXNET-format record from its source
+#'
+#' Reads each product of the site's source and combines them (see the file header): spliced
+#' (splice_products()) if the source joins them by "+", else stitched (stitch_products()).
+#'
+#' @param site_id Site ID.
+#' @param source The site's `source` (data/site_info.csv).
+#' @param base_dir Root of the raw site data.
+#' @return A data frame, one row per record.
+#' @noRd
 read_fluxnet_record <- function(site_id, source, base_dir = path_original("SiteData")) {
   tables <- lapply(source_products(source), function(product) read_fluxnet(site_id, product, base_dir))
   if (grepl("+", source, fixed = TRUE)) splice_products(tables) else stitch_products(tables)
 }
 
-# The first table's records, plus each later table's records before the
-# start or after the end of the record so far; sorted by time.
+#' Splice product tables, the first one winning
+#'
+#' The first table's records, plus each later table's records before the start or after the end
+#' of the record so far; sorted by time.
+#'
+#' @param tables List of FLUXNET-format data frames with TIMESTAMP_START, the first one winning.
+#' @return A data frame sorted by TIMESTAMP_START.
+#' @noRd
 splice_products <- function(tables) {
   a <- tables[[1]]
   for (next_table in tables[-1]) {
@@ -87,6 +142,15 @@ splice_products <- function(tables) {
   a[order(a$TIMESTAMP_START), , drop = FALSE]
 }
 
+#' Stitch product tables end to end
+#'
+#' Each later table (sorted by time) only adds its records after the end of the record so far,
+#' as the original scripts did. If the later table has no record at the last TIMESTAMP_START so
+#' far, all of its records are added.
+#'
+#' @param tables List of FLUXNET-format data frames with TIMESTAMP_START, in source order.
+#' @return A data frame.
+#' @noRd
 stitch_products <- function(tables) {
   by_time <- function(x) x[order(x$TIMESTAMP_START), , drop = FALSE]
   a <- by_time(tables[[1]])

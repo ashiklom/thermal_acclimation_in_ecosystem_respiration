@@ -9,10 +9,19 @@
 #                          total thermal response
 #   scenario_data()        04_02's acclimation_data_future_ssp245.csv table
 
-# Monthly minimum-temperature change (Tmin1..Tmin12, deg C) at each site: the
-# mean over GCMs of the 2041-2060 monthly means minus the mean of the
-# 2000-2020 monthly series, averaged over the site's cell and its four rook
-# neighbours.
+#' Monthly minimum-temperature change per site (04_01)
+#'
+#' Monthly minimum-temperature change (Tmin1..Tmin12, deg C) at each site: the mean over GCMs of
+#' the 2041-2060 monthly means minus the mean of the 2000-2020 monthly series, averaged over the
+#' site's cell and its four rook neighbours.
+#'
+#' @param site_info data/site_info.csv (site_ID, LAT, LONG).
+#' @param baseline_files The baseline monthly GeoTIFFs (names ending in the two-digit month).
+#' @param future_files The future 12-layer GeoTIFFs, one per GCM; those whose path contains
+#'   `ssp` are used.
+#' @param ssp Scenario name.
+#' @return A data frame: site_ID, Tmin1..Tmin12.
+#' @noRd
 future_tmin_change <- function(site_info, baseline_files, future_files, ssp = "ssp245") {
   xy <- data.frame(x=site_info$LONG, y=site_info$LAT)
   base_line <- terra::rast()
@@ -40,9 +49,14 @@ future_tmin_change <- function(site_info, baseline_files, future_files, ssp = "s
   Tmin_month
 }
 
-# The respiration model of 04_02: the total model of step 02, but with the
-# beta prior bounded at -0.02 and fixed (not re-centred) prior means; like
-# step 02 its prior values and residual-SD scale reach Stan as data.
+#' Priors of the scenario model
+#'
+#' The respiration model of 04_02: the total model of step 02, but with the beta prior bounded
+#' at -0.02 and fixed (not re-centred) prior means; like step 02 its prior values and
+#' residual-SD scale reach Stan as data.
+#'
+#' @return The priors of C0, alpha and beta (brmsprior).
+#' @noRd
 scenario_priors <- function() {
   loadNamespace("brms")
   brms::prior("normal(C0_mu, C0_sd)", nlpar = "C0", lb = 0, ub = 10) +
@@ -50,6 +64,13 @@ scenario_priors <- function() {
     brms::prior("normal(beta_mu, beta_sd)", nlpar = "beta", lb = -0.02, ub = 0.0)
 }
 
+#' Compile the scenario model
+#'
+#' Compile the 04_02 model (brm() without sampling) into the cache, as compile_tas_models()
+#' does for step 02.
+#'
+#' @return NULL, invisibly.
+#' @noRd
 compile_scenario_model <- function() {
   data <- data.frame(NEE = c(1, 2, 3, 2), TS = c(5, 10, 15, 20))
   f <- brms::bf(NEE ~ exp(alpha * TS + beta*TS^2) * C0, alpha+beta+C0 ~ 1, nl = TRUE)
@@ -58,12 +79,30 @@ compile_scenario_model <- function() {
   invisible(NULL)
 }
 
-# 04_02 for one site. tmin_change: the site's row of future_tmin_change().
-# Returns one row: TS_TA (slope of soil on air temperature), TSmin_c and
-# TSmin_c_gs (minimum soil temperature change, year and growing season), and
-# growing-season mean nighttime respiration at present (NEE_night_mod_p) and
-# in the future without thermal response (NEE_night_mod_f). None of it
-# depends on TAS: scenario_data() applies a set of TAS estimates.
+#' Present and future nighttime respiration at one site (04_02)
+#'
+#' 04_02 for one site. tmin_change: the site's row of future_tmin_change(). Returns one row:
+#' TS_TA (slope of soil on air temperature), TSmin_c and TSmin_c_gs (minimum soil temperature
+#' change, year and growing season), and growing-season mean nighttime respiration at present
+#' (NEE_night_mod_p) and in the future without thermal response (NEE_night_mod_f). None of it
+#' depends on TAS: scenario_data() applies a set of TAS estimates.
+#'
+#' The model is fitted window by window to each of three control years (those with more
+#' growing-season nighttime records than the median, closest to the median growing-season soil
+#' temperature) and predicts the mean nighttime soil-temperature pattern now and warmed by the
+#' minimum-temperature change times TS_TA; the control year with the smallest future/present
+#' ratio is left out of the means.
+#'
+#' @param site_id Site ID.
+#' @param ac The site's step-01 half-hourly table.
+#' @param a_measure_night_complete The site's step-01 nighttime table.
+#' @param gStart Growing-season start (day of year).
+#' @param gEnd Growing-season end (day of year).
+#' @param tmin_change The site's row of future_tmin_change().
+#' @param sampler Sampler settings (tas_fit_settings()).
+#' @return A one-row data frame: site_ID, TS_TA, NEE_night_mod_p, NEE_night_mod_f, TSmin_c,
+#'   TSmin_c_gs.
+#' @noRd
 scenario_site <- function(site_id, ac, a_measure_night_complete, gStart, gEnd, tmin_change,
                           sampler = tas_fit_settings()) {
   name_site <- site_id
@@ -172,11 +211,18 @@ scenario_site <- function(site_id, ac, a_measure_night_complete, gStart, gEnd, t
   out
 }
 
-# 04_02's output table for one set of TAS estimates: the driver table (with
-# its total TAS, TAS_tot) joined to the monthly minimum-temperature changes and
-# each site's scenario results, plus future respiration with the site's total
-# thermal response, NEE_night_mod_fa = NEE_night_mod_f * exp(TAS_tot *
-# TSmin_c_gs); in the published column order.
+#' The scenario table for one set of TAS estimates
+#'
+#' 04_02's output table for one set of TAS estimates: the driver table (with its total TAS,
+#' TAS_tot) joined to the monthly minimum-temperature changes and each site's scenario results,
+#' plus future respiration with the site's total thermal response, NEE_night_mod_fa =
+#' NEE_night_mod_f * exp(TAS_tot * TSmin_c_gs); in the published column order.
+#'
+#' @param acclimation The driver table (driver_data()).
+#' @param tmin_month future_tmin_change()'s table.
+#' @param scenario_rows scenario_site() rows of all sites.
+#' @return A data frame, one row per site of `acclimation`.
+#' @noRd
 scenario_data <- function(acclimation, tmin_month, scenario_rows) {
   out <- acclimation |>
     dplyr::left_join(tmin_month, by = "site_ID") |>

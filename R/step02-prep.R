@@ -28,11 +28,25 @@
 # applied to the record's TA). ts_bounds_method records which it is:
 # "step01" (step 01's own) or "regressed".
 
+#' Read the site settings
+#'
+#' The per-site settings of data/site_settings.csv (ts_regression, tstart_floor,
+#' trim_last_growing_year, the soil-temperature sensor columns, ...).
+#'
+#' @param path The settings file.
+#' @return A data frame, one row per site.
+#' @noRd
 read_site_settings <- function(path = file.path("data", "site_settings.csv")) {
   utils::read.csv(path)
 }
 
-# ERA5-Land daily soil water (%) for every site, keyed by calendar date.
+#' Read ERA5-Land daily soil water
+#'
+#' ERA5-Land daily soil water (%) for every site, keyed by calendar date.
+#'
+#' @param path The CSV file of all sites (name = site ID, date, SWC).
+#' @return The table, with date as a Date and YEAR, MONTH and DAY added.
+#' @noRd
 read_era5_swc <- function(path = path_original("ERA5_daily_swc_1990_2024_allsites.csv")) {
   swc_ERA5 <- utils::read.csv(path)
   swc_ERA5$date <- as.Date(swc_ERA5$date)
@@ -42,14 +56,45 @@ read_era5_swc <- function(path = path_original("ERA5_daily_swc_1990_2024_allsite
   swc_ERA5
 }
 
-# ERA5-Land soil water extended with a later extraction
-# (scripts/download-era5-swc.py): its days after the end of `swc_ERA5`.
+#' Extend ERA5-Land soil water with a later extraction
+#'
+#' ERA5-Land soil water extended with a later extraction (scripts/download-era5-swc.py): its
+#' days after the end of `swc_ERA5`. Stops unless both cover the same sites.
+#'
+#' @param swc_ERA5 ERA5-Land daily soil water (read_era5_swc()).
+#' @param extension The later extraction (name, date, ...).
+#' @return `swc_ERA5` with the extension's later rows (their columns shared with `swc_ERA5`)
+#'   appended.
+#' @noRd
 extend_era5_swc <- function(swc_ERA5, extension) {
   stopifnot(setequal(unique(extension$name), unique(swc_ERA5$name)))
   later <- extension[extension$date > max(swc_ERA5$date), intersect(names(swc_ERA5), names(extension))]
   dplyr::bind_rows(swc_ERA5, later)
 }
 
+#' Prepare a site's TAS-fit inputs (step 02, part 1)
+#'
+#' Turns a site's step-01 tables into the inputs of the TAS fits, making every site-specific
+#' choice (see the file header): soil water (measured, or ERA5-Land where SWC_use is "NO"), the
+#' TS ~ TA regression, tStart and tEnd by step 01's rule (at least tstart_floor), daily daytime
+#' NEE, the growing years (dropping the last, incomplete one where trim_last_growing_year), the
+#' control year (the year with growing-season TS closest to the long-term mean) and the minimum
+#' number of observations of a window-year (100 at half-hourly, 60 at hourly sites).
+#'
+#' @param site The site's row of data/site_info.csv.
+#' @param settings The site's row of data/site_settings.csv.
+#' @param feature_gs The growing-season features (gStart, gEnd by site_ID).
+#' @param a_measure_night_complete The site's step-01 nighttime table.
+#' @param ac The site's step-01 half-hourly table.
+#' @param swc_ERA5 ERA5-Land daily soil water of all sites (read_era5_swc()).
+#' @param climatology The site's step-01 climatology (DOY, TA, TS, season).
+#' @return list(night, ac, ac_day, settings): the nighttime table and the half-hourly table,
+#'   both with the soil temperature and soil water the fits use and a growing_year column (the
+#'   nighttime table also with NEE_daytime1 and NEE_daytime, its preceding day's daytime NEE
+#'   and the 3-day mean of it); daily daytime NEE (ac_day: date, NEE_daytime1, YEAR, DOY,
+#'   NEE_daytime); and a one-row data frame of the site's fit settings (site_ID, gStart, gEnd,
+#'   tStart, tEnd, ts_bounds_method, dt, nobs_threshold, control_year).
+#' @noRd
 prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_complete, ac, swc_ERA5, climatology) {
   name_site <- site$site_ID
   stopifnot(identical(settings$site_ID, name_site))

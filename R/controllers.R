@@ -9,8 +9,20 @@
 #   TAS_SLURM_MEMORY_GB  memory of each worker job (default: 24)
 # A worker has 4 CPUs: one brm() fit samples 4 chains in parallel.
 
+#' Whether this process runs on YCRC Bouchet
+#'
+#' @return TRUE if the hostname ends in ycrc.yale.edu.
+#' @noRd
 on_bouchet <- function() grepl("ycrc\\.yale\\.edu$", Sys.info()[["nodename"]])
 
+#' The crew controller of the targets pipeline
+#'
+#' On YCRC Bouchet a Slurm controller (every worker its own job with 4 CPUs, logging to
+#' _logs/), anywhere else local R processes; sized by the environment variables in the file
+#' header.
+#'
+#' @return A crew controller.
+#' @noRd
 pipeline_controller <- function() {
   if (on_bouchet()) {
     crew.cluster::crew_controller_slurm(
@@ -36,9 +48,14 @@ pipeline_controller <- function() {
   }
 }
 
-# The IP address workers on other nodes use to reach this process: the first
-# address that is neither loopback nor link-local (crew's default can pick
-# an address the compute nodes cannot reach).
+#' The address workers use to reach this process
+#'
+#' The IP address workers on other nodes use to reach this process: the first IPv4 address that
+#' is neither loopback nor link-local (crew's default can pick an address the compute nodes
+#' cannot reach). Stops if there is none.
+#'
+#' @return The IPv4 address (character).
+#' @noRd
 controller_host <- function() {
   ips <- unlist(nanonext::ip_addr())
   usable <- ips[!grepl("^(127\\.|169\\.254\\.|::1|fe80:)", ips) & grepl("^[0-9.]+$", ips)]

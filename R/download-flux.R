@@ -12,7 +12,14 @@
 # directory holds one file per site). Downloads need internet access (on
 # YCRC Bouchet: a compute node).
 
-# The AmeriFlux account in _creds.toml; stops if the file or a key is missing.
+#' Read the AmeriFlux account
+#'
+#' The AmeriFlux account in _creds.toml; stops if the file or a key (user_id, user_email) is
+#' missing.
+#'
+#' @param path The credentials file.
+#' @return The parsed TOML file, a named list with at least user_id and user_email.
+#' @noRd
 flux_credentials <- function(path = "_creds.toml") {
   if (!file.exists(path)) {
     stop("Downloading AmeriFlux data needs ", normalizePath(path, mustWork = FALSE),
@@ -24,7 +31,16 @@ flux_credentials <- function(path = "_creds.toml") {
   creds
 }
 
-# Download a site's latest AmeriFlux BASE-BADM release; returns its path.
+#' Download a site's latest AmeriFlux BASE-BADM release
+#'
+#' Downloads with amerifluxr into a staging directory, then replaces the site's earlier
+#' BASE-BADM zip in `dir` with it.
+#'
+#' @param site_id Site ID.
+#' @param creds The AmeriFlux account, as flux_credentials() returns it.
+#' @param dir Destination directory.
+#' @return The path of the downloaded zip.
+#' @noRd
 download_ameriflux_base <- function(site_id, creds = flux_credentials(), dir = path_raw("flux", "AmeriFlux_BASE")) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   staging <- file.path(dir, paste0(".download-", site_id))
@@ -45,8 +61,14 @@ download_ameriflux_base <- function(site_id, creds = flux_credentials(), dir = p
   dest
 }
 
-# The FLUXNET-archive shuttle's catalogue (one row per site and data hub),
-# written to `dir`; returns the snapshot file.
+#' Write the FLUXNET-archive shuttle's catalogue
+#'
+#' The FLUXNET-archive shuttle's catalogue (one row per site and data hub), written to `dir` by
+#' `fluxnet-shuttle listall`; stops if the command fails.
+#'
+#' @param dir Destination directory.
+#' @return The path of the new snapshot file (CSV).
+#' @noRd
 shuttle_snapshot <- function(dir = path_raw("flux", "SHUTTLE")) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   before <- list.files(dir, pattern = "^fluxnet_shuttle_snapshot_.*\\.csv$")
@@ -57,9 +79,17 @@ shuttle_snapshot <- function(dir = path_raw("flux", "SHUTTLE")) {
   file.path(dir, new)
 }
 
-# Download a site's FLUXNET product from the shuttle and extract its
-# half-hourly (or hourly) table; returns the table's path, or NULL if the
-# shuttle has no product for the site.
+#' Download a site's FLUXNET product from the shuttle
+#'
+#' Download a site's FLUXNET product (zip) from the shuttle into `dir` and extract its
+#' half-hourly (or hourly) FLUXMET table into `dir`/unzip, replacing the site's earlier table
+#' there.
+#'
+#' @param site_id Site ID.
+#' @param snapshot The shuttle catalogue, as shuttle_snapshot() writes it.
+#' @param dir Destination directory.
+#' @return The table's path, or NULL if the shuttle has no product for the site.
+#' @noRd
 download_shuttle <- function(site_id, snapshot, dir = path_raw("flux", "SHUTTLE")) {
   catalogue <- utils::read.csv(snapshot)
   if (!site_id %in% catalogue$site_id) return(NULL)

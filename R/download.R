@@ -1,14 +1,21 @@
-# Download the WorldClim 2.1 minimum-temperature rasters that 04_01 needs into
-# `dir` (data-raw/Climate by default), keeping existing complete files:
-#
-#   wc2.1_2.5m_tmin/              monthly series 2000-2020 (CRU-TS 4.06
-#                                 downscaled), one GeoTIFF per year-month
-#   wc2.1_2.5m_tmin_2041-2060/    SSP2-4.5 2041-2060, one 12-layer GeoTIFF
-#                                 per GCM
-#
-# Downloads go to a `.part` file renamed only on success, so an interrupted
-# run never leaves a truncated file that looks complete. Returns
-# list(baseline = <252 paths>, future = <13 paths>).
+#' Download the WorldClim minimum-temperature rasters
+#'
+#' Download the WorldClim 2.1 minimum-temperature rasters that 04_01 needs into `dir`, keeping
+#' existing complete files:
+#'
+#'   wc2.1_2.5m_tmin/              monthly series 2000-2020 (CRU-TS 4.06
+#'                                 downscaled), one GeoTIFF per year-month
+#'   wc2.1_2.5m_tmin_2041-2060/    SSP2-4.5 2041-2060, one 12-layer GeoTIFF
+#'                                 per GCM
+#'
+#' Downloads go to a `.part` file renamed only on success, so an interrupted run never leaves a
+#' truncated file that looks complete. Stops if baseline files are missing, or unexpected ones
+#' present, after the download.
+#'
+#' @param dir Destination directory (data-raw/Climate by default).
+#' @return list(baseline = <252 paths>, future = <13 paths>): the paths of the baseline and the
+#'   future GeoTIFFs.
+#' @noRd
 download_worldclim <- function(dir = path_raw("Climate")) {
   baseline_url <- "https://geodata.ucdavis.edu/climate/worldclim/2_1/hist/cts4.06/2.5m"
   future_url <- "https://geodata.ucdavis.edu/cmip6/2.5m"

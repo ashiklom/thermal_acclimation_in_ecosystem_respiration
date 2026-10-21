@@ -29,7 +29,14 @@
 # half-hourly table. It returns step 01's list(ac, night, feature,
 # climatology), and `keep`: which rows of `base` the nighttime table holds.
 
-# Day-of-year means of soil temperature over the whole record.
+#' Day-of-year means of soil temperature
+#'
+#' Day-of-year means of soil temperature over the whole record.
+#'
+#' @param base The site's record (uses DOY).
+#' @param ts Soil temperature, one value per row of `base`.
+#' @return A data frame of DOY and mean TS, sorted by DOY.
+#' @noRd
 ts_doy_means <- function(base, ts) {
   data.frame(DOY = base$DOY, TS = ts) |>
     dplyr::group_by(.data$DOY) |>
@@ -37,10 +44,17 @@ ts_doy_means <- function(base, ts) {
     dplyr::arrange(.data$DOY)
 }
 
-# Growing-season start and temperature range from the day-of-year means of
-# soil temperature: the start no earlier than the first day whose mean soil
-# temperature is >= 0 C (unless site_info sets it), the range the 2.5-97.5%
-# quantiles of the mean soil temperature over the NEE-uptake days.
+#' Growing-season start and soil-temperature range
+#'
+#' Growing-season start and temperature range from the day-of-year means of soil temperature:
+#' the start no earlier than the first day whose mean soil temperature is >= 0 C (unless
+#' site_info sets it), the range the 2.5-97.5% quantiles of the mean soil temperature over the
+#' NEE-uptake days, tStart at least params$tstart_floor where that is set.
+#'
+#' @param TS_doy Day-of-year means of soil temperature (ts_doy_means()).
+#' @param params The site's settings (see the file header).
+#' @return list(gStart, gEnd, tStart, tEnd); gEnd is params$gEnd.
+#' @noRd
 ts_season <- function(TS_doy, params) {
   gStart <- max(params$gStart_nee, min(TS_doy$DOY[which(TS_doy$TS >= 0)]))
   if (!is.na(params$gStart_site)) {
@@ -55,11 +69,22 @@ ts_season <- function(TS_doy, params) {
   list(gStart = gStart, gEnd = params$gEnd, tStart = tStart, tEnd = tEnd)
 }
 
-# Growing years whose nighttime records have no large gaps within the growing
-# season: the longest gap (days) below gap_max_thresh and the gaps longer than
-# 14 days together below gap_total_thresh of the season. `night` holds the
-# records (TIMESTAMP, DOY); `years` the years whose season bounds count as
-# records, so that gaps at either end of a season count too.
+#' Growing years without large gaps
+#'
+#' Growing years whose nighttime records have no large gaps within the growing season: the
+#' longest gap (days) below gap_max_thresh and the gaps longer than 14 days together below
+#' gap_total_thresh of the season (by default max(31, 22.5% of the season) and max(1/3, that
+#' share of the season); params$gap_fixed where set). `night` holds the records (TIMESTAMP,
+#' DOY); `years` the years whose season bounds count as records, so that gaps at either end of a
+#' season count too. Years in params$years_removed are left out.
+#'
+#' @param night The nighttime records (TIMESTAMP, DOY).
+#' @param gStart Growing-season start (day of year).
+#' @param gEnd Growing-season end (day of year).
+#' @param years Years whose season bounds count as records.
+#' @param params The site's settings (see the file header).
+#' @return The good growing years.
+#' @noRd
 ts_good_years <- function(night, gStart, gEnd, years, params) {
   if (!is.null(params$gap_fixed)) {
     gap_max_thresh <- params$gap_fixed[1]
@@ -100,6 +125,22 @@ ts_good_years <- function(night, gStart, gEnd, years, params) {
   setdiff(good_years, params$years_removed)
 }
 
+#' Step 01's tables from one soil-temperature column
+#'
+#' Does what step 01 does with its soil temperature `ts` (one value per row of `base`), given
+#' where it is usable (`ts_ok`): the growing-season start and temperature range, the nighttime
+#' table, the screening of years with large gaps, and the half-hourly table (at AmeriFlux sites
+#' with TA, TS and NEE_uStar_f gap-filled by their day-of-year x time-of-day means).
+#'
+#' @param base The site's record without soil temperature (see the file header), sorted by
+#'   time.
+#' @param params The site's settings (see the file header).
+#' @param ts Soil temperature, one value per row of `base`.
+#' @param ts_ok Whether `ts` is usable, one value per row of `base`.
+#' @return Step 01's list(ac, night, feature, climatology), and `keep`: which rows of `base` the
+#'   nighttime table holds. feature is one row: site_ID, gStart, gEnd, tStart (at least 0),
+#'   tEnd, nyear.
+#' @noRd
 ts_column_tables <- function(base, params, ts, ts_ok) {
   stopifnot(length(ts) == nrow(base), length(ts_ok) == nrow(base), !is.unsorted(base$TIMESTAMP))
   season <- ts_season(ts_doy_means(base, ts), params)
