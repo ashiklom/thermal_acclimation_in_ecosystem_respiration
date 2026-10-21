@@ -3,3 +3,6 @@
   day-of-year climatology. Row and day of year differ where the climatology does not start at day 1
   (southern-hemisphere sites, whose day of year runs from 183) or has missing days. gStart also bounds
   the step-04 scenario windows.</p>
+<p><strong>Result.</strong> No site is affected: wherever the row and the day of year differ (the wrapped
+  southern-hemisphere sites), the bound does not bind, so every growing-season start, input and TAS is unchanged.
+  The fix only matters for data where it would bind.</p>
