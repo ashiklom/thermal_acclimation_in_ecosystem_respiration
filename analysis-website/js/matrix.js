@@ -85,7 +85,8 @@ async function draw() {
     { type: "heatmap", x: columns, y: order, z, text: hover, hoverinfo: "text", colorscale: "RdBu", zmin: -vmax, zmax: vmax, colorbar: { title: { text: "TAS" }, thickness: 12 } },
     { type: "scatter", mode: "text", x: marks.x, y: marks.y, text: marks.text, textfont: { size: 9, color: "#111" }, hoverinfo: "skip", showlegend: false },
     { type: "scatter", mode: "markers", x: flipsXY.x, y: flipsXY.y, marker: { symbol: "square-open", size: 14, color: "#d1242f", line: { width: 2 } }, hoverinfo: "skip", showlegend: false },
-  ], baseLayout({ margin: { l: 80, r: 20, t: 20, b: 150 }, xaxis: { tickangle: -45 }, yaxis: { autorange: "reversed", tickfont: { size: 9 } },
+  ], baseLayout({ margin: { l: 80, r: 20, t: 20, b: 150 }, xaxis: { tickangle: -45, title: "soil-temperature column" },
+    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site" },
     plot_bgcolor: "#e5e5e5", height: Math.max(450, order.length * 12 + 220) }), PLOT_CONFIG);
   document.getElementById("heat").on("plotly_click", (e) => { if (e.points[0].y) location.href = `site.html?site=${e.points[0].y}`; });
 
@@ -103,7 +104,7 @@ async function draw() {
       { type: "scatter", mode: "markers", x: pts.map(([a]) => a.TAS), y: pts.map(([, b]) => b.TAS), text: pts.map(([a, b, s]) => `${s}<br>${ref} ${fmt(a.TAS)} (${cls(a)})<br>${c} ${fmt(b.TAS)} (${cls(b)})`),
         hoverinfo: "text", customdata: pts.map(([, , s]) => s),
         marker: { size: pts.map((x) => (isFlip(x) ? 11 : 7)), color: pts.map((x) => (isFlip(x) ? "#d1242f" : "#0969da")), line: { width: 0.5, color: "#333" } }, showlegend: false },
-    ], baseLayout({ title: { text: c, font: { size: 12 } }, xaxis: { title: ref, range: [-lim, lim] }, yaxis: { title: c, range: [-lim, lim] }, margin: { l: 55, r: 10, t: 30, b: 40 } }), PLOT_CONFIG);
+    ], baseLayout({ title: { text: c, font: { size: 12 } }, xaxis: { title: `TAS (°C⁻¹), ${ref}`, range: [-lim, lim] }, yaxis: { title: `TAS (°C⁻¹), ${c}`, range: [-lim, lim] }, margin: { l: 55, r: 10, t: 30, b: 40 } }), PLOT_CONFIG);
     document.getElementById(`pair-${c}`).on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
   }
 

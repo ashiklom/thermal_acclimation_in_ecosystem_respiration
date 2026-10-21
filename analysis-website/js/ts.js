@@ -39,7 +39,8 @@ async function draw() {
   const cols = [...new Set(rk.map((r) => r.column))];
   Plotly.newPlot("tops", metrics.map((m) => ({ type: "bar", name: m, x: cols,
     y: cols.map((c) => rk.filter((r) => r.metric === m && r.column === c && r.top).length) })),
-  baseLayout({ barmode: "group", yaxis: { title: "sites" }, legend: { orientation: "h", y: -0.25 } }), PLOT_CONFIG);
+  baseLayout({ barmode: "group", xaxis: { title: "estimator" }, yaxis: { title: "sites where best or close to the top 3" },
+    legend: { orientation: "h", y: -0.35, title: { text: "metric" } } }), PLOT_CONFIG);
 
   // heatmap
   const sites = [...new Set(q.map((r) => r.site_ID))];
@@ -53,7 +54,8 @@ async function draw() {
     colorscale: kind === "diverging" ? "RdBu" : "Viridis", reversescale: kind === false,
     zmin: kind === "diverging" ? -vmax : undefined, zmax: kind === "diverging" ? vmax : undefined,
     colorbar: { title: { text: METRICS[metric][0] }, thickness: 12 } }],
-  baseLayout({ margin: { l: 80, r: 20, t: 20, b: 140 }, xaxis: { tickangle: -45 }, yaxis: { autorange: "reversed", tickfont: { size: 9 } },
+  baseLayout({ margin: { l: 80, r: 20, t: 20, b: 140 }, xaxis: { tickangle: -45, title: "soil-temperature column" },
+    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site" },
     plot_bgcolor: "#e5e5e5", height: Math.max(500, sites.length * 11 + 200) }), PLOT_CONFIG);
   document.getElementById("heat").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].y}`; });
 

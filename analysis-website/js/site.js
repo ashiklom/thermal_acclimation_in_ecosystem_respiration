@@ -44,7 +44,7 @@ async function draw() {
       text: pts.map((x) => `${x.s.label}<br>TAS ${fmt(x.r.TAS)} (p ${fmt(x.r.TASp, 3)}, ${tasClass(x.r.TAS, x.r.TASp)})`), hoverinfo: "text",
       marker: { size: 10, symbol: i ? "diamond" : "circle", color: pts.map((x) => CLASS_COLORS[tasClass(x.r.TAS, x.r.TASp)]), line: { width: 1, color: "#000" } } };
   });
-  Plotly.newPlot("tas", traces, baseLayout({ yaxis: { title: "TAS (°C⁻¹)", zeroline: true }, legend: { orientation: "h", y: -0.25 } }), PLOT_CONFIG);
+  Plotly.newPlot("tas", traces, baseLayout({ xaxis: { title: "run" }, yaxis: { title: "TAS (°C⁻¹)", zeroline: true }, legend: { orientation: "h", y: -0.35, title: { text: "model" } } }), PLOT_CONFIG);
 
   // Window-year detail for the chosen run.
   const sy = ((await getSiteyear(set))[model] || []).filter((r) => r.site_ID === site);

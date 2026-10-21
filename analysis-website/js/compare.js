@@ -2,6 +2,7 @@ import { header, loadJSON, compare, summarise, table, fmt, params, setParams, ba
 
 header("compare.html");
 const sets = await loadJSON("data/resultsets.json");
+const label = (id) => (sets.find((s) => s.id === id) || { label: id }).label;
 const cache = {};
 const getTas = async (id) => (cache[id] ??= await loadJSON(`data/tas/${id}.json`));
 
@@ -45,7 +46,7 @@ async function draw() {
   const band = { type: "scatter", x: [-lim, lim, lim, -lim], y: [-lim - threshold, lim - threshold, lim + threshold, -lim + threshold], fill: "toself",
     fillcolor: "rgba(140,149,159,0.25)", line: { width: 0 }, showlegend: false, hoverinfo: "skip" };
   Plotly.newPlot("scatter", [band, line, ...groups], baseLayout({
-    xaxis: { title: `TAS, ${a}`, range: [-lim, lim], zeroline: true }, yaxis: { title: `TAS, ${b}`, range: [-lim, lim], zeroline: true },
+    xaxis: { title: `TAS (°C⁻¹), ${label(a)}`, range: [-lim, lim], zeroline: true }, yaxis: { title: `TAS (°C⁻¹), ${label(b)}`, range: [-lim, lim], zeroline: true },
     legend: { orientation: "h", y: -0.2 },
   }), PLOT_CONFIG);
   document.getElementById("scatter").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });

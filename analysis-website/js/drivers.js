@@ -10,6 +10,9 @@ document.getElementById("a").value = p.get("a") || "published";
 document.getElementById("b").value = p.get("b") || index[index.length - 1].id;
 document.getElementById("trs").value = p.get("trs") || "TAS_direct";
 let tbl;
+const PREDICTORS = { elev: "elevation (m)", mata: "mean annual air temperature (°C)", mat: "mean annual air temperature (°C)",
+  lai: "leaf area index (m² m⁻²)", soc: "soil organic carbon", warm_rate: "warming rate" };
+const RESPONSES = { TAS_direct: "direct TAS", TAS_tot: "total TAS", TAS_total: "total TAS", TAS_app: "apparent TAS" };
 
 const increase = (rows, col) => rows.map((r) => (r[col] !== null && r.NEE_night_mod_p ? r[col] / r.NEE_night_mod_p - 1 : null));
 const mean = (v) => { const x = v.filter((y) => y !== null && Number.isFinite(y)); return x.length ? x.reduce((s, y) => s + y, 0) / x.length : null; };
@@ -31,7 +34,8 @@ async function draw() {
   Plotly.newPlot("varimp", [
     { type: "bar", name: "reference", x: vars, y: vars.map((v) => val(A, v)), marker: { color: "#8c959f" } },
     { type: "bar", name: "analysis", x: vars, y: vars.map((v) => val(B, v)), marker: { color: "#0969da" } },
-  ], baseLayout({ title: { text: `Variable importance, ${trs}`, font: { size: 13 } }, yaxis: { title: "% increase in MSE" }, barmode: "group" }), PLOT_CONFIG);
+  ], baseLayout({ title: { text: `Variable importance, ${trs}`, font: { size: 13 } }, xaxis: { title: "predictor" },
+    yaxis: { title: "% increase in MSE" }, barmode: "group" }), PLOT_CONFIG);
 
   const fa = new Map((A.future || []).map((r) => [r.site_ID, r]));
   const both = (B.future || []).filter((r) => fa.has(r.site_ID)).map((r) => ({ site_ID: r.site_ID, ref: increase([fa.get(r.site_ID)], "NEE_night_mod_fa")[0], new: increase([r], "NEE_night_mod_fa")[0],
@@ -42,7 +46,8 @@ async function draw() {
     { type: "scatter", mode: "markers", x: both.map((r) => r.ref), y: both.map((r) => r.new), text: both.map((r) => `${r.site_ID}<br>ref ${pct(r.ref)}<br>new ${pct(r.new)}`), hoverinfo: "text",
       customdata: both.map((r) => r.site_ID), marker: { size: 8, color: "#0969da" }, showlegend: false },
   ], baseLayout({ title: { text: "Future nighttime respiration increase, with total TAS", font: { size: 13 } },
-    xaxis: { title: "reference", tickformat: ".0%" }, yaxis: { title: "analysis", tickformat: ".0%" } }), PLOT_CONFIG);
+    xaxis: { title: "increase with total TAS, reference", tickformat: ".0%" },
+    yaxis: { title: "increase with total TAS, analysis", tickformat: ".0%" } }), PLOT_CONFIG);
   document.getElementById("future").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
 
   const pd = (T) => (T.partial || []).filter((r) => r.TRS_type === trs);
@@ -57,7 +62,9 @@ async function draw() {
   for (const v of pvars) {
     const ra = pd(A).filter((r) => r.var === v).sort((x, y) => x.x - y.x), rb = pd(B).filter((r) => r.var === v).sort((x, y) => x.x - y.x);
     Plotly.newPlot(`pd-${v}`, [...band(ra, "#666", "rgba(140,149,159,0.3)", "reference"), ...band(rb, "#0969da", "rgba(9,105,218,0.2)", "analysis")],
-      baseLayout({ title: { text: v, font: { size: 12 } }, yaxis: { title: trs }, margin: { l: 60, r: 10, t: 30, b: 40 }, showlegend: false }), PLOT_CONFIG);
+      baseLayout({ title: { text: v, font: { size: 12 } }, xaxis: { title: PREDICTORS[v.toLowerCase()] || v },
+        yaxis: { title: `partial dependence of ${RESPONSES[trs] || trs}` }, margin: { l: 60, r: 10, t: 30, b: 40 },
+        showlegend: false }), PLOT_CONFIG);
   }
 
   const f = numberFormatter(4);

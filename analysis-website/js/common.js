@@ -96,12 +96,21 @@ export function summarise(rows) {
 export const PLOT_CONFIG = { responsive: true, displaylogo: false, topojsonURL: "vendor/topojson/" };
 
 export function baseLayout(extra = {}) {
-  return Object.assign({
+  const layout = Object.assign({
     margin: { l: 60, r: 20, t: 30, b: 50 },
     font: { family: "-apple-system, Helvetica, Arial, sans-serif", size: 12 },
     hovermode: "closest",
     plot_bgcolor: "#fff",
   }, extra);
+  // Plotly.js 3 shows axis titles only as { text }, not as plain strings; and
+  // long titles need room
+  for (const [key, axis] of Object.entries(layout)) {
+    if (/^[xy]axis\d*$/.test(key) && axis) {
+      if (typeof axis.title === "string") axis.title = { text: axis.title };
+      if (axis.title && axis.automargin === undefined) axis.automargin = true;
+    }
+  }
+  return layout;
 }
 
 // Two site maps, geographic and climate space (mean annual temperature from
