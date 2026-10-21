@@ -5,9 +5,9 @@ Reads volumetric soil water of layer 1 (swvl1, 0-7 cm, m3/m3) from ECMWF's
 analysis-ready (ARCO) ERA5-Land store, at the grid cell nearest each site
 (data/site_info.csv LAT/LONG), averages it per UTC day and converts it to %
 (x 100), the units of the published file. Where that cell is sea (no soil
-water at any of a sample of times, e.g. IT-Noe on the coast), the nearest
-land cell (one with soil water) within MAX_RADIUS cells is used instead,
-with a warning naming it and its distance. Needs internet access and the
+water over the period, e.g. IT-Noe on the coast), the nearest land cell (one
+with soil water at any of a sample of times) within MAX_RADIUS cells is used
+instead, with a warning naming it and its distance. Needs internet access and the
 Climate Data Store key `cds_api_key` in _creds.toml (stops at once
 otherwise).
 
@@ -43,37 +43,28 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * 6371.0 * math.asin(math.sqrt(a))
 
 
-def land_cells(swc, sites, lon):
-    """Per site, the (latitude, longitude) of the cell to read: the nearest
-    cell, or, where that is sea, the nearest land cell around it."""
-    sample = list(range(0, swc.sizes["time"], max(1, swc.sizes["time"] // N_SAMPLE_TIMES)))
+def nearest_land_cell(swc, site, lat, lon):
+    """The land cell (one with soil water at any of a sample of times)
+    nearest (lat, lon) within MAX_RADIUS cells, with its distance (km)."""
     lats = swc.latitude.values
     lons = swc.longitude.values
-    out = []
-    for (site, lat), x in zip(sites[["site_ID", "LAT"]].itertuples(index=False), lon):
-        i = int(abs(lats - lat).argmin())
-        j = int(abs(lons - x).argmin())
-        block = swc.isel(time=xr.DataArray(sample, dims="t"),
-                         latitude=slice(max(i - MAX_RADIUS, 0), i + MAX_RADIUS + 1),
-                         longitude=[(j + d) % len(lons) for d in range(-MAX_RADIUS, MAX_RADIUS + 1)]).compute()
-        land = block.notnull().any("t")
-        here = land.sel(latitude=lats[i], longitude=lons[j]).item()
-        if here:
-            out.append((lats[i], lons[j]))
-            continue
-        best = None
-        for la in land.latitude.values:
-            for lo in land.longitude.values:
-                if land.sel(latitude=la, longitude=lo).item():
-                    d = haversine_km(lat, x, float(la), float(lo))
-                    if best is None or d < best[0]:
-                        best = (d, float(la), float(lo))
-        if best is None:
-            sys.exit(f"{site}: no land cell within {MAX_RADIUS} cells of ({lat}, {x})")
-        print(f"WARNING: {site}: nearest ERA5-Land cell ({lats[i]:.2f}, {lons[j]:.2f}) is sea; using the nearest land "
-              f"cell ({best[1]:.2f}, {best[2]:.2f}), {best[0]:.1f} km from the site", file=sys.stderr)
-        out.append((best[1], best[2]))
-    return out
+    i = int(abs(lats - lat).argmin())
+    j = int(abs(lons - lon).argmin())
+    sample = list(range(0, swc.sizes["time"], max(1, swc.sizes["time"] // N_SAMPLE_TIMES)))
+    block = swc.isel(time=xr.DataArray(sample, dims="t"),
+                     latitude=slice(max(i - MAX_RADIUS, 0), i + MAX_RADIUS + 1),
+                     longitude=[(j + d) % len(lons) for d in range(-MAX_RADIUS, MAX_RADIUS + 1)]).compute()
+    land = block.notnull().any("t")
+    best = None
+    for la in land.latitude.values:
+        for lo in land.longitude.values:
+            if land.sel(latitude=la, longitude=lo).item():
+                d = haversine_km(lat, lon, float(la), float(lo))
+                if best is None or d < best[0]:
+                    best = (d, float(la), float(lo))
+    if best is None:
+        sys.exit(f"{site}: no land cell within {MAX_RADIUS} cells of ({lat}, {lon})")
+    return best
 
 
 def cds_key(path="_creds.toml"):
@@ -110,13 +101,18 @@ def main():
     lon = sites.LONG.to_numpy()
     if float(swc.longitude.max()) > 180:  # store on 0..360
         lon = lon % 360
-    chosen = land_cells(swc, sites, lon)
     # one site at a time: the store is chunked by location, so each site's
     # read covers long time series; all at once does not fit in memory
+    period = slice(pd.Timestamp(a.start), end + pd.Timedelta(hours=23))
     frames = []
-    for (site, (la, lo)) in zip(sites.site_ID, chosen):
-        cell = swc.sel(latitude=la, longitude=lo).sel(time=slice(pd.Timestamp(a.start), end + pd.Timedelta(hours=23)))
-        daily = cell.resample(time="1D").mean().compute()
+    for site, lat, x in zip(sites.site_ID, sites.LAT, lon):
+        cell = swc.sel(latitude=lat, longitude=x, method="nearest")
+        daily = cell.sel(time=period).resample(time="1D").mean().compute()
+        if daily.isnull().all():
+            d, la, lo = nearest_land_cell(swc, site, lat, x)
+            print(f"WARNING: {site}: nearest ERA5-Land cell ({float(cell.latitude):.2f}, {float(cell.longitude):.2f}) is sea; "
+                  f"using the nearest land cell ({la:.2f}, {lo:.2f}), {d:.1f} km from the site", file=sys.stderr, flush=True)
+            daily = swc.sel(latitude=la, longitude=lo).sel(time=period).resample(time="1D").mean().compute()
         frames.append(pd.DataFrame({"date": pd.to_datetime(daily.time.values).strftime("%Y-%m-%d"),
                                     "name": site, "SWC": daily.values * 100}))
         print(f"{site}: {len(daily.time)} days", flush=True)
