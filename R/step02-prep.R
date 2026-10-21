@@ -42,6 +42,14 @@ read_era5_swc <- function(path = path_original("ERA5_daily_swc_1990_2024_allsite
   swc_ERA5
 }
 
+# ERA5-Land soil water extended with a later extraction
+# (scripts/download-era5-swc.py): its days after the end of `swc_ERA5`.
+extend_era5_swc <- function(swc_ERA5, extension) {
+  stopifnot(setequal(unique(extension$name), unique(swc_ERA5$name)))
+  later <- extension[extension$date > max(swc_ERA5$date), intersect(names(swc_ERA5), names(extension))]
+  dplyr::bind_rows(swc_ERA5, later)
+}
+
 prepare_tas_inputs <- function(site, settings, feature_gs, a_measure_night_complete, ac, swc_ERA5, climatology) {
   name_site <- site$site_ID
   stopifnot(identical(settings$site_ID, name_site))

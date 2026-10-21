@@ -1,0 +1,6 @@
+# targets projects (TAR_PROJECT): the published input data (default) and the
+# latest flux releases (refactor-v2 stage S18), each with its own store.
+main:
+  store: _targets
+update:
+  store: _targets_update

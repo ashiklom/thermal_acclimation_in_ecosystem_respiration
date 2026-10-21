@@ -49,3 +49,5 @@ scripts/.DS_Store
 /analysis-website/data/
 !/analysis-website/**/*.html
 /analysis-website/vendor/plotly.min.js
+/_targets_update/
+/data-proc-update/

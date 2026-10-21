@@ -13,6 +13,13 @@ site_raw_files <- function(site, base_dir = path_original("SiteData")) {
   unname(files)
 }
 
+# Where a site's raw data are, by input data version: the latest AmeriFlux
+# releases are in data-raw/flux (R/download-flux.R); FLUXNET-format sites
+# read their new product from there whatever this is (R/read-raw.R).
+site_data_dir <- function(site, data_version = "published") {
+  if (data_version == "update" && site$source == "AmeriFlux_BASE") path_raw("flux") else path_original("SiteData")
+}
+
 # Step-01 preparation of one site from its raw data (dispatching on the data
 # product), returning list(ac, night, feature).
 prepare_site <- function(site, ts_rf, coordinates, base_dir = path_original("SiteData")) {

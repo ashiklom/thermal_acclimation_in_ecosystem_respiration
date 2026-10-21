@@ -8,6 +8,10 @@
 #   TAS_FIT_PROFILE  "full" (default; the published sampler settings) or
 #                    "fast" (only checks that everything runs)
 #   TAS_WORKERS, TAS_SLURM_*  worker settings, see R/controllers.R
+#   TAR_PROJECT      "main" (default; the published input data) or "update"
+#                    (the latest flux releases, data/site_info_update.csv;
+#                    its own store, _targets.yaml; set THERMAL_DATA_PROC too,
+#                    e.g. data-proc-update, to keep its outputs apart)
 
 library(targets)
 library(tarchetypes)
@@ -26,6 +30,9 @@ tar_option_set(
   error = "continue"
 )
 
+# input data version (refactor-v2 stage S18)
+data_version <- if (Sys.getenv("TAR_PROJECT") == "update") "update" else "published"
+
 all_sites <- utils::read.csv(file.path("data", "site_info.csv"))$site_ID
 selected <- Sys.getenv("TAS_SITES", "all")
 pipeline_sites <- switch(selected,
@@ -40,14 +47,18 @@ site_values <- data.frame(
 )
 
 inputs <- list(
-  tar_target(site_info_file, file.path("data", "site_info.csv"), format = "file"),
+  tar_target(site_info_file, file.path("data", if (data_version == "update") "site_info_update.csv" else "site_info.csv"), format = "file"),
   tar_target(site_info, utils::read.csv(site_info_file)),
   tar_target(site_settings_file, file.path("data", "site_settings.csv"), format = "file"),
   tar_target(site_settings, read_site_settings(site_settings_file)),
   tar_target(coordinates_file, file.path("data", "ameriflux_coordinates.csv"), format = "file"),
   tar_target(coordinates, utils::read.csv(coordinates_file)),
   tar_target(era5_file, path_original("ERA5_daily_swc_1990_2024_allsites.csv"), format = "file"),
-  tar_target(era5_swc, read_era5_swc(era5_file)),
+  if (data_version == "update") list(
+    # ERA5-Land soil water after 2024 (scripts/download-era5-swc.py)
+    tar_target(era5_update_file, path_raw("era5", "ERA5_daily_swc_update.csv"), format = "file"),
+    tar_target(era5_swc, extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file)))
+  ) else tar_target(era5_swc, read_era5_swc(era5_file)),
   # The published random-forest soil temperatures (01_01) are an input:
   # regenerating them does not reproduce them exactly (see refactor-v2-log.md).
   tar_target(ts_rf_files, list.files(path_original("TS_RandomForest"), pattern = "\\.csv$", full.names = TRUE), format = "file"),
@@ -78,12 +89,26 @@ per_site <- tar_map(
   values = site_values,
   names = "name",
   tar_target(site, site_info[site_info$site_ID == site_id, ]),
-  tar_target(raw_files, site_raw_files(site), format = "file"),
-  tar_target(ts_rf, read_published_ts_rf(site, ts_rf_files)),
-  tar_target(step01, {
-    raw_files
-    prepare_site(site, ts_rf, coordinates)
-  }),
+  if (data_version == "update") list(
+    # the latest releases: AmeriFlux records from data-raw/flux, and the
+    # 01_01 soil temperatures estimated anew on them
+    tar_target(raw_files, site_raw_files(site, site_data_dir(site, data_version)), format = "file"),
+    tar_target(ts_rf, {
+      raw_files
+      if (site$estimate_Ts == "YES") estimate_ts_site(site, site_data_dir(site, data_version)) else NULL
+    }),
+    tar_target(step01, {
+      raw_files
+      prepare_site(site, ts_rf, coordinates, site_data_dir(site, data_version))
+    })
+  ) else list(
+    tar_target(raw_files, site_raw_files(site), format = "file"),
+    tar_target(ts_rf, read_published_ts_rf(site, ts_rf_files)),
+    tar_target(step01, {
+      raw_files
+      prepare_site(site, ts_rf, coordinates)
+    })
+  ),
   tar_target(step01_files, write_step01_outputs(step01, site_id), format = "file"),
   # step 01's tables as targets of their own, so that what uses one table
   # reruns only when that table changes (string indexing: tar_map() renames
@@ -106,7 +131,7 @@ per_site <- tar_map(
   # candidate soil-temperature columns (R/ts-columns.R)
   tar_target(ts_sensor, {
     raw_files
-    read_ts_sensor(site, site_settings[site_settings$site_ID == site_id, ])
+    read_ts_sensor(site, site_settings[site_settings$site_ID == site_id, ], site_data_dir(site, data_version))
   }),
   tar_target(ts_candidate_values, ts_candidates(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ], tas_inputs)),
   tar_target(ts_columns, {
@@ -180,8 +205,12 @@ combined <- list(
   }, format = "file"),
   tar_combine(ts_quality_all, per_site[["ts_site_quality"]], command = dplyr::bind_rows(!!!.x)),
   tar_target(ts_ranking, rank_ts_columns(ts_quality_all)),
-  # the soil-temperature columns the fits are run with
-  tar_target(ts_methods_selected, select_ts_methods(ts_ranking)),
+  # the soil-temperature columns the fits are run with (with the latest
+  # data, the published data's, so that both are run with the same columns)
+  if (data_version == "update") list(
+    tar_target(ts_methods_selected_file, file.path("data-proc", "ts_methods_selected.csv"), format = "file"),
+    tar_target(ts_methods_selected, utils::read.csv(ts_methods_selected_file)$column)
+  ) else tar_target(ts_methods_selected, select_ts_methods(ts_ranking)),
   # every selected column's TAS estimates, climate statistics and scenario
   tar_combine(ts_fit_sets_total, per_site[["ts_tas_total"]], command = combine_ts_fits(list(!!!.x), ts_methods_selected)),
   tar_combine(ts_fit_sets_direct, per_site[["ts_tas_direct"]], command = combine_ts_fits(list(!!!.x), ts_methods_selected)),
