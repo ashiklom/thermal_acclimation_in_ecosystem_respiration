@@ -5,13 +5,14 @@ export const PAGES = [
   ["index.html", "Overview"],
   ["compare.html", "Compare runs"],
   ["stages.html", "Method stages"],
+  ["drivers.html", "Drivers & scenario"],
   ["ts.html", "Soil temperature"],
   ["site.html", "Site explorer"],
 ];
 
-// Default threshold for "TAS changed" (refactor-v2-log.md): recalibrated
-// from the reproduction run's noise once it exists (config in resultsets).
-export const DEFAULT_THRESHOLD = 1e-3;
+// Threshold for "TAS changed" (refactor-v2-log.md, S9): 4 x the robust sd of
+// the full reproduction run vs the published TAS (total 1.2e-3, direct 1.7e-3).
+export const DEFAULT_THRESHOLD = 1.7e-3;
 
 export const CLASS_COLORS = { "sig-": "#2166ac", "n.s.": "#8c959f", "sig+": "#b2182b", "NA": "#d0d7de" };
 

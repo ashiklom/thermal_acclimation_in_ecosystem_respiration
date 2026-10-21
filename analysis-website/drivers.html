@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Drivers and scenario · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Drivers and future respiration (steps 03–04)</h1>
+  <p class="lead">Step 03 relates the thermal responses (direct, total and apparent TAS) to site conditions with
+    random forests: variable importance and partial dependence. Step 04 projects growing-season nighttime
+    respiration under SSP2-4.5 (2041–2060) without and with each site's total TAS. Each run's analysis is
+    shown for each set of TAS estimates it was run with, against the published one or any other.</p>
+  <div class="controls">
+    <label>Reference <select id="a"></select></label>
+    <label>Analysis <select id="b"></select></label>
+    <label>Response <select id="trs"><option>TAS_direct</option><option>TAS_tot</option><option>TAS_app</option></select></label>
+  </div>
+  <div id="stats" class="stats"></div>
+  <div class="grid2">
+    <div id="varimp" class="plot"></div>
+    <div id="future" class="plot"></div>
+  </div>
+  <h2>Partial dependence</h2>
+  <p class="small">Median and 90% band over bootstrap forests: reference in grey, analysis in blue.</p>
+  <div id="partial" class="grid2"></div>
+  <h2>Future respiration by site</h2>
+  <div id="table"></div>
+</main>
+<script type="module" src="js/drivers.js"></script>
+</body>
+</html>

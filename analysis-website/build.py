@@ -20,6 +20,9 @@ Writes analysis-website/data/:
                              compared with and the sites whose TAS inputs changed
   ts/<id>.json               soil-temperature columns of a run: per-site summary and quality,
                              estimator ranking, the selected columns
+  drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
+                             partial dependence, future respiration) of the published analysis
+                             and of every fit set of every run
 
 Run with `pixi run -e website website-build`.
 """
@@ -202,6 +205,30 @@ def build_ts(sets):
     return out
 
 
+STEP0304_FILES = {"drivers": "acclimation_data.csv", "varimp": "varImp_plot.csv", "partial": "partial_plot.csv",
+                  "future": "acclimation_data_future_ssp245.csv"}
+
+
+def build_drivers(sets):
+    """Steps 03-04 outputs: the published tables, and every fit set of every run that has
+    them (results/<id>/step03-04/<fit set>/)."""
+    entries = [{"id": "published", "label": "Published (original/data)", "dir": ROOT / "data"}]
+    for s in sets:
+        d = ROOT / "results" / s["id"] / "step03-04"
+        if d.exists():
+            for fs in sorted(p.name for p in d.iterdir() if p.is_dir()):
+                entries.append({"id": f"{s['id']}--{fs}", "label": f"{s['label']}: TAS {fs}", "dir": d / fs})
+    index = []
+    for e in entries:
+        tables = {k: records(pd.read_csv(e["dir"] / f)) for k, f in STEP0304_FILES.items() if (e["dir"] / f).exists()}
+        if not tables:
+            continue
+        write_json(tables, OUT / "drivers" / f"{e['id']}.json")
+        index.append({"id": e["id"], "label": e["label"]})
+    write_json(index, OUT / "drivers.json")
+    return index
+
+
 def copy_plotly():
     try:
         import plotly
@@ -219,6 +246,7 @@ def main():
     sets = build_resultsets()
     stages = build_stages(sets)
     build_ts(sets)
+    build_drivers(sets)
     copy_plotly()
     print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages -> {OUT}")
 
