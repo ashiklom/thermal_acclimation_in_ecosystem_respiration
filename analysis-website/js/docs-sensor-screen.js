@@ -132,7 +132,7 @@ function yearlyScreen(yearly) {
     const odd = METRICS.map((m) => {
       const v = yearly.map((r) => r[m]), vs = v.filter((_, i) => inSeg[i]);
       const med = median(vs);
-      const s = 1.4826 * (1.4826 * median(vs.map((x) => Math.abs(x - med))));   // 1.4826 * stats::mad()
+      const s = 1.4826 * median(vs.map((x) => Math.abs(x - med)));   // stats::mad(): scaled to a standard deviation
       reference[`${seg} ${m}`] = med;
       return v.map((x, i) => inSeg[i] && Math.abs(x - med) > C.YEAR_MIN_DEV[m] && (s === 0 || Math.abs(x - med) / Math.max(s, 1e-9) > C.YEAR_Z));
     });
