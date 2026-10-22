@@ -52,13 +52,19 @@ TS_SCREEN_COVERAGE_MIN <- 0.40
 #' (conduction: 1); outside [1/x, x] the series is not conductive
 #' @noRd
 TS_SCREEN_DEPTH_RATIO <- 3
-#' Robust z-score above which a year is an outlier among a site's years, and
-#' the minimum absolute deviations that also have to be exceeded (offset in
-#' deg C, range ratio, lag in hours)
+#' Robust z-score above which a year (or a segment of years) stands out among
+#' a site's years, and the minimum absolute deviations that also have to be
+#' exceeded (offset from air in deg C; log of the range ratio, i.e. depth in
+#' damping depths; lag in hours). A change counts only if at least
+#' TS_SCREEN_MIN_METRICS of the three agree: the range ratio and lag alone
+#' vary between years with soil moisture (the damping depth does), while a
+#' moved or replaced sensor shifts several together
 #' @noRd
 TS_SCREEN_YEAR_Z <- 4
 #' @noRd
-TS_SCREEN_YEAR_MIN_DEV <- c(offset = 1.5, amp_ratio = 0.15, lag_h = 1.5)
+TS_SCREEN_YEAR_MIN_DEV <- c(offset = 1.0, log_amp = 0.4, lag_h = 1.5)
+#' @noRd
+TS_SCREEN_MIN_METRICS <- 2
 #' Fewest years on each side of a changepoint, and fewest screenable years to
 #' look for one
 #' @noRd
@@ -160,34 +166,40 @@ ts_diurnal_diagnostics <- function(day, hour, ts, ta, min_obs) {
 
 #' The strongest changepoint in a stretch of a site's yearly diagnostics
 #'
-#' For each metric (offset, range ratio, lag), every split of the years into an
-#' earlier and a later segment (at least TS_SCREEN_CHANGE_MIN_SIDE years each)
-#' is scored by the difference of the segments' medians over the pooled
-#' within-segment robust spread; a split counts if that difference exceeds the
-#' metric's TS_SCREEN_YEAR_MIN_DEV and its score TS_SCREEN_YEAR_Z.
+#' Every split of the years into an earlier and a later segment (at least
+#' TS_SCREEN_CHANGE_MIN_SIDE years each) is scored, for each metric (offset,
+#' log range ratio, lag), by the difference of the segments' medians over the
+#' pooled within-segment robust spread; a metric agrees if that difference
+#' exceeds its TS_SCREEN_YEAR_MIN_DEV and its score TS_SCREEN_YEAR_Z. A split
+#' counts if at least TS_SCREEN_MIN_METRICS metrics agree; the strongest
+#' (summed score of the agreeing metrics) is returned.
 #'
-#' @param yearly Yearly diagnostics (growing_year, offset, amp_ratio, lag_h),
+#' @param yearly Yearly diagnostics (growing_year, offset, log_amp, lag_h),
 #'   screenable years only, in year order.
 #' @return NULL, or a one-row data frame: first year of the later segment, the
-#'   metric, the earlier and the later segment's medians, and the score.
+#'   agreeing metrics (comma-separated, strongest first), the strongest
+#'   metric's earlier and later segment medians, and the summed score.
 #' @noRd
 ts_changepoint <- function(yearly) {
   if (is.null(yearly) || !nrow(yearly)) return(NULL)
   n <- nrow(yearly)
   if (n < TS_SCREEN_CHANGE_MIN_YEARS) return(NULL)
   best <- NULL
-  for (metric in names(TS_SCREEN_YEAR_MIN_DEV)) {
-    v <- yearly[[metric]]
-    for (k in seq(TS_SCREEN_CHANGE_MIN_SIDE, n - TS_SCREEN_CHANGE_MIN_SIDE)) {
-      a <- v[1:k]
-      b <- v[(k + 1):n]
+  for (k in seq(TS_SCREEN_CHANGE_MIN_SIDE, n - TS_SCREEN_CHANGE_MIN_SIDE)) {
+    split <- do.call(rbind, lapply(names(TS_SCREEN_YEAR_MIN_DEV), function(metric) {
+      a <- yearly[[metric]][1:k]
+      b <- yearly[[metric]][(k + 1):n]
       d <- stats::median(b) - stats::median(a)
       spread <- 1.4826 * stats::median(abs(c(a - stats::median(a), b - stats::median(b))))
-      score <- abs(d) / max(spread, 1e-9)
-      if (abs(d) > TS_SCREEN_YEAR_MIN_DEV[[metric]] && score > TS_SCREEN_YEAR_Z && (is.null(best) || score > best$score)) {
-        best <- data.frame(year = yearly$growing_year[k + 1], metric = metric, before = stats::median(a),
-                           after = stats::median(b), score = score)
-      }
+      data.frame(metric = metric, before = stats::median(a), after = stats::median(b),
+                 score = abs(d) / max(spread, 1e-9), agrees = abs(d) > TS_SCREEN_YEAR_MIN_DEV[[metric]])
+    }))
+    split <- split[split$agrees & split$score > TS_SCREEN_YEAR_Z, ]
+    if (nrow(split) < TS_SCREEN_MIN_METRICS) next
+    split <- split[order(-split$score), ]
+    if (is.null(best) || sum(split$score) > best$score) {
+      best <- data.frame(year = yearly$growing_year[k + 1], metric = paste(split$metric, collapse = ","),
+                         before = split$before[1], after = split$after[1], score = sum(split$score))
     }
   }
   best
@@ -252,25 +264,29 @@ ts_screen_series <- function(base, ts, gStart, gEnd, dt_secs) {
   }))
   if (is.null(yearly)) yearly <- data.frame(growing_year = integer(), coverage_season = double(), offset = double(),
                                             amp_ratio = double(), lag_h = double(), n_amp_days = integer())
+  yearly$log_amp <- ifelse(yearly$amp_ratio > 0, log(yearly$amp_ratio), NA_real_)
   yearly$outlier <- rep("", nrow(yearly))
   yearly$segment <- rep(1L, nrow(yearly))
-  screenable <- is.finite(yearly$offset) & is.finite(yearly$amp_ratio) & is.finite(yearly$lag_h) & yearly$n_amp_days >= 20
+  screenable <- is.finite(yearly$offset) & is.finite(yearly$log_amp) & is.finite(yearly$lag_h) & yearly$n_amp_days >= 20
   changes <- ts_changepoints(yearly[screenable, ])
   for (y in changes$year) yearly$segment[yearly$growing_year >= y] <- yearly$segment[yearly$growing_year >= y] + 1L
-  # single odd years, within their segment
+  # single odd years, within their segment (at least TS_SCREEN_MIN_METRICS
+  # metrics agreeing)
   reference <- list()
   for (seg in unique(yearly$segment)) {
     in_seg <- screenable & yearly$segment == seg
     if (sum(in_seg) < 3) next
-    for (metric in names(TS_SCREEN_YEAR_MIN_DEV)) {
+    odd <- sapply(names(TS_SCREEN_YEAR_MIN_DEV), function(metric) {
       v <- yearly[[metric]]
       med <- stats::median(v[in_seg])
       s <- 1.4826 * stats::mad(v[in_seg])
+      reference[[paste(seg, metric)]] <<- med
       dev <- abs(v - med)
-      out <- in_seg & dev > TS_SCREEN_YEAR_MIN_DEV[[metric]] & (s == 0 | dev / max(s, 1e-9) > TS_SCREEN_YEAR_Z)
-      yearly$outlier[out] <- paste0(yearly$outlier[out], ifelse(nzchar(yearly$outlier[out]), ",", ""), "shift_", metric)
-      reference[[paste(seg, metric)]] <- med
-    }
+      in_seg & dev > TS_SCREEN_YEAR_MIN_DEV[[metric]] & (s == 0 | dev / max(s, 1e-9) > TS_SCREEN_YEAR_Z)
+    })
+    odd <- matrix(odd, nrow = nrow(yearly), dimnames = list(NULL, names(TS_SCREEN_YEAR_MIN_DEV)))
+    flag <- rowSums(odd) >= TS_SCREEN_MIN_METRICS
+    yearly$outlier[flag] <- apply(odd[flag, , drop = FALSE], 1, function(r) paste0("shift_", names(r)[r], collapse = ","))
   }
 
   # bad windows: runs of outlier years, and long stuck periods
@@ -283,7 +299,8 @@ ts_screen_series <- function(base, ts, gStart, gEnd, dt_secs) {
     rows <- growing_year < last$year
     windows <- rbind(windows, data.frame(
       start = min(base$TIMESTAMP[rows]), end = max(base$TIMESTAMP[rows]), scale = "changepoint",
-      rule = paste(unique(paste0("changepoint_", changes$metric)), collapse = ","), value = last$before, reference = last$after))
+      rule = paste(unique(paste0("changepoint_", unlist(strsplit(changes$metric, ",")))), collapse = ","),
+      value = last$before, reference = last$after))
   }
   flagged <- yearly[nzchar(yearly$outlier), ]
   if (nrow(flagged)) {
