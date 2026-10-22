@@ -11,6 +11,9 @@
 # and, downloaded for the data update (R/download-flux.R), in path_raw("flux")
 # whatever `base_dir`:
 #   SHUTTLE         SHUTTLE/unzip/<hub>_<site>_FLUXNET_FLUXMET_(HH|HR)_*.csv
+#   ICOSL2          ICOSL2/unzip/ICOSETC_<site>_FLUXNET_FLUXMET_(HH|HR)_*.csv (the
+#                   current ICOS ETC L2 release, from ICOS labelling on;
+#                   scripts/download-icos-l2.py)
 #
 # A site's `source` names its products in one of two ways: joined by "_"
 # (stitched: each later product only adds the records after the end of the
@@ -31,14 +34,15 @@ raw_product_dirs <- list(
   FLUXNET2025 = file.path("FLUXNET07202025", "unzip"),
   ICOS2025 = file.path("Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"),
   ICOS2020 = "ICOS_after2020",
-  SHUTTLE = file.path("SHUTTLE", "unzip")
+  SHUTTLE = file.path("SHUTTLE", "unzip"),
+  ICOSL2 = file.path("ICOSL2", "unzip")
 )
 
 #' Products of the data update
 #'
 #' Products downloaded for the data update, read from path_raw("flux") whatever `base_dir`.
 #' @noRd
-update_products <- c("SHUTTLE")
+update_products <- c("SHUTTLE", "ICOSL2")
 
 #' Products named by a site's source
 #'
@@ -73,6 +77,7 @@ raw_product_file <- function(site_id, product, base_dir = path_original("SiteDat
     ICOS2025 = paste0("^ICOSETC_", site_re, "_.*\\.csv$"),
     ICOS2020 = paste0(site_re, ".*\\.csv$"),
     SHUTTLE = paste0("_", site_re, "_.*FLUXMET_(HH|HR)_.*\\.csv$"),
+    ICOSL2 = paste0("^ICOSETC_", site_re, "_FLUXNET_FLUXMET_(HH|HR)_.*\\.csv$"),
     stop("unknown product: ", product)
   )
   root <- if (product %in% update_products) path_raw("flux") else base_dir
@@ -99,7 +104,7 @@ read_ameriflux_base <- function(site_id, base_dir = path_original("SiteData")) {
 #' Read a site's table from one FLUXNET-format product
 #'
 #' A site's table from one FLUXNET-format product (FLUXNET2015/2020/2025, ICOS2025, ICOS2020,
-#' or SHUTTLE), as read.csv() reads it (missing values still coded -9999).
+#' SHUTTLE or ICOSL2), as read.csv() reads it (missing values still coded -9999).
 #'
 #' @param site_id Site ID.
 #' @param product Product name.
