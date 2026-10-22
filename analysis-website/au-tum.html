@@ -10,8 +10,9 @@
 <main class="docs">
   <h1>AU-Tum: which flux record for the latest data?</h1>
   <p class="lead">AU-Tum (Tumbarumba, a 40 m wet sclerophyll forest measured from a 70 m tower) is the one TERN site. Its
-    published record is FLUXNET2015 (2001–2014). Two later records exist: the FLUXNET-archive shuttle's TERN product
-    (ONEFlux v1.3, 2002–2022, but only constant-u* NEE), and TERN's own L6 product (PyFluxPro, 2002–2026). This page
+    published record is FLUXNET2015 (2001–2014). Two later records exist: the TERN product the FLUXNET-archive shuttle
+    serves (TERN's own ONEFlux release 2026_r1, 2002–2022, with only constant-u* NEE), and TERN's L6 product (PyFluxPro,
+    2002–2026). This page
     compares the streams and shows AU-Tum's TAS under each candidate record, to choose how to extend AU-Tum. Data:
     <code>scripts/compare-au-tum-sources.py</code> and <code>scripts/au-tum-source-options.R</code>; TERN's variables
     as FLUXNET columns: <code>scripts/download-tern.py</code>.</p>
@@ -20,6 +21,7 @@
     <li><a href="#sec-series">NEE over time</a></li>
     <li><a href="#sec-annual">Year by year</a></li>
     <li><a href="#sec-pairs">Hour by hour: what changes between streams</a></li>
+    <li><a href="#sec-co2">What differs in the CO₂ flux</a></li>
     <li><a href="#sec-curves">Respiration against soil temperature</a></li>
     <li><a href="#sec-tas">AU-Tum's TAS under each candidate record</a></li>
     <li><a href="#sec-findings">Findings</a></li>
@@ -32,19 +34,33 @@
     which hours each stream keeps and what flux it reports for them, not its gap filling.</p>
   <table class="plain">
     <tr><th></th><th>FLUXNET2015 (published)</th><th>Shuttle TERN product</th><th>TERN L6</th></tr>
-    <tr><th>Processing</th><td>ONEFlux, FLUXNET2015 release (from the OzFlux data of the time)</td>
-      <td>ONEFlux v1.3, FLUXNET-archive shuttle, run on TERN's current data</td>
-      <td>PyFluxPro v3.4 (OzFlux), dataset version 2026_v2</td></tr>
+    <tr><th>Processing</th><td>ONEFlux, FLUXNET2015 release, on the data OzFlux supplied at the time</td>
+      <td>TERN's FLUXNET release 2026_r1 (the file the shuttle serves): quality control in PyFluxPro, then ONEFlux 1.3.4-rc
+        (a release candidate) for u* filtering, gap filling and partitioning; run by TERN, 2026-02-23</td>
+      <td>PyFluxPro v3.4 throughout (OzFlux), dataset version 2026_v2</td></tr>
+    <tr><th>CO₂ flux</th><td>as supplied for FLUXNET2015</td>
+      <td colspan="2">TERN's current processing of the same measurements. Sensible and latent heat, u* and net radiation
+        are identical to FLUXNET2015's (slope 1.000, r 1.000), but the CO₂ flux is 0.55–0.84 × FLUXNET2015's by day,
+        varying by year, and ~0.6 × at night: the CO₂ flux itself was reprocessed. Neither product documents how.</td></tr>
     <tr><th>Period</th><td>2001–2014</td><td>2002–2022</td><td>2002-01 – 2026-04; no flux 2023–2024, almost none in 2020</td></tr>
     <tr><th>Time step</th><td colspan="3">hourly in all three</td></tr>
-    <tr><th>u* filter</th><td>VUT (u* threshold varying by year) and CUT (one threshold); the pipeline uses VUT</td>
-      <td>CUT only (no VUT in the product): the strictest, accepted night hours have u* ≥ ~0.35 m s⁻¹</td>
+    <tr><th>u* filter</th><td>VUT (a threshold per year) and CUT (one threshold for all years); the pipeline uses VUT.
+        The change-point method failed in every year, so the thresholds come from the moving-point method alone: VUT
+        medians 0.15–0.25 m s⁻¹ (2001: 0.08), CUT median 0.17 m s⁻¹ (AUXNEE file)</td>
+      <td>CUT only. Again the change-point method failed in every year and the moving-point method succeeded, yet all
+        VUT thresholds are missing (−9999 in the BIF metadata). ONEFlux supports CUT-only output (since v0.8.0-rc,
+        2025); why VUT was not produced is not documented. CUT median 0.31 m s⁻¹ (percentiles 0.10–0.68): the
+        strictest filter, accepted night hours have u* ≥ ~0.35 m s⁻¹</td>
       <td>TERN's own threshold: accepted night hours reach u* 0.01–0.05 m s⁻¹ through 2019 (5% quantile ~0.08);
         from 2020, ≥ ~0.58 m s⁻¹</td></tr>
     <tr><th>NEE for step 01</th><td><code>NEE_VUT_REF</code>, QC 0</td><td><code>NEE_CUT_REF</code>, QC 0</td>
       <td><code>Fco2</code> where TERN flags it as an observation (identical to TERN's night-time, u*-filtered ER)</td></tr>
-    <tr><th>CO₂ storage</th><td>evidently included (see the night difference by u* below)</td>
-      <td>evidently not included before 2020</td>
+    <tr><th>CO₂ storage</th><td>not reported. Its excess over TERN does not follow the tower-top storage term
+        (r = 0.12, below); a storage term from a CO₂ profile would fit its larger excess on calm nights, but the
+        product cannot confirm it</td>
+      <td>tower-top (single-point) storage, added by ONEFlux: TERN supplied a CO₂ flux without storage, so ONEFlux
+        added Δ(tower-top CO₂)/Δt × 70 m / 0.024 (<code>set_nee()</code> in ONEFlux's <code>qc_auto</code>). The
+        shuttle minus TERN follows that term (r = 0.77, below)</td>
       <td>no storage term before 2020; a storage series (Sco2) only from 2020 (the file does not say whether Fco2 includes it)</td></tr>
     <tr><th>Soil temperature</th><td><code>TS_F_MDS_1</code></td><td><code>TS_F_MDS_1</code>; 2020–2021 a constant fill (16.8 °C, QC 3)</td>
       <td><code>Ts</code>, 2 cm (observations; TERN's gap fill flagged)</td></tr>
@@ -80,6 +96,21 @@
   <p class="small">Night NEE: hours both streams select. Drivers: all common hours.</p>
   <div id="agreement"></div>
 
+  <h2 id="sec-co2">What differs in the CO₂ flux</h2>
+  <p>ONEFlux builds NEE from what a network supplies, in this order (<code>set_nee()</code>,
+    <code>oneflux_steps/qc_auto</code>): the network's NEE; else its CO₂ flux plus its storage flux; else its CO₂ flux
+    plus a single-point storage term from the CO₂ concentration at the top of the tower,
+    ΔCO₂/Δt × height / 0.024; else the CO₂ flux alone, only where the site declares storage negligible. The left figure
+    computes that single-point term from each ONEFlux stream's own tower-top CO₂ and plots each stream's night NEE minus
+    TERN L6's against it. The shuttle follows the 1:1 line: it is TERN's flux plus ONEFlux's single-point storage.
+    FLUXNET2015 does not: its excess over TERN (+1 to +4 µmol m⁻² s⁻¹) is unrelated to the tower-top term. The right
+    figure shows why: by day, when storage is small, FLUXNET2015's CO₂ flux is larger in magnitude than TERN's by a
+    factor of 1.2–1.8 that changes from year to year. The heat fluxes, u* and radiation do not differ at all.</p>
+  <div class="grid2">
+    <div id="storage" class="plot"></div>
+    <div id="scaling" class="plot"></div>
+  </div>
+
   <h2 id="sec-curves">Respiration against soil temperature</h2>
   <div class="controls"><label>Years <select id="period"></select></label></div>
   <div id="curves" class="plot"></div>
@@ -92,19 +123,27 @@
   <h2 id="sec-findings">Findings</h2>
   <div id="findings-text">
   <ol>
-    <li><b>The newer records report less night-time respiration than FLUXNET2015 for the same hours</b>: by
-      2.3 µmol m⁻² s⁻¹ on average for TERN L6 and 1.0 for the shuttle, against a FLUXNET2015 night mean of ~7. The
-      gap grows as turbulence falls: 3–4 µmol m⁻² s⁻¹ at u* &lt; 0.4 m s⁻¹, 0.5–1.2 above 0.6. That is the
-      signature of the CO₂ storage term, large in still nights under a tall canopy. FLUXNET2015 evidently includes it.
-      TERN's current data, and the shuttle's ONEFlux run on it, have none before 2020.</li>
-    <li><b>The shuttle and TERN L6 agree</b>: both come from TERN's current data. For the hours both select they differ
-      by 0.24 µmol m⁻² s⁻¹ (r = 0.96). They differ mainly in which hours they keep. The shuttle's constant-u* filter
-      is strict (u* ≥ ~0.35 m s⁻¹, ~40% fewer night records). TERN's filter is lenient through 2019 (hours down to
-      u* ≈ 0.01–0.05 m s⁻¹, which without storage underestimate respiration) and strict from 2020.</li>
+    <li><b>TERN has reprocessed AU-Tum's CO₂ flux since FLUXNET2015.</b> For the same hours, the newer records' CO₂
+      exchange is smaller in magnitude by day and by night. The daytime slope against FLUXNET2015 is 0.55–0.84 for TERN
+      L6 and 0.57–0.91 for the shuttle, varying by year; night-time respiration is lower by 2.3 (TERN) and 1.0 (shuttle)
+      µmol m⁻² s⁻¹, against a FLUXNET2015 night mean of ~7. Sensible and latent heat, u* and net radiation are identical
+      in both, so only the CO₂ flux changed. Because the factor varies from year to year, at least one of the two records
+      carries year-dependent CO₂ corrections that the other lacks. Which one is right cannot be told from the products;
+      neither documents the change.</li>
+    <li><b>Storage explains the shuttle–TERN difference, not the FLUXNET2015 one.</b> The shuttle is TERN's CO₂ flux plus
+      ONEFlux's tower-top storage term (r = 0.77). FLUXNET2015's excess over TERN does not follow that term (r = 0.12).
+      It does grow on calm nights (3–4 µmol m⁻² s⁻¹ at u* &lt; 0.4 m s⁻¹, 0.5–1.2 above 0.6), as a storage term from a
+      CO₂ profile through the canopy would; but how much of the night-time gap is storage and how much the general
+      scaling cannot be separated here.</li>
+    <li><b>The shuttle and TERN L6 otherwise agree</b>: the same CO₂ flux (daytime slope 0.94), differing mainly in which
+      night hours they keep. The shuttle's constant-u* filter is strict (median threshold 0.31 m s⁻¹ against 0.17 in
+      FLUXNET2015; ~40% fewer night records). TERN's filter is lenient through 2019 (hours down to u* ≈ 0.01–0.05
+      m s⁻¹, which without storage underestimate respiration) and strict from 2020.</li>
     <li><b>Air temperature, soil temperature and soil water agree</b> between FLUXNET2015 and both newer streams over
       2002–2014 (hourly r ≥ 0.98, soil water against TERN 0.977). The exception is the shuttle's 2020–2021 soil data, which are constant fill values.</li>
     <li><b>The temperature sensitivity hardly changes; the base level does.</b> Yearly Q10 from an exponential fit of
-      night NEE on soil temperature varies alike in all streams over 2002–2014 (1.1–2.7), TERN's ~0.15 lower on average.
+      night NEE on soil temperature varies alike in all streams over 2002–2014 (1.1–2.7), TERN's ~0.15 lower on average:
+      a scaling of the flux changes the base level, not the temperature sensitivity.
       R10 is 5.0–7.2 µmol m⁻² s⁻¹ in FLUXNET2015 against 3.9–5.6 (TERN) and 3.2–4.8 (shuttle) in the same years, and the
       mean night NEE 6.4–8.1 against 4.6–6.8 and 3.7–5.4. A record that switches from FLUXNET2015 to TERN therefore steps
       down by about a quarter in night-time respiration at the switch, whatever the temperature.</li>
@@ -115,29 +154,33 @@
 
   <h2 id="sec-recommendation">Recommendation</h2>
   <div id="recommendation-text">
-  <p><b>Use FLUXNET2015 through 2014, then TERN L6</b> (<code>FLUXNET2015+TERN</code>), as originally proposed. The
-    alternatives are worse:</p>
+  <p><b>For now, keep AU-Tum on FLUXNET2015 alone (no extension)</b>, and ask TERN which CO₂ processing is right.
+    Splicing FLUXNET2015 with any of the newer records joins two different processings of the CO₂ flux. The difference
+    is not only the storage term, as this page first concluded, but a year-varying scaling of the flux (0.55–0.84 by
+    day). That makes a step of about a quarter in night-time respiration at the switch. It is undocumented, so it
+    cannot be corrected with any confidence.</p>
+  <p>If AU-Tum must be extended, the options rank as follows:</p>
   <ul>
-    <li><b>TERN alone</b> (or the shuttle alone) would replace the published years with data that lack the storage term
-      and, for TERN, keep low-turbulence nights. That changes AU-Tum's answer, not just its precision. The direct TAS
-      moves from −0.018 (n.s.) to +0.032 (significantly positive), about 3 standard errors; the total TAS from −0.022 to
-      +0.019.</li>
-    <li><b>The shuttle's ONEFlux product between FLUXNET2015 and TERN</b> adds nothing TERN does not have for
-      2015–2022. It is the same underlying data without storage, with a third u* method (constant u*, the strictest:
-      ~40% fewer night records). Its soil temperature and soil water for 2020–2021 are constant fill values, which step
-      01 would use for soil water. (Not fitted, for these reasons.)</li>
-    <li><b>FLUXNET2015 → TERN</b> keeps the published years unchanged and adds the growing years 2014–2019, 2021 and 2025 (2014 straddles the switch; 8,946 night
-      records instead of 5,413; 19 years instead of 11). Its TAS stays within one standard error of the published one
-      and keeps its class: total −0.022 → −0.018, direct −0.018 → −0.008, both not significant.</li>
+    <li><b>FLUXNET2015 → TERN</b> (<code>FLUXNET2015+TERN</code>) keeps the published years unchanged and adds the
+      growing years 2014–2019, 2021 and 2025 (2014 straddles the switch; 8,946 night records instead of 5,413; 19 years
+      instead of 11). Its TAS stays within one standard error of the published one and keeps its class: total −0.022 →
+      −0.018, direct −0.018 → −0.008, both not significant. This is the least disruptive, but it carries the step
+      above.</li>
+    <li><b>TERN alone</b> (or the shuttle alone) is one consistent processing of the CO₂ flux, but it replaces the
+      published years and changes AU-Tum's answer: the direct TAS moves from −0.018 (n.s.) to +0.032 (significantly
+      positive), about 3 standard errors; the total TAS from −0.022 to +0.019. That would be the right choice only if
+      TERN confirms that its current CO₂ processing supersedes FLUXNET2015's. TERN L6 also keeps low-turbulence nights
+      that the shuttle discards.</li>
+    <li><b>The shuttle between FLUXNET2015 and TERN</b> adds nothing TERN lacks for 2015–2022: the same CO₂ flux plus
+      ONEFlux's tower-top storage, with a third u* method (CUT only, the strictest). Its soil temperature and soil water
+      for 2020–2021 are constant fill values, which step 01 would use for soil water. Not fitted, for these reasons.</li>
   </ul>
-  <p class="note"><b>Caveat.</b> The TERN years carry no storage term, so their night-time respiration is about a quarter
-    lower than FLUXNET2015's would be. The splice is a step in the record that the TAS model can partly read as a
-    response to the years' temperatures. The extension's effect on AU-Tum's TAS is small here, but it is a data-level
-    inconsistency, not noise. Two further points: the control year becomes 2025, a sparse TERN year (180 night records),
-    because it is the year closest to the mean growing-season soil temperature; and keeping AU-Tum on FLUXNET2015 alone
-    remains a defensible alternative. A possible refinement, not done: apply a stricter, ONEFlux-like u* threshold
-    (~0.4 m s⁻¹) to the TERN years: over 2002–2014 that narrows TERN's mean night gap to FLUXNET2015 from about 2.3 to
-    about 1.6 µmol m⁻² s⁻¹ (see the night difference by u* above), at the cost of fewer records.</p>
+  <p class="note"><b>Open questions for TERN</b> (support@fluxnet.org, or the site team at CSIRO): what changed in AU-Tum's
+    CO₂ flux processing since the data supplied to FLUXNET2015, and why the change is year-dependent; whether the
+    FLUXNET2015 input included a storage term from a CO₂ profile; and why the 2026_r1 ONEFlux run produced no VUT although
+    the moving-point u* method succeeded in every year. Also note: in the extended options the control year becomes 2025,
+    a sparse TERN year (180 night records), because it is the year closest to the mean growing-season soil
+    temperature.</p>
 </div>
 </main>
 <script type="module" src="js/au-tum.js"></script>

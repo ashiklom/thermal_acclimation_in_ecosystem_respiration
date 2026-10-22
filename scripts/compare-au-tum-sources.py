@@ -28,11 +28,19 @@ data-raw/flux/TERN/unzip/TERN_AU-Tum_L6_HR_*.csv; writes one JSON file:
   daily     per stream: date, mean NEE over all hours (gap-filled; complete
             days), mean night-record NEE and their number
   pairs     per pair of streams over their common years: agreement of the
-            night records both select (n, bias, RMSE, r, slope) and of the
-            drivers (TA, TS, SWC, USTAR; all hours), the records only one
+            night records both select (n, bias, RMSE, r, slope), of the
+            daytime NEE observations both have (and its slope per year), and
+            of the drivers (TA, TS, SWC, USTAR: all hours; H, LE:
+            observations in both), the records only one
             selects, per year, the mean difference (b - a) of the matched night
             records by u* bin, and a sample of them
   curves    per stream and period: night NEE by 1 degC TS bin
+  storage   the single-point storage term ONEFlux adds when a network
+            submits a CO2 flux without storage but with tower-top CO2
+            (oneflux_steps/qc_auto set_nee(): FC + dCO2/dt * height / 0.024,
+            here height 70 m), from each ONEFlux stream's own CO2
+            observations, against that stream's night NEE minus TERN L6's
+            for the night hours both select: agreement and binned means
 """
 
 import argparse
@@ -61,7 +69,11 @@ FILES = {
 }
 PAIRS = [("F15_VUT", "F15_CUT"), ("F15_CUT", "SHUT_CUT"), ("F15_VUT", "SHUT_CUT"), ("F15_VUT", "TERN"),
          ("SHUT_CUT", "TERN")]
-DRIVERS = {"TA": "TA_F_MDS", "TS": "TS_F_MDS_1", "SWC": "SWC_F_MDS_1", "USTAR": "USTAR"}
+DRIVERS = {"TA": "TA_F_MDS", "TS": "TS_F_MDS_1", "SWC": "SWC_F_MDS_1", "USTAR": "USTAR", "H": "H_F_MDS", "LE": "LE_F_MDS"}
+# drivers compared on observations only (QC 0 in both)
+OBSERVED_ONLY = ("H", "LE")
+TOWER_HEIGHT = 70  # m, AU-Tum's eddy-covariance height
+SC_BINS = [-2, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5]
 USTAR_BINS = [0, 0.2, 0.3, 0.4, 0.6, 1.0, 3.0]
 PERIODS = {"2002-2014": (2002, 2014), "2015-2022": (2015, 2022), "2023-2026": (2023, 2026)}
 
@@ -71,7 +83,8 @@ def read_product(product):
     if len(files) != 1:
         raise SystemExit(f"{product}: expected one file matching {FILES[product]}, found {len(files)}")
     cols = ["TIMESTAMP_START", "NEE_VUT_REF", "NEE_VUT_REF_QC", "NEE_CUT_REF", "NEE_CUT_REF_QC", "NIGHT",
-            *DRIVERS.values(), "TS_F_MDS_1_QC", "SWC_F_MDS_1_QC"]
+            "CO2_F_MDS", "CO2_F_MDS_QC",
+            *DRIVERS.values(), "TS_F_MDS_1_QC", "SWC_F_MDS_1_QC", "H_F_MDS_QC", "LE_F_MDS_QC"]
     a = pd.read_csv(files[0], usecols=lambda c: c in cols).replace(-9999, np.nan)
     a.index = pd.to_datetime(a.pop("TIMESTAMP_START").astype(np.int64).astype(str), format="%Y%m%d%H%M")
     return a, pathlib.Path(files[0]).name
@@ -81,7 +94,12 @@ def stream_table(product_table, nee_col):
     a = product_table
     t = pd.DataFrame({"NEE": a[nee_col], "QC": a[f"{nee_col}_QC"], "NIGHT": a["NIGHT"]}, index=a.index)
     for k, c in DRIVERS.items():
-        t[k] = a[c]
+        t[k] = a[c].where(a[f"{c}_QC"] == 0) if k in OBSERVED_ONLY else a[c]
+    if "CO2_F_MDS" in a:
+        # single-point storage: hourly change of measured tower-top CO2 (umol mol-1)
+        co2 = a["CO2_F_MDS"].where(a["CO2_F_MDS_QC"] == 0)
+        step = a.index.to_series().diff().dt.total_seconds()
+        t["SC_SP"] = (co2.diff() / step * (TOWER_HEIGHT / 0.024)).where(step == 3600).values
     t["night_ok"] = t.TA.notna() & (t.QC == 0) & (t.NIGHT == 1) & (t.NEE > -5) & (t.NEE < 30)
     return t
 
@@ -140,9 +158,14 @@ def pair(a, b, ta, tb, rng):
     per_year = (j.assign(only_a=j.night_ok_a & ~j.night_ok_b, only_b=~j.night_ok_a & j.night_ok_b,
                          both=j.night_ok_a & j.night_ok_b)
                 .groupby(j.index.year)[["only_a", "only_b", "both"]].sum().reset_index(names="year"))
+    day = j[(j.QC_a == 0) & (j.QC_b == 0) & (j.NIGHT_a == 0) & j.NEE_a.notna() & j.NEE_b.notna()]
+    yearly = [{"year": int(y), "n": int(len(g)), "slope": float(np.polyfit(g.NEE_a, g.NEE_b, 1)[0])}
+              for y, g in day.groupby(day.index.year) if len(g) >= 200]
     diff = (both.NEE_b - both.NEE_a).groupby(pd.cut(both.USTAR_a, USTAR_BINS), observed=False).agg(["mean", "count"])
     return {"a": a, "b": b, "years": [int(min(years)), int(max(years))] if years else None,
             "night": agreement(both.NEE_a, both.NEE_b),
+            "day": agreement(day.NEE_a, day.NEE_b),
+            "day_slope_by_year": yearly,
             "by_ustar": {"lower": USTAR_BINS[:-1], "upper": USTAR_BINS[1:], "diff": rnd(diff["mean"]),
                          "n": diff["count"].astype(int).tolist()},
             "drivers": {k: agreement(j[f"{k}_a"], j[f"{k}_b"]) for k in DRIVERS},
@@ -159,6 +182,21 @@ def curves(t):
         g = night.groupby(np.floor(night.TS)).NEE.agg(["mean", "count"])
         g = g[g["count"] >= 20]
         out[name] = {"ts": (g.index + 0.5).tolist(), "nee": rnd(g["mean"]), "n": g["count"].astype(int).tolist()}
+    return out
+
+
+def storage(tables):
+    """Each ONEFlux stream's night NEE minus TERN L6's against the single-point storage term."""
+    tern = tables["TERN"]
+    out = {"bins": {"lower": SC_BINS[:-1], "upper": SC_BINS[1:]}}
+    for s in ("F15_VUT", "SHUT_CUT"):
+        j = tables[s].join(tern, how="inner", lsuffix="_a", rsuffix="_b")
+        both = j[j.night_ok_a & j.night_ok_b & j.SC_SP.notna()]
+        d = both.NEE_a - both.NEE_b
+        binned = d.groupby(pd.cut(both.SC_SP, SC_BINS), observed=False).agg(["mean", "count"])
+        out[s] = {"n": int(len(d)), "mean_diff": float(d.mean()), "mean_sc": float(both.SC_SP.mean()),
+                  "r": float(np.corrcoef(d, both.SC_SP)[0, 1]), "slope": float(np.polyfit(both.SC_SP, d, 1)[0]),
+                  "diff": rnd(binned["mean"]), "count": binned["count"].astype(int).tolist()}
     return out
 
 
@@ -196,7 +234,8 @@ def main():
            "annual": {s: annual(t) for s, t in tables.items()},
            "daily": {s: daily(t) for s, t in tables.items()},
            "pairs": [pair(a, b, tables[a], tables[b], rng) for a, b in PAIRS],
-           "curves": {s: curves(t) for s, t in tables.items()}}
+           "curves": {s: curves(t) for s, t in tables.items()},
+           "storage": storage(tables)}
     path = ROOT / args.out
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(clean(out), separators=(",", ":")))
@@ -204,6 +243,10 @@ def main():
         n = p["night"]
         print(f"{p['a']:>8} vs {p['b']:<8} {p['years']}: night n={n.get('n')} bias={n.get('bias', float('nan')):.3f} "
               f"rmse={n.get('rmse', float('nan')):.3f} r={n.get('r', float('nan')):.3f}")
+    for s in ("F15_VUT", "SHUT_CUT"):
+        x = out["storage"][s]
+        print(f"{s} - TERN vs single-point storage: n={x['n']} mean diff={x['mean_diff']:.3f} mean SC={x['mean_sc']:.3f} "
+              f"r={x['r']:.3f} slope={x['slope']:.3f}")
     print(f"wrote {path}")
 
 

@@ -97,10 +97,32 @@ const row = (label, a) => `<td>${label}</td><td class="num">${a.n?.toLocaleStrin
   <td class="num">${fmt(a.rmse, 3)}</td><td class="num">${fmt(a.r, 3)}</td><td class="num">${fmt(a.slope, 3)}</td>`;
 document.getElementById("agreement").innerHTML = `<table class="plain"><tr><th>a</th><th>b</th><th>years</th><th>variable</th><th class="num">n</th>
   <th class="num">bias (b − a)</th><th class="num">RMSE</th><th class="num">r</th><th class="num">slope</th></tr>${d.pairs.map((p) => {
-  const vars = [["night NEE (both select)", p.night], ...Object.entries(p.drivers)];
+  const vars = [["night NEE (both select)", p.night], ["day NEE (observations in both)", p.day], ...Object.entries(p.drivers)];
   return vars.map(([k, a], i) => `<tr>${i === 0 ? `<td rowspan="${vars.length}">${SHORT[p.a]}</td><td rowspan="${vars.length}">${SHORT[p.b]}</td>
     <td rowspan="${vars.length}">${p.years.join("–")}</td>` : ""}${row(k, a)}</tr>`).join("");
 }).join("")}</table>`;
+
+// ---- what differs in the CO2 flux: single-point storage, and a year-varying scaling
+{
+  const st = d.storage;
+  const mids = st.bins.lower.map((l, i) => (l + st.bins.upper[i]) / 2);
+  const lim = [Math.min(...st.bins.lower), Math.max(...st.bins.upper)];
+  Plotly.newPlot("storage", [
+    { type: "scatter", mode: "lines", x: lim, y: lim, line: { color: "#000", dash: "dash", width: 1 }, name: "1:1 (difference = the storage term)", hoverinfo: "skip" },
+    ...["SHUT_CUT", "F15_VUT"].map((s) => ({ type: "scatter", mode: "lines+markers", name: `${SHORT[s]} − TERN L6 (r = ${fmt(st[s].r, 2)})`,
+      x: mids, y: st[s].diff, text: st[s].count.map((n) => `n=${n}`), line: { color: COLORS[s] },
+      hovertemplate: "storage %{x:.2f}: difference %{y:.2f} (%{text})<extra></extra>" })),
+  ], baseLayout({ xaxis: { title: "single-point storage, tower-top CO₂ (µmol m⁻² s⁻¹)" },
+    yaxis: { title: "night NEE − TERN L6 (µmol m⁻² s⁻¹)" }, legend: { orientation: "h", y: -0.25 } }), PLOT_CONFIG);
+  const pairs = [["F15_VUT", "TERN"], ["F15_VUT", "SHUT_CUT"], ["SHUT_CUT", "TERN"]];
+  Plotly.newPlot("scaling", pairs.map(([a, b]) => {
+    const p = d.pairs.find((x) => x.a === a && x.b === b);
+    return { type: "scatter", mode: "lines+markers", name: `${SHORT[b]} on ${SHORT[a]}`, x: p.day_slope_by_year.map((r) => r.year),
+      y: p.day_slope_by_year.map((r) => r.slope), line: { color: COLORS[b], dash: a === "SHUT_CUT" ? "dot" : "solid" } };
+  }), baseLayout({ xaxis: { title: "year", dtick: 2 }, yaxis: { title: "daytime NEE slope, b on a", range: [0.4, 1.1] },
+    legend: { orientation: "h", y: -0.25 },
+    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { dash: "dash", color: "#888" } }] }), PLOT_CONFIG);
+}
 
 // ---- respiration curves
 const periodSel = document.getElementById("period");

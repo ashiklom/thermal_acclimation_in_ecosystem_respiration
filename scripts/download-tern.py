@@ -17,10 +17,10 @@ the names only say which step-01 input each one stands in for.
   NEE_VUT_REF_QC       0 where Fco2 is an observation that passed TERN's
                        checks (QC flag 0), else 3 (gap-filled: never used
                        as an observation)
-  TA_F_MDS, TS_F_MDS_1, SWC_F_MDS_1, SW_IN_F_MDS, VPD_F_MDS
+  TA_F_MDS, TS_F_MDS_1, SWC_F_MDS_1, SW_IN_F_MDS, VPD_F_MDS, H_F_MDS, LE_F_MDS
                        Ta, Ts (the 2 cm sensor at AU-Tum), Sws x 100 (%),
-                       Fsd, VPD x 10 (hPa); their _QC is 0 for observations
-                       (TERN flag 0), 2 for TERN's gap fill
+                       Fsd, VPD x 10 (hPa), Fh, Fe; their _QC is 0 for
+                       observations (TERN flag 0), 2 for TERN's gap fill
   NETRAD, USTAR, RH, P Fn, ustar, RH, Precip
   SW_IN_POT, NIGHT     top-of-atmosphere shortwave radiation averaged over
                        the period (NOAA solar geometry, minute steps), and
@@ -54,6 +54,8 @@ MET = {
     "Ts": ("TS_F_MDS_1", 1, True),
     "Sws": ("SWC_F_MDS_1", 100, True),
     "Fsd": ("SW_IN_F_MDS", 1, True),
+    "Fh": ("H_F_MDS", 1, True),
+    "Fe": ("LE_F_MDS", 1, True),
     "VPD": ("VPD_F_MDS", 10, True),
     "Fn": ("NETRAD", 1, False),
     "ustar": ("USTAR", 1, False),
