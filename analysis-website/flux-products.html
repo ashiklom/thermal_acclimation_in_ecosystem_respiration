@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Published records vs the FLUXNET shuttle · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Published records vs the FLUXNET shuttle</h1>
+  <p class="lead">The night-time NEE records the manuscript used against the FLUXNET-archive shuttle's ONEFlux products,
+    at every site the shuttle has. FLUXNET-format sites: the published record (FLUXNET2015 and its successors, as
+    <code>data/site_info.csv</code> names them) with its VUT and CUT u* filtering, against the shuttle's VUT (where the
+    product has it) and CUT. AmeriFlux sites: the manuscript's own record (AmeriFlux BASE with its REddyProc u*
+    threshold) against the shuttle's VUT and CUT. Every stream's night records are selected as step 01 selects them.
+    Differences are shuttle − reference. Data: <code>scripts/compare-flux-products.R</code>.</p>
+  <div class="controls">
+    <label>Comparison <select id="comparison"><option value="VUT">VUT (shuttle NEE_VUT_REF)</option>
+      <option value="CUT">CUT (shuttle NEE_CUT_REF)</option></select></label>
+    <label>Statistic <select id="stat"><option value="diff">mean difference (µmol m⁻² s⁻¹)</option>
+      <option value="rel">relative difference (% of the reference)</option></select></label>
+    <label>Sites <select id="network"><option value="all">all</option><option value="FLUXNET-format">FLUXNET-format</option>
+      <option value="AmeriFlux">AmeriFlux</option></select></label>
+  </div>
+  <p class="small">FLUXNET-format reference: the published record's NEE of the same u* method (PUB_VUT vs SHUT_VUT, PUB_CUT
+    vs SHUT_CUT). AmeriFlux reference: the manuscript's record in both comparisons (MS vs SHUT_VUT, MS vs SHUT_CUT).</p>
+
+  <h2 id="sec-summary">Average night-time differences</h2>
+  <div id="stats" class="stats"></div>
+  <div id="sites-plot" class="plot"></div>
+  <p class="small">Each site's mean difference over the night records both streams select, in all the years they share
+    (bars: the middle 50% of its yearly differences). Sorted by the difference; colour by network.</p>
+  <div id="heatmap" class="plot"></div>
+  <p class="small">The same difference per site and year (sites in the order above; blank: no night record both select).</p>
+
+  <h2 id="sec-table">Sites</h2>
+  <p>Choose a site with its <b>show</b> button to plot its time series below. Matched: night records both streams select.
+    Own: each stream's own selection over the shared years (includes the effect of different u* filters). Day slope:
+    shuttle on reference for the daytime observations both have; a value away from 1 is a scaling of the flux itself.</p>
+  <div id="table"></div>
+
+  <h2 id="sec-series">Time series</h2>
+  <div id="series-title" class="readout"></div>
+  <div id="series" class="plot"></div>
+  <p class="small">Monthly mean of each stream's selected night-time NEE (months with at least 10 records).</p>
+  <div id="yearly" class="plot"></div>
+</main>
+<script type="module" src="js/flux-products.js"></script>
+</body>
+</html>

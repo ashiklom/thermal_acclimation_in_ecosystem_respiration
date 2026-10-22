@@ -8,6 +8,8 @@ Reads (paths relative to the repository root):
   results/<id>/tas_inputs_summary.csv   (optional) each site's fit settings and input hashes
   data-proc/RespirationData/*_ac.parquet   (optional) for mean annual air temperature
   analysis-website/stages/<stage>.html     what each method stage changes and why
+  data-proc/flux-products/{summary,siteyear,monthly}.csv  (optional) the manuscript's records
+                                       against the shuttle's (scripts/compare-flux-products.R)
   data-proc/au-tum-sources.json        (optional) AU-Tum's candidate flux records compared
                                        (scripts/compare-au-tum-sources.py)
   data-proc/au-tum-options/<option>/   (optional) AU-Tum's TAS under each candidate source
@@ -37,6 +39,10 @@ Writes analysis-website/data/:
                              older products (source_fills.csv), the ERA5 extension offsets, and
                              the ERA5 nearest-cell sensitivity runs (ids containing
                              "era5-nearest") with the run they are compared with
+  flux_products.json         the manuscript's flux records against the FLUXNET-archive shuttle's
+                             ONEFlux products (scripts/compare-flux-products.R): per site and
+                             comparison (VUT, CUT) summary, and per site-year differences
+  flux_products/<site>.json  monthly means of each stream's selected night-time NEE, by stream
   au_tum_sources.json        AU-Tum's candidate flux records compared (a copy)
   au_tum_options.json        AU-Tum's TAS inputs summary, outcome and site-year tables per
                              candidate source, by option
@@ -300,6 +306,23 @@ def build_update(sets):
     return out
 
 
+def build_flux_products():
+    """The manuscript's flux records against the shuttle's ONEFlux products."""
+    d = ROOT / "data-proc" / "flux-products"
+    if not (d / "summary.csv").exists():
+        write_json({}, OUT / "flux_products.json")
+        return None
+    out = {"summary": records(pd.read_csv(d / "summary.csv")),
+           "siteyear": records(pd.read_csv(d / "siteyear.csv")) if (d / "siteyear.csv").exists() else []}
+    write_json(out, OUT / "flux_products.json")
+    if (d / "monthly.csv").exists():
+        monthly = pd.read_csv(d / "monthly.csv")
+        for site, g in monthly.groupby("site_ID"):
+            write_json({s: {"month": h["month"].tolist(), "nee": [round(v, 3) for v in h["nee"]], "n": h["n"].tolist()}
+                        for s, h in g.groupby("stream")}, OUT / "flux_products" / f"{site}.json")
+    return out
+
+
 def build_au_tum():
     """AU-Tum's candidate flux records and its TAS under each candidate source."""
     src = ROOT / "data-proc" / "au-tum-sources.json"
@@ -412,6 +435,7 @@ def main():
     build_drivers(sets)
     build_screen(sets)
     build_update(sets)
+    build_flux_products()
     build_au_tum()
     code = build_code()
     copy_plotly()

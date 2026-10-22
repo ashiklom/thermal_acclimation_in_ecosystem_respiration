@@ -10,6 +10,7 @@ export const PAGES = [
   ["matrix.html", "TAS by column"],
   ["site.html", "Site explorer"],
   ["update.html", "Data update"],
+  ["flux-products.html", "Records vs shuttle"],
   ["au-tum.html", "AU-Tum sources"],
   ["docs-ts-estimators.html", "Docs: TS estimators"],
   ["docs-sensor-screen.html", "Docs: sensor screen"],
