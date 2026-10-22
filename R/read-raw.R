@@ -14,6 +14,10 @@
 #   ICOSL2          ICOSL2/unzip/ICOSETC_<site>_FLUXNET_FLUXMET_(HH|HR)_*.csv (the
 #                   current ICOS ETC L2 release, from ICOS labelling on;
 #                   scripts/download-icos-l2.py)
+#   TERN            TERN/unzip/TERN_<site>_L6_(HH|HR)_*.csv (TERN's own L6
+#                   processing, PyFluxPro, written in FLUXNET format by
+#                   scripts/download-tern.py, whose header says how each
+#                   TERN variable stands in for a FLUXNET column)
 #
 # A site's `source` names its products in one of two ways: joined by "_"
 # (stitched: each later product only adds the records after the end of the
@@ -35,14 +39,15 @@ raw_product_dirs <- list(
   ICOS2025 = file.path("Ecosystem final quality (L2) product in ETC-Archive format - release 2025-1", "unzip"),
   ICOS2020 = "ICOS_after2020",
   SHUTTLE = file.path("SHUTTLE", "unzip"),
-  ICOSL2 = file.path("ICOSL2", "unzip")
+  ICOSL2 = file.path("ICOSL2", "unzip"),
+  TERN = file.path("TERN", "unzip")
 )
 
 #' Products of the data update
 #'
 #' Products downloaded for the data update, read from path_raw("flux") whatever `base_dir`.
 #' @noRd
-update_products <- c("SHUTTLE", "ICOSL2")
+update_products <- c("SHUTTLE", "ICOSL2", "TERN")
 
 #' Products named by a site's source
 #'
@@ -78,6 +83,7 @@ raw_product_file <- function(site_id, product, base_dir = path_original("SiteDat
     ICOS2020 = paste0(site_re, ".*\\.csv$"),
     SHUTTLE = paste0("_", site_re, "_.*FLUXMET_(HH|HR)_.*\\.csv$"),
     ICOSL2 = paste0("^ICOSETC_", site_re, "_FLUXNET_FLUXMET_(HH|HR)_.*\\.csv$"),
+    TERN = paste0("^TERN_", site_re, "_L6_(HH|HR)_.*\\.csv$"),
     stop("unknown product: ", product)
   )
   root <- if (product %in% update_products) path_raw("flux") else base_dir
@@ -104,7 +110,7 @@ read_ameriflux_base <- function(site_id, base_dir = path_original("SiteData")) {
 #' Read a site's table from one FLUXNET-format product
 #'
 #' A site's table from one FLUXNET-format product (FLUXNET2015/2020/2025, ICOS2025, ICOS2020,
-#' SHUTTLE or ICOSL2), as read.csv() reads it (missing values still coded -9999).
+#' SHUTTLE, ICOSL2 or TERN), as read.csv() reads it (missing values still coded -9999).
 #'
 #' @param site_id Site ID.
 #' @param product Product name.
