@@ -287,7 +287,9 @@ by_fit_set <- tar_map(
   values = list(fit_set = c("published", "v2"), fits = rlang::syms(c("fits_published", "fits_v2"))),
   names = "fit_set",
   tar_target(drivers, driver_data(pipeline_site_info, climate_all, spectral, soil, fits$total, fits$direct)),
-  tar_target(driver_results, driver_analysis(drivers)),
+  # (over the sites with both TAS: a site's fit can be missing, e.g. US-BZS
+  # with the latest data)
+  tar_target(driver_results, driver_analysis(drivers[!is.na(drivers$TAS) & !is.na(drivers$TAS_tot), ])),
   tar_target(future, scenario_data(drivers, tmin_month, scenario_all)),
   tar_target(step0304_files, write_step0304_outputs(fit_set, drivers, driver_results, future, tmin_month), format = "file")
 )
