@@ -9,6 +9,7 @@ export const PAGES = [
   ["ts.html", "Soil temperature"],
   ["matrix.html", "TAS by column"],
   ["site.html", "Site explorer"],
+  ["update.html", "Data update"],
   ["au-tum.html", "AU-Tum sources"],
   ["docs-ts-estimators.html", "Docs: TS estimators"],
   ["docs-sensor-screen.html", "Docs: sensor screen"],

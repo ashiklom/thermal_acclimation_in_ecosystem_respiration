@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Data update · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Data update (S18): method effect and data effect</h1>
+  <p class="lead">How far each site's TAS moved from the published estimate, split in two. The <b>method effect</b> is the
+    refactored pipeline (S11–S14 fixes) on the published data against the published TAS. The <b>data effect</b> is
+    the same pipeline on the latest flux releases against the published data. Both use the manuscript's soil temperature
+    (<code>TS_manuscript</code>); the fit matrix below repeats the data effect for every soil-temperature column.</p>
+  <div class="controls">
+    <label>Latest-data run <select id="run"></select></label>
+    <label>Model <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+    <label>Threshold <input id="threshold" type="number" step="0.0001" value="0.0017" style="width:6rem"></label>
+  </div>
+  <h2 id="sec-effects">Method and data effects</h2>
+  <div id="stats" class="stats"></div>
+  <div id="flipnote"></div>
+  <div class="grid2">
+    <div id="effects" class="plot"></div>
+    <div id="records" class="plot"></div>
+  </div>
+  <p class="small">Left: each site's data effect against its method effect (colour: its class on the latest data; a
+    black ring marks a significant sign flip between the published-data and latest-data runs). Right: the data effect
+    against the change in the number of night-time records the fit uses (sites whose inputs changed). Click a point to
+    open the site.</p>
+
+  <h2 id="sec-columns">Data effect by soil-temperature column</h2>
+  <div id="columns" class="plot"></div>
+  <div id="columns-table"></div>
+
+  <h2 id="sec-sites">Sites</h2>
+  <div id="table"></div>
+
+  <h2 id="sec-fills">Soil drivers filled from older products</h2>
+  <p>Where the newest product lacks soil temperature or soil water at a time step that an older published product has,
+    the older value (with its quality flag) is used (<code>splice_products()</code>, R/read-raw.R). Records filled, by
+    site, product and variable:</p>
+  <div id="fills"></div>
+
+  <h2 id="sec-era5">ERA5 soil water: offset correction</h2>
+  <p>Sites using ERA5-Land soil water need it after 2024. The extraction (nearest grid cell) does not reproduce the
+    published file, so the extension is shifted by each site's mean offset over 2024
+    (<code>extend_era5_swc()</code>). The sensitivity run uses the extension uncorrected.</p>
+  <div id="era5-stats" class="stats"></div>
+  <div class="grid2">
+    <div id="era5-scatter" class="plot"></div>
+    <div id="era5-offsets" class="plot"></div>
+  </div>
+</main>
+<script type="module" src="js/update.js"></script>
+</body>
+</html>

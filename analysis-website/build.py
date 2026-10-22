@@ -31,6 +31,12 @@ Writes analysis-website/data/:
   drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
+  update.json                the data update (S18): each latest-data run with the run on the
+                             published data it is compared with (the latest S17 run), the sites
+                             whose TAS inputs changed between them, the soil drivers filled from
+                             older products (source_fills.csv), the ERA5 extension offsets, and
+                             the ERA5 nearest-cell sensitivity runs (ids containing
+                             "era5-nearest") with the run they are compared with
   au_tum_sources.json        AU-Tum's candidate flux records compared (a copy)
   au_tum_options.json        AU-Tum's TAS inputs summary, outcome and site-year tables per
                              candidate source, by option
@@ -272,6 +278,28 @@ def build_screen(sets):
     return out
 
 
+def build_update(sets):
+    """The data update: latest-data runs against the latest run on the published data."""
+    reference = [s for s in sets if s.get("stage") == "S17"]
+    runs = [s for s in sets if s.get("stage") == "S18" and "era5-nearest" not in s["id"]]
+    nearest = [s for s in sets if s.get("stage") == "S18" and "era5-nearest" in s["id"]]
+    if not reference or not runs:
+        write_json({}, OUT / "update.json")
+        return None
+
+    def optional(run_id, name):
+        path = ROOT / "results" / run_id / name
+        return records(pd.read_csv(path)) if path.exists() else None
+
+    ref = reference[-1]["id"]
+    out = {"reference": ref, "runs": [{
+        "run": r["id"], "inputs": input_changes(ROOT / "results" / ref, ROOT / "results" / r["id"]),
+        "fills": optional(r["id"], "source_fills.csv"), "era5_offsets": optional(r["id"], "era5_extension_offsets.csv"),
+    } for r in runs], "era5_nearest": [{"run": n["id"], "reference": runs[-1]["id"]} for n in nearest]}
+    write_json(out, OUT / "update.json")
+    return out
+
+
 def build_au_tum():
     """AU-Tum's candidate flux records and its TAS under each candidate source."""
     src = ROOT / "data-proc" / "au-tum-sources.json"
@@ -383,6 +411,7 @@ def main():
     build_ts(sets)
     build_drivers(sets)
     build_screen(sets)
+    build_update(sets)
     build_au_tum()
     code = build_code()
     copy_plotly()
