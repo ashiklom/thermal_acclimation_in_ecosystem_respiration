@@ -21,7 +21,7 @@ library(tarchetypes)
 
 tar_source(c(
   "R/paths.R", "R/io.R", "R/read-raw.R", "R/sun-times.R", "R/step01-prep.R", "R/ts-qualify.R",
-  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/ts-ranking.R", "R/ts-fits.R", "R/step03-drivers.R", "R/step04-scenario.R",
+  "R/step02-prep.R", "R/step02-tas.R", "R/ts-columns.R", "R/ts-ranking.R", "R/ts-fits.R", "R/ts-screen.R", "R/step03-drivers.R", "R/step04-scenario.R",
   "R/download.R", "R/pipeline.R", "R/controllers.R"
 ))
 
@@ -147,6 +147,8 @@ per_site <- tar_map(
     raw_files
     read_ts_sensor(site, site_settings[site_settings$site_ID == site_id, ], site_data_dir(site, data_version))
   }),
+  # soil-temperature sensor screen (R/ts-screen.R): input data only, no fits
+  tar_target(ts_screen, ts_screen_site(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ], tas_inputs)),
   tar_target(ts_candidate_values, ts_candidates(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ], tas_inputs)),
   tar_target(ts_columns, {
     settings <- site_settings[site_settings$site_ID == site_id, ]
@@ -223,6 +225,9 @@ combined <- list(
     utils::write.csv(ts_columns_summary_all, path, row.names = FALSE)
     path
   }, format = "file"),
+  tar_combine(ts_screen_all, per_site[["ts_screen"]], command = combine_ts_screen(list(!!!.x))),
+  tar_target(ts_screen_validation_table, ts_screen_validation(ts_screen_all, site_info, site_settings)),
+  tar_target(ts_screen_files, write_ts_screen(ts_screen_all, validation = ts_screen_validation_table), format = "file"),
   tar_combine(ts_quality_all, per_site[["ts_site_quality"]], command = dplyr::bind_rows(!!!.x)),
   tar_target(ts_ranking, rank_ts_columns(ts_quality_all)),
   # the soil-temperature columns the fits are run with (with the latest
