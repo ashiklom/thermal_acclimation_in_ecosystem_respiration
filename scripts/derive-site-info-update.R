@@ -86,7 +86,7 @@ optional_columns <- c("TS_PI_1")
 problems <- character()
 for (s in update$site_ID[update$source == "AmeriFlux_BASE"]) {
   row <- update[update$site_ID == s, ]
-  if (!s %in% manifest$site_ID[!is.na(manifest$file)]) {
+  if (!s %in% manifest$site_ID[manifest$product == "AmeriFlux_BASE" & !is.na(manifest$file)]) {
     problems <- c(problems, paste0(s, ": no new release downloaded"))
     next
   }
