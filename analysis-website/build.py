@@ -27,6 +27,17 @@ Writes analysis-website/data/:
   drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
+  code.json                  the source of every top-level R definition in R/*.R, by name:
+                             {file, line, code}, for the documentation pages' code snippets
+                             (built from the code alone, never from results)
+
+Code snippets (build_code()): a top-level definition is a line starting at column 0 with
+`name <- `. Its source runs from the roxygen block (`#'` lines) directly above it to the end
+of the expression: the line where the brackets ((), [], {}) opened since the `<-` are all
+closed again and the line does not end in an operator or comma (brackets inside strings and
+comments are ignored). For a function that is the closing brace at column 0; for a one-line
+constant, that line. `line` is the line of `name <- ` (1-based); a name defined twice keeps
+its first definition (with a warning).
 
 Run with `pixi run website-build`.
 """
@@ -34,6 +45,7 @@ Run with `pixi run website-build`.
 import json
 import math
 import pathlib
+import re
 import shutil
 
 import pandas as pd
@@ -253,6 +265,79 @@ def build_screen(sets):
     return out
 
 
+DEFINITION = re.compile(r"^([A-Za-z.][A-Za-z0-9._]*) <- ")
+CONTINUES = re.compile(r"(\|>|%[^%]*%|<-|[-+*/^&|=,~(\[{])\s*$")
+CLOSERS = {")": "(", "]": "[", "}": "{"}
+
+
+def code_only(line):
+    """A line of R without its comment and string contents (brackets in them don't count)."""
+    out, quote, i = [], None, 0
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = None
+                out.append(c)
+        elif c in "\"'`":
+            quote = c
+            out.append(c)
+        elif c == "#":
+            break
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out), quote
+
+
+def definition_end(lines, start):
+    """Index of the last line of the definition starting at lines[start]."""
+    depth, quote = 0, None
+    for i in range(start, len(lines)):
+        if quote:  # a string spanning lines: skip to its end
+            j = lines[i].find(quote)
+            if j < 0:
+                continue
+            text, quote = code_only(lines[i][j + 1:])
+        else:
+            text, quote = code_only(lines[i] if i > start else lines[i].split("<-", 1)[1])
+        for c in text:
+            if c in "([{":
+                depth += 1
+            elif c in CLOSERS:
+                depth -= 1
+        if depth <= 0 and not quote and not CONTINUES.search(text):
+            return i
+    return len(lines) - 1
+
+
+def build_code():
+    """The source of every top-level R definition in R/*.R (see the module docstring)."""
+    code = {}
+    for path in sorted((ROOT / "R").glob("*.R")):
+        lines = path.read_text().splitlines()
+        i = 0
+        while i < len(lines):
+            m = DEFINITION.match(lines[i])
+            if not m:
+                i += 1
+                continue
+            first = i
+            while first > 0 and lines[first - 1].startswith("#'"):
+                first -= 1
+            last = definition_end(lines, i)
+            name = m.group(1)
+            if name in code:
+                print(f"warning: {name} defined again in {path.name}:{i + 1}; keeping {code[name]['file']}:{code[name]['line']}")
+            else:
+                code[name] = {"file": f"R/{path.name}", "line": i + 1, "code": "\n".join(lines[first:last + 1])}
+            i = last + 1
+    write_json(code, OUT / "code.json")
+    return code
+
+
 def copy_plotly():
     try:
         import plotly
@@ -272,8 +357,10 @@ def main():
     build_ts(sets)
     build_drivers(sets)
     build_screen(sets)
+    code = build_code()
     copy_plotly()
-    print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages -> {OUT}")
+    print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages, "
+          f"{len(code)} R definitions -> {OUT}")
 
 
 if __name__ == "__main__":
