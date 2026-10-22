@@ -107,10 +107,18 @@ read_ameriflux_base <- function(site_id, base_dir = path_original("SiteData")) {
   amerifluxr::amf_read_base(raw_product_file(site_id, "AmeriFlux_BASE", base_dir), parse_timestamp = TRUE, unzip = TRUE)
 }
 
+#' Column types of FLUXNET-format tables
+#'
+#' Every column of a FLUXNET-format table is numeric, and read as double: the quality flags too
+#' (some products write them as "3.0"), and TIMESTAMP_START/END (12-digit numbers, exact).
+#' @noRd
+FLUXNET_COL_TYPES <- readr::cols(.default = readr::col_double())
+
 #' Read a site's table from one FLUXNET-format product
 #'
 #' A site's table from one FLUXNET-format product (FLUXNET2015/2020/2025, ICOS2025, ICOS2020,
-#' SHUTTLE, ICOSL2 or TERN), as read.csv() reads it (missing values still coded -9999).
+#' SHUTTLE, ICOSL2 or TERN), read with readr as FLUXNET_COL_TYPES
+#' (missing values still coded -9999). Stops if any value does not parse as its type.
 #'
 #' @param site_id Site ID.
 #' @param product Product name.
@@ -118,7 +126,14 @@ read_ameriflux_base <- function(site_id, base_dir = path_original("SiteData")) {
 #' @return A data frame, one row per record.
 #' @noRd
 read_fluxnet <- function(site_id, product, base_dir = path_original("SiteData")) {
-  utils::read.csv(raw_product_file(site_id, product, base_dir))
+  path <- raw_product_file(site_id, product, base_dir)
+  tab <- readr::read_csv(path, col_types = FLUXNET_COL_TYPES, na = c("", "NA"), progress = FALSE, lazy = FALSE)
+  problems <- readr::problems(tab)
+  if (nrow(problems)) {
+    stop(basename(path), ": ", nrow(problems), " values do not parse as their column type, e.g. column ",
+         problems$col[1], " row ", problems$row[1], ": '", problems$actual[1], "'", call. = FALSE)
+  }
+  as.data.frame(tab)
 }
 
 #' Read a site's FLUXNET-format record from its source

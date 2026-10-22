@@ -7,7 +7,7 @@ pkgs <- c(
   "randomForest", "ranger", "REddyProc", "rsample", "suncalc", "terra",
   "tidyr", "tidyverse", "vip", "VSURF", "zoo",
   "arrow", "digest", "optparse", "targets", "tarchetypes", "crew",
-  "crew.cluster", "qs2", "testthat", "RcppTOML"
+  "crew.cluster", "qs2", "testthat", "RcppTOML", "readr"
 )
 ok <- vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)
 if (!all(ok)) stop("Missing R packages: ", paste(pkgs[!ok], collapse = ", "))
