@@ -13,8 +13,12 @@
 #                  new; mean NEE of each one's own selection)
 #   per year       the same for NEE, so reprocessed years show
 #   shuttle        on the hours the shuttle's NEE_VUT_REF (else NEE_CUT_REF)
-#                  is an observation (QC 0): the share of them equal (1e-6)
-#                  to the old release's NEE and to the new one's
+#                  is an observation (QC 0): its agreement with the old
+#                  release's NEE and with the new one's (n, share within
+#                  0.01 umol m-2 s-1 - the products round differently -, r,
+#                  slope, mean difference shuttle - release), and the
+#                  site's NEE definition (data/site_info.csv: which BASE
+#                  columns the manuscript sums)
 #
 # Usage (on Bouchet, from a checkout; stores and data-raw given):
 #   Rscript scripts/compare-ameriflux-releases.R --store=_targets --update-store=_targets_update
@@ -82,7 +86,8 @@ compare_site <- function(site_id) {
 
   # the shuttle's observations against both releases
   shuttle <- tryCatch(read_fluxnet(site_id, "SHUTTLE"), error = function(e) NULL)
-  row$shuttle_column <- NA; row$shuttle_n <- 0; row$shuttle_equals_old <- NA; row$shuttle_equals_new <- NA
+  row$NEE_definition <- site_info$NEE[site_info$site_ID == site_id]
+  row$shuttle_column <- NA
   if (!is.null(shuttle)) {
     col <- if (!is.null(shuttle$NEE_VUT_REF) && any(shuttle$NEE_VUT_REF != -9999)) "NEE_VUT_REF" else "NEE_CUT_REF"
     start <- as.POSIXct(as.character(shuttle$TIMESTAMP_START), format = "%Y%m%d%H%M", tz = "UTC")
@@ -92,10 +97,10 @@ compare_site <- function(site_id) {
     k <- merge(j, s[s$obs & !is.na(s$NEE_shuttle), ], by = "time")
     k <- k[!is.na(k$NEE_old) & !is.na(k$NEE_new), ]
     row$shuttle_column <- col
-    row$shuttle_n <- nrow(k)
-    if (nrow(k)) {
-      row$shuttle_equals_old <- mean(abs(k$NEE_shuttle - k$NEE_old) < TOL)
-      row$shuttle_equals_new <- mean(abs(k$NEE_shuttle - k$NEE_new) < TOL)
+    for (r in c("old", "new")) {
+      a <- agree(k[[paste0("NEE_", r)]], k$NEE_shuttle, paste0("shuttle_vs_", r))
+      a[[paste0("shuttle_vs_", r, "_identical")]] <- if (nrow(k)) mean(abs(k$NEE_shuttle - k[[paste0("NEE_", r)]]) < 0.01) else NA
+      row <- cbind(row, as.data.frame(a))
     }
   }
   yearly <- do.call(rbind, lapply(sort(unique(year)), function(y) {
@@ -104,8 +109,7 @@ compare_site <- function(site_id) {
           night_only_old = sum(j$night_ok_old[m] & !j$night_ok_new[m]), night_only_new = sum(!j$night_ok_old[m] & j$night_ok_new[m]),
           night_both = sum(j$night_ok_old[m] & j$night_ok_new[m]))
   }))
-  message(site_id, ": NEE identical ", round(row$NEE_identical, 3), ", shuttle = old ", round(row$shuttle_equals_old, 3),
-          ", shuttle = new ", round(row$shuttle_equals_new, 3))
+  message(site_id, ": NEE identical ", round(row$NEE_identical, 3))
   list(summary = row, yearly = yearly)
 }
 
