@@ -12,8 +12,8 @@ for (const id of runs) runSel.insertAdjacentHTML("beforeend", `<option value="${
 const METRICS = {
   rmse: ["RMSE vs sensor (°C, out of fold)", false], bias: ["bias vs sensor (°C)", "diverging"], r2: ["r² vs sensor", true],
   sd_ratio: ["sd ratio (column / sensor)", false], cell_sd: ["within-cell error sd (°C)", false], year_sd: ["sd of yearly bias (°C)", false],
-  amp_ratio: ["daily range / air temperature's", false], lag_h: ["peak-hour lag after air temperature (h)", "diverging"],
-  offset: ["mean − air temperature (°C)", "diverging"], stuck: ["share in stuck runs", false], spikes: ["share of > 5 °C steps", false],
+  amp_ratio: ["median daily range / air temperature's", false], lag_h: ["peak-hour lag after air temperature (h)", "diverging"],
+  offset: ["mean − air temperature (°C)", "diverging"], stuck: ["share in stuck runs", false], spikes: ["share of steps > 2 °C per hour", false],
   coverage: ["share of record usable", true], n_night: ["nighttime fit records", true], n_years: ["years kept", true],
 };
 const metricSel = document.getElementById("metric");

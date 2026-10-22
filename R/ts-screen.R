@@ -221,6 +221,38 @@ ts_changepoints <- function(yearly) {
         ts_changepoints(yearly[yearly$growing_year >= found$year, ]))
 }
 
+#' Whole-series diagnostics of one soil-temperature series
+#'
+#' Coverage, the growing-season offset from air temperature, stuck runs
+#' (ts_runs(): >= 6 repeated values, zero curtain exempt), spikes (steps of more
+#' than 2 deg C per hour) and the growing-season diurnal diagnostics
+#' (ts_diurnal_diagnostics()). The screen's summary diagnostics
+#' (ts_screen_series()), and the plausibility metrics of the estimator ranking
+#' (ts_plausibility(), R/ts-ranking.R), so both judge a series alike.
+#'
+#' @param base,ts,gStart,gEnd,dt_secs As for ts_screen_series().
+#' @return A one-row data frame: n, coverage, coverage_season, mean_offset,
+#'   stuck_frac, stuck_max_h, spike_rate, and ts_diurnal_diagnostics()'s columns.
+#' @noRd
+ts_series_diagnostics <- function(base, ts, gStart, gEnd, dt_secs) {
+  min_obs <- max(4, floor(0.8 * 86400 / dt_secs))
+  hour <- base$HOUR + base$MINUTE / 60
+  growing_year <- ifelse(base$DOY <= 366, base$YEAR, base$YEAR - 1)
+  day <- paste(growing_year, base$DOY)
+  season <- dplyr::between(base$DOY, gStart, gEnd)
+  has <- !is.na(ts)
+  runs <- ts_runs(ts)
+  stuck_runs <- runs[runs$length >= 6, ]
+  cbind(
+    data.frame(n = sum(has), coverage = mean(has), coverage_season = if (any(season)) mean(has[season]) else NA_real_,
+               mean_offset = if (any(has & season)) mean(ts[season] - base$TA[season], na.rm = TRUE) else NA_real_,
+               stuck_frac = if (any(has)) sum(stuck_runs$length) / sum(has) else NA_real_,
+               stuck_max_h = if (nrow(runs)) max(runs$length) * dt_secs / 3600 else 0,
+               spike_rate = mean(abs(diff(ts)) > 2 * dt_secs / 3600, na.rm = TRUE)),
+    ts_diurnal_diagnostics(day[season], hour[season], ts[season], base$TA[season], min_obs)
+  )
+}
+
 #' Screen one soil-temperature series
 #'
 #' @param base Step 01's record (step01$ts_base): TIMESTAMP, YEAR, DOY, HOUR,
@@ -245,15 +277,7 @@ ts_screen_series <- function(base, ts, gStart, gEnd, dt_secs) {
 
   # whole record: coverage, offset, stuck runs, spikes; growing season: diurnal
   runs <- ts_runs(ts)
-  stuck_runs <- runs[runs$length >= 6, ]
-  diag <- cbind(
-    data.frame(n = sum(has), coverage = mean(has), coverage_season = if (any(season)) mean(has[season]) else NA_real_,
-               mean_offset = if (any(has & season)) mean(ts[season] - base$TA[season], na.rm = TRUE) else NA_real_,
-               stuck_frac = if (any(has)) sum(stuck_runs$length) / sum(has) else NA_real_,
-               stuck_max_h = if (nrow(runs)) max(runs$length) * dt_secs / 3600 else 0,
-               spike_rate = mean(abs(diff(ts)) > 2 * dt_secs / 3600, na.rm = TRUE)),
-    ts_diurnal_diagnostics(day[season], hour[season], ts[season], base$TA[season], min_obs)
-  )
+  diag <- ts_series_diagnostics(base, ts, gStart, gEnd, dt_secs)
 
   # each growing year
   years <- sort(unique(growing_year[has]))

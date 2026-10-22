@@ -12,17 +12,21 @@
 #     rmse, bias (column − sensor), r2, sd_ratio (sd column / sd sensor),
 #     cell_sd          mean within day-of-year x hour cell sd of the error,
 #     year_sd          sd of the yearly mean error (stability across years)
-#   plausibility against air temperature, over the growing season
-#   (gStart..gEnd of step 01):
-#     amp_ratio        mean daily range of the column / of air temperature
-#     lag_h            hour of the column's mean daily maximum minus air
-#                      temperature's (circular, -12..12)
-#     offset           mean column − air temperature
-#     stuck            share of values in runs of >= 6 equal values (3 h at
-#                      half-hourly records)
-#     spikes           share of steps > 5 deg C between consecutive records
+#   plausibility against air temperature, as the sensor screen measures it
+#   (ts_series_diagnostics(), R/ts-screen.R; growing season gStart..gEnd of
+#   step 01):
+#     amp_ratio        median daily range of the column / median daily range of
+#                      air temperature, over days both have
+#     lag_h            first-harmonic peak hour of the column's mean daily cycle
+#                      minus air temperature's, unwrapped towards the depth the
+#                      range ratio implies
+#     offset           mean column − air temperature (growing season)
+#     stuck            share of the column's values in runs of >= 6 repeated
+#                      values, runs near 0 deg C (zero curtain) exempt
+#     spikes           share of steps of more than 2 deg C per hour
 #   and their distance from the sensor's own (d_amp, d_lag, d_offset), where
-#   the site has a sensor.
+#   the site has a sensor (d_lag circular: a nearly flat series can unwrap a
+#   day away).
 #
 # select_ts_methods() keeps the estimators that, at some site and under
 # some metric, are best or within a margin of the third best (TS_MARGIN), and
@@ -127,7 +131,8 @@ ts_reference_metrics <- function(table) {
 
 #' Plausibility of the columns against air temperature
 #'
-#' Plausibility of each column against air temperature over the growing season (rows of
+#' Plausibility of each column against air temperature, measured as the sensor screen measures it
+#' (ts_series_diagnostics(), R/ts-screen.R; rows of
 #' `table`, the site's ts_columns table, with TA); see the file header for the metrics.
 #'
 #' @param table The site's ts_columns table (ts_columns_table()).
@@ -137,36 +142,17 @@ ts_reference_metrics <- function(table) {
 #'   d_amp, d_lag, d_offset.
 #' @noRd
 ts_plausibility <- function(table, gStart, gEnd) {
-  gs <- dplyr::between(table$DOY, gStart, gEnd)
-  date <- lubridate::make_date(table$YEAR, table$MONTH, table$DAY)
-  hour <- table$HOUR + table$MINUTE / 60
-  daily_range <- function(x) {
-    r <- tapply(x[gs], date[gs], function(v) if (sum(!is.na(v)) >= 12) diff(range(v, na.rm = TRUE)) else NA_real_)
-    mean(r, na.rm = TRUE)
-  }
-  peak_hour <- function(x) {
-    h <- tapply(x[gs], hour[gs], mean, na.rm = TRUE)
-    if (all(is.na(h))) NA_real_ else as.numeric(names(h)[which.max(h)])
-  }
-  wrap <- function(d) ((d + 12) %% 24) - 12
-  ta_range <- daily_range(table$TA)
-  ta_peak <- peak_hour(table$TA)
+  table <- table[order(table$TIMESTAMP), , drop = FALSE]
+  dt_secs <- stats::median(diff(as.numeric(table$TIMESTAMP)))
   columns <- setdiff(grep("^TS_", names(table), value = TRUE), c("TS_truth", "TS_real", grep("_keep$", names(table), value = TRUE)))
   out <- do.call(rbind, lapply(columns, function(column) {
-    x <- table[[column]]
-    if (all(is.na(x[gs]))) {
-      return(data.frame(column = column, amp_ratio = NA_real_, lag_h = NA_real_, offset = NA_real_, stuck = NA_real_, spikes = NA_real_))
-    }
-    runs <- rle(x)
-    in_stuck <- rep(runs$lengths >= 6 & !is.na(runs$values), runs$lengths)
-    steps <- abs(diff(x))
-    data.frame(column = column, amp_ratio = daily_range(x) / ta_range, lag_h = wrap(peak_hour(x) - ta_peak),
-               offset = mean(x[gs] - table$TA[gs], na.rm = TRUE),
-               stuck = mean(in_stuck[gs & !is.na(x)]), spikes = mean(steps[gs[-1]] > 5, na.rm = TRUE))
+    d <- ts_series_diagnostics(table, table[[column]], gStart, gEnd, dt_secs)
+    data.frame(column = column, amp_ratio = d$amp_ratio, lag_h = d$lag_h, offset = d$mean_offset,
+               stuck = d$stuck_frac, spikes = d$spike_rate)
   }))
   sensor <- out[out$column == "TS_original", ]
   out$d_amp <- abs(log(out$amp_ratio / sensor$amp_ratio))
-  out$d_lag <- abs(wrap(out$lag_h - sensor$lag_h))
+  out$d_lag <- abs(ts_wrap_lag(out$lag_h - sensor$lag_h))
   out$d_offset <- abs(out$offset - sensor$offset)
   out
 }

@@ -228,25 +228,24 @@
     <code>year_sd</code> measures how stable the column's bias is from year to year.</p>
   <div data-code="ts_error_metrics ts_reference_metrics"></div>
   <h3>Plausibility against air temperature</h3>
-  <p>Over the growing season (day of year gStart … gEnd of step 01), for every column including the sensor:</p>
+  <p>Measured exactly as the <a href="docs-sensor-screen.html">sensor screen</a> measures a series (the same function,
+    <code>ts_series_diagnostics()</code>), for every column including the sensor; diurnal metrics over the growing season
+    (day of year gStart … gEnd of step 01):</p>
   <table class="plain">
     <tr><th>metric</th><th>definition</th></tr>
-    <tr><td><code>amp_ratio</code></td><td>mean daily range of the column / mean daily range of air temperature (days with
-      at least 12 values; each series over its own days)</td></tr>
-    <tr><td><code>lag_h</code></td><td>hour of the column's mean daily maximum minus air temperature's (hour of the
-      maximum of the mean diurnal cycle), wrapped into −12…12 h</td></tr>
-    <tr><td><code>offset</code></td><td>mean of column − air temperature</td></tr>
-    <tr><td><code>stuck</code></td><td>share of the column's values in runs of ≥ 6 exactly equal consecutive values (3 h
-      of half-hourly records)</td></tr>
-    <tr><td><code>spikes</code></td><td>share of steps between consecutive records larger than 5 °C</td></tr>
+    <tr><td><code>amp_ratio</code></td><td>median daily range of the column / median daily range of air temperature, over
+      the days both have (days with at least 80% of their records)</td></tr>
+    <tr><td><code>lag_h</code></td><td>first-harmonic peak hour of the column's mean daily cycle minus air temperature's,
+      unwrapped towards the lag the range ratio implies for heat conduction</td></tr>
+    <tr><td><code>offset</code></td><td>mean of column − air temperature over the growing season</td></tr>
+    <tr><td><code>stuck</code></td><td>share of the column's values in runs of ≥ 6 repeated consecutive values; runs within
+      0.5 °C of 0 °C (the zero curtain under snow) exempt</td></tr>
+    <tr><td><code>spikes</code></td><td>share of steps between consecutive records of more than 2 °C per hour</td></tr>
     <tr><td><code>d_amp</code>, <code>d_lag</code>, <code>d_offset</code></td><td>distance from the sensor's own value
-      (<code>TS_original</code>): |ln(amp_ratio / amp_ratio<sub>sensor</sub>)|, |wrap(lag_h − lag_h<sub>sensor</sub>)|,
+      (<code>TS_original</code>): |ln(amp_ratio / amp_ratio<sub>sensor</sub>)|, |wrap(lag_h − lag_h<sub>sensor</sub>)| (circular, −12…12 h: a nearly flat series can unwrap a day away),
       |offset − offset<sub>sensor</sub>|; missing at sites without a sensor</td></tr>
   </table>
-  <p class="small">These are simpler than the sensor screen's diurnal diagnostics (<a href="docs-sensor-screen.html">sensor
-    screen</a>), which use the median range over common days and the first-harmonic peak hour; the two are separate
-    code.</p>
-  <div data-code="ts_plausibility ts_quality"></div>
+  <div data-code="ts_plausibility ts_series_diagnostics ts_quality"></div>
 
   <h2 id="ranking">Ranking and the "top" margin</h2>
   <p>At every site, the estimators (the <code>TS_&lt;name&gt;</code> columns of <code>ts_estimators()</code>, including
