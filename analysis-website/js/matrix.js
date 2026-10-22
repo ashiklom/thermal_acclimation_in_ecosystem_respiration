@@ -1,4 +1,4 @@
-import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, tasClass, fmt } from "./common.js";
+import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, tasClass, fmt, loadScreen, VERDICT_COLORS } from "./common.js";
 
 header("matrix.html");
 const runs = await loadJSON("data/ts_runs.json");
@@ -16,6 +16,9 @@ for (const id of withFits) runSel.insertAdjacentHTML("beforeend", `<option value
 const p = params();
 runSel.value = p.get("run") || withFits[withFits.length - 1];
 document.getElementById("model").value = p.get("model") || "total";
+document.getElementById("sensor").value = p.get("sensor") || "all";
+const screen = await loadScreen();
+const verdictOf = (site) => screen?.sensor.get(site)?.verdict || "NA";
 let tbl;
 
 function fillRef(columns) {
@@ -31,8 +34,10 @@ async function draw() {
   const columns = [...new Set(rows.map((r) => r.column))];
   fillRef(columns);
   const ref = document.getElementById("ref").value;
-  setParams({ run, model, ref });
-  const sites = [...new Set(rows.map((r) => r.site_ID))].sort();
+  const sensor = document.getElementById("sensor").value;
+  setParams({ run, model, ref, sensor });
+  const keep = (s) => sensor === "all" || (sensor === "notBAD" ? verdictOf(s) !== "BAD" : verdictOf(s) === sensor);
+  const sites = [...new Set(rows.map((r) => r.site_ID))].filter(keep).sort();
   const get = new Map(rows.map((r) => [`${r.site_ID}|${r.column}`, r]));
   const cls = (r) => (r ? tasClass(r.TAS, r.TASp) : "NA");
 
@@ -40,7 +45,7 @@ async function draw() {
   const siteRows = sites.map((s) => {
     const rr = get.get(`${s}|${ref}`);
     const cr = cls(rr);
-    const out = { site_ID: s, ref_TAS: rr?.TAS ?? null, ref_class: cr, flips: [], changes: [] };
+    const out = { site_ID: s, sensor: verdictOf(s), ref_TAS: rr?.TAS ?? null, ref_class: cr, flips: [], changes: [] };
     const vals = [];
     for (const c of columns) {
       const r = get.get(`${s}|${c}`);
@@ -111,6 +116,7 @@ async function draw() {
   const f = numberFormatter(4);
   const cols = [
     { title: "Site", field: "site_ID", formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "sensor", field: "sensor", formatter: (c) => `<span style="color:${VERDICT_COLORS[c.getValue()] || "#000"};font-weight:600">${c.getValue()}</span>` },
     { title: `TAS (${ref})`, field: "ref_TAS", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "class", field: "ref_class" },
     { title: "min TAS", field: "min", formatter: f, hozAlign: "right", headerFilter: false },
@@ -122,5 +128,5 @@ async function draw() {
   ];
   if (tbl) tbl.replaceData(siteRows); else tbl = table("table", siteRows, cols, { height: "520px" });
 }
-for (const id of ["run", "model", "ref"]) document.getElementById(id).addEventListener("change", draw);
+for (const id of ["run", "model", "ref", "sensor"]) document.getElementById(id).addEventListener("change", draw);
 draw();

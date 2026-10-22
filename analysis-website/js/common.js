@@ -17,6 +17,19 @@ export const DEFAULT_THRESHOLD = 1.7e-3;
 
 export const CLASS_COLORS = { "sig-": "#2166ac", "n.s.": "#8c959f", "sig+": "#b2182b", "NA": "#d0d7de" };
 
+// Soil-temperature sensor screen verdicts (R/ts-screen.R).
+export const VERDICT_COLORS = { GOOD: "#1a7f37", SUSPECT: "#bf8700", BAD: "#cf222e", NA: "#d0d7de" };
+
+// The latest run's sensor screen: { run, data, sensor: Map(site -> the
+// sensor's validation row) }, or null if no run has one.
+export async function loadScreen(run) {
+  const runs = await loadJSON("data/ts_screen_runs.json").catch(() => []);
+  if (!runs.length) return null;
+  const id = run && runs.includes(run) ? run : runs[runs.length - 1];
+  const data = await loadJSON(`data/ts_screen/${id}.json`);
+  return { run: id, runs, data, sensor: new Map((data.validation || []).map((r) => [r.site_ID, r])) };
+}
+
 export async function loadJSON(path) {
   const r = await fetch(path, { cache: "no-cache" });
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
@@ -118,7 +131,7 @@ export function baseLayout(extra = {}) {
 // points coloured by `value(site)` (numeric) or `category(site)`. With
 // `focus`, for one site: the map zoomed in and centred on it, and the site
 // labelled in both.
-export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick, focus = false } = {}) {
+export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick, focus = false, colors = CLASS_COLORS } = {}) {
   const biomes = await loadJSON("static/whittaker_biomes.json");
   const text = sites.map((s) => `${s.site_ID}<br>${s.IGBP}, ${s.Climate_class}<br>${label}: ${value ? fmt(value(s)) : category(s)}`);
   let marker;
@@ -129,7 +142,7 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, label 
       size: 9, line: { width: 0.5, color: "#333" }, colorbar: { title: { text: label }, thickness: 12 } };
   } else {
     const cats = sites.map(category);
-    marker = { color: cats.map((c) => CLASS_COLORS[c] || "#8c959f"), size: 9, line: { width: 0.5, color: "#333" } };
+    marker = { color: cats.map((c) => colors[c] || "#8c959f"), size: 9, line: { width: 0.5, color: "#333" } };
   }
   if (focus) Object.assign(marker, { size: 14, line: { width: 1.5, color: "#000" } });
   const mode = focus ? "markers+text" : "markers";

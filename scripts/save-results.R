@@ -55,7 +55,8 @@ for (model in c("total", "direct")) {
 
 for (f in c("tas_inputs_summary.csv", "growing_season_feature.csv", "ts_columns_summary.csv", "ts_quality.csv",
             "ts_ranking.csv", "ts_methods_selected.csv", "ts_outcome_total.csv", "ts_outcome_direct.csv",
-            "ts_siteyear_total.csv", "ts_siteyear_direct.csv")) {
+            "ts_siteyear_total.csv", "ts_siteyear_direct.csv", "ts_screen.csv", "ts_screen_yearly.csv",
+            "ts_screen_windows.csv", "ts_screen_diurnal.csv", "ts_screen_validation.csv")) {
   if (file.exists(file.path(from, f))) file.copy(file.path(from, f), file.path(out, f), overwrite = TRUE)
 }
 for (d in c("step03-04", "step03-04-ts")) {

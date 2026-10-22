@@ -21,6 +21,9 @@ Writes analysis-website/data/:
   ts/<id>.json               soil-temperature columns of a run: per-site summary and quality,
                              estimator ranking, the selected columns, and (fit matrix) every
                              column's TAS
+  ts_screen_runs.json, ts_screen/<id>.json   the soil-temperature sensor screen (summary,
+                             yearly diagnostics, bad windows, diurnal cycles, the
+                             manuscript's own corrections beside it)
   drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
@@ -232,6 +235,24 @@ def build_drivers(sets):
     return index
 
 
+SCREEN_FILES = {"summary": "ts_screen.csv", "yearly": "ts_screen_yearly.csv", "windows": "ts_screen_windows.csv",
+                "diurnal": "ts_screen_diurnal.csv", "validation": "ts_screen_validation.csv"}
+
+
+def build_screen(sets):
+    """The soil-temperature sensor screen of every run that has it."""
+    out = []
+    for s in sets:
+        d = ROOT / "results" / s["id"]
+        if not (d / SCREEN_FILES["summary"]).exists():
+            continue
+        data = {k: records(pd.read_csv(d / f)) for k, f in SCREEN_FILES.items() if (d / f).exists()}
+        write_json(data, OUT / "ts_screen" / f"{s['id']}.json")
+        out.append(s["id"])
+    write_json(out, OUT / "ts_screen_runs.json")
+    return out
+
+
 def copy_plotly():
     try:
         import plotly
@@ -250,6 +271,7 @@ def main():
     stages = build_stages(sets)
     build_ts(sets)
     build_drivers(sets)
+    build_screen(sets)
     copy_plotly()
     print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages -> {OUT}")
 

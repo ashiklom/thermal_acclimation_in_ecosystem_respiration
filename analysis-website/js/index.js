@@ -1,4 +1,4 @@
-import { header, loadJSON, compare, summarise, siteMaps, table, fmt, tasClass, params, setParams } from "./common.js";
+import { header, loadJSON, compare, summarise, siteMaps, table, fmt, tasClass, params, setParams, loadScreen, VERDICT_COLORS } from "./common.js";
 
 header("index.html");
 const sites = await loadJSON("data/sites.json");
@@ -34,6 +34,7 @@ table("sets", rows, [
 ], { height: "auto", onRowClick: (r) => { location.href = `compare.html?a=published&b=${r.id}`; } });
 
 // Maps.
+const screen = await loadScreen();
 const setSel = document.getElementById("set");
 for (const s of sets) setSel.insertAdjacentHTML("beforeend", `<option value="${s.id}">${s.label}</option>`);
 const p = params();
@@ -53,6 +54,7 @@ function draw() {
   if (colour === "tas") Object.assign(opts, { value: (s) => bySite.get(s.site_ID).TAS, label: `TAS (${model})` });
   if (colour === "delta") Object.assign(opts, { value: (s) => (bySite.get(s.site_ID).TAS ?? NaN) - (ref.get(s.site_ID)?.TAS ?? NaN), label: "ΔTAS" });
   if (colour === "class") Object.assign(opts, { category: (s) => tasClass(bySite.get(s.site_ID).TAS, bySite.get(s.site_ID).TASp), label: "class" });
+  if (colour === "verdict") Object.assign(opts, { category: (s) => screen?.sensor.get(s.site_ID)?.verdict || "NA", label: "sensor", colors: VERDICT_COLORS });
   siteMaps("geo", "clim", shown, opts);
 }
 for (const id of ["set", "model", "colour"]) document.getElementById(id).addEventListener("change", draw);

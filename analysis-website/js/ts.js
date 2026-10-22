@@ -1,4 +1,4 @@
-import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter } from "./common.js";
+import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, loadScreen, siteMaps, VERDICT_COLORS, fmt } from "./common.js";
 
 header("ts.html");
 const runs = await loadJSON("data/ts_runs.json");
@@ -6,8 +6,7 @@ const sets = await loadJSON("data/resultsets.json");
 const label = (id) => (sets.find((s) => s.id === id) || { label: id }).label;
 const runSel = document.getElementById("run");
 if (!runs.length) {
-  document.querySelector("main").insertAdjacentHTML("beforeend", `<p class="note">No run with soil-temperature columns yet.</p>`);
-  throw new Error("no runs");
+  document.getElementById("selected").innerHTML = `<p class="note">No run with soil-temperature columns yet.</p>`;
 }
 for (const id of runs) runSel.insertAdjacentHTML("beforeend", `<option value="${id}">${label(id)}</option>`);
 const METRICS = {
@@ -68,4 +67,49 @@ async function draw() {
   if (tbl) tbl.replaceData(q); else tbl = table("table", q, tcols, { height: "520px" });
 }
 for (const el of [runSel, metricSel]) el.addEventListener("change", draw);
-draw();
+if (runs.length) draw();
+
+// The sensor screen (input data only; independent of the run selector above).
+const screen = await loadScreen();
+if (screen) {
+  const sites = await loadJSON("data/sites.json");
+  const v = screen.data.validation || [];
+  const count = (pred) => v.filter(pred).length;
+  const stat = (n, k) => `<div class="stat"><div class="v">${n}</div><div class="k">${k}</div></div>`;
+  document.getElementById("screenstats").innerHTML = ["GOOD", "SUSPECT", "BAD"].map((x) => stat(count((r) => r.verdict === x), `sensor ${x}`)).join("") +
+    stat(count((r) => r.verdict !== "GOOD" && r.manuscript_acted), "not GOOD, manuscript corrected it") +
+    stat(count((r) => r.verdict !== "GOOD" && !r.manuscript_acted), "not GOOD, manuscript kept it") +
+    stat(count((r) => r.verdict === "GOOD" && r.manuscript_acted), "GOOD, manuscript corrected it");
+  siteMaps("screengeo", "screenclim", sites.filter((s) => screen.sensor.has(s.site_ID)), {
+    category: (s) => screen.sensor.get(s.site_ID).verdict, label: "sensor", colors: VERDICT_COLORS,
+    onClick: (id) => { location.href = `site.html?site=${id}#screen`; } });
+  const pct = (c) => (c.getValue() === null ? "–" : `${Math.round(100 * c.getValue())}%`);
+  const link = (c) => `<a href="site.html?site=${c.getValue()}#screen">${c.getValue()}</a>`;
+  const verdict = (c) => `<span style="color:${VERDICT_COLORS[c.getValue()] || "#000"};font-weight:600">${c.getValue()}</span>`;
+  table("screentable", v, [
+    { title: "Site", field: "site_ID", formatter: link, frozen: true },
+    { title: "screened", field: "screened" },
+    { title: "verdict", field: "verdict", formatter: verdict },
+    { title: "flags", field: "flags" },
+    { title: "bad share", field: "bad_fraction", formatter: pct, hozAlign: "right", headerFilter: false },
+    { title: "bad windows", field: "windows", widthGrow: 2 },
+    { title: "manuscript: step 01 replaces", field: "step01_replaced", formatter: pct, hozAlign: "right", headerFilter: false },
+    { title: "manuscript: fits replace", field: "manuscript_replaced", formatter: pct, hozAlign: "right", headerFilter: false },
+    { title: "regression", field: "ts_regression" },
+    { title: "sensor from", field: "sensor_first_year", hozAlign: "right" },
+    { title: "years removed", field: "year_removed" },
+    { title: "manuscript corrected", field: "manuscript_acted", formatter: "tickCross", headerFilter: "tickCross" },
+  ], { height: "520px" });
+  table("windowstable", screen.data.windows || [], [
+    { title: "Site", field: "site_ID", formatter: link },
+    { title: "column", field: "column" },
+    { title: "start", field: "start" },
+    { title: "end", field: "end" },
+    { title: "scale", field: "scale" },
+    { title: "rule", field: "rule" },
+    { title: "value", field: "value", formatter: numberFormatter(3), hozAlign: "right", headerFilter: false },
+    { title: "reference", field: "reference", formatter: numberFormatter(3), hozAlign: "right", headerFilter: false },
+  ], { height: "420px" });
+} else {
+  document.getElementById("screenstats").innerHTML = `<p class="note">No run with the sensor screen yet.</p>`;
+}

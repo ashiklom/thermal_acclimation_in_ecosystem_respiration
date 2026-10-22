@@ -32,6 +32,25 @@
   <div id="heat" class="plot" style="min-height:900px"></div>
   <h2>Table</h2>
   <div id="table"></div>
+
+  <h2 id="screen">Sensor screen</h2>
+  <p class="small">Is each site's soil-temperature sensor behaving like buried soil temperature? Heat conduction damps
+    and delays the daily cycle of air temperature with depth, so over the growing season a buried sensor's daily range
+    is a fraction of air's and its daily peak comes later; a sensor reporting air (range ratio near 1, no lag), leading
+    air, flat, stuck or sparse is not measuring soil. <b>BAD</b>: one of those whole-record rules fires.
+    <b>SUSPECT</b>: only the newer checks fire: damping and delay imply different depths (non-conductive; e.g. a
+    regression on air temperature is damped but not delayed), the yearly diagnostics change for good (changepoint:
+    the record before the latest segment is a bad window), single odd years, or stuck periods of a day or more.
+    Bad windows are machine-readable (ts_screen_windows.csv) for a later reconstruction step. The screen uses only
+    the input data. Beside it, what the manuscript did by hand: a guideline, not a target.</p>
+  <div id="screenstats" class="stats"></div>
+  <div class="grid2">
+    <div id="screengeo" class="plot"></div>
+    <div id="screenclim" class="plot"></div>
+  </div>
+  <div id="screentable"></div>
+  <h3>Bad windows</h3>
+  <div id="windowstable"></div>
 </main>
 <script type="module" src="js/ts.js"></script>
 </body>
