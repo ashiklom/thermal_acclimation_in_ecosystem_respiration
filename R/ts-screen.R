@@ -72,7 +72,8 @@ TS_SCREEN_CHANGE_MIN_SIDE <- 2
 #' @noRd
 TS_SCREEN_CHANGE_MIN_YEARS <- 6
 
-#' Shortest stuck run (hours) reported as a bad period, and the gap (hours)
+#' Shortest stuck run (hours, mostly in the growing season) reported as a bad
+#' period, and the gap (hours)
 #' within which runs merge into one window
 #' @noRd
 TS_SCREEN_STUCK_PERIOD_H <- 24
@@ -316,7 +317,10 @@ ts_screen_series <- function(base, ts, gStart, gEnd, dt_secs) {
         reference = reference[[paste(yy$segment[1], metric)]]))
     }
   }
+  # (only runs mostly in the growing season: under snow, soil temperature
+  # can stay at one reading for days, not only near 0 deg C)
   long <- runs[runs$length * dt_secs / 3600 >= TS_SCREEN_STUCK_PERIOD_H, ]
+  long <- long[vapply(seq_len(nrow(long)), function(i) mean(season[long$first[i]:long$last[i]]) > 0.5, logical(1)), ]
   if (nrow(long)) {
     group <- cumsum(c(1, (long$first[-1] - long$last[-nrow(long)]) * dt_secs / 3600 > TS_SCREEN_STUCK_MERGE_H))
     for (g in unique(group)) {
