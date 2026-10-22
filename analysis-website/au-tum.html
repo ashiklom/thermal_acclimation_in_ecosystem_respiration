@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AU-Tum: which flux record? · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="vendor/plotly.min.js"></script>
+</head>
+<body>
+<main class="docs">
+  <h1>AU-Tum: which flux record for the latest data?</h1>
+  <p class="lead">AU-Tum (Tumbarumba, a 40 m wet sclerophyll forest measured from a 70 m tower) is the one TERN site. Its
+    published record is FLUXNET2015 (2001–2014). Two later records exist: the FLUXNET-archive shuttle's TERN product
+    (ONEFlux v1.3, 2002–2022, but only constant-u* NEE), and TERN's own L6 product (PyFluxPro, 2002–2026). This page
+    compares the streams and shows AU-Tum's TAS under each candidate record, to choose how to extend AU-Tum. Data:
+    <code>scripts/compare-au-tum-sources.py</code> and <code>scripts/au-tum-source-options.R</code>; TERN's variables
+    as FLUXNET columns: <code>scripts/download-tern.py</code>.</p>
+  <ul class="toc">
+    <li><a href="#sec-processing">How the streams are processed</a></li>
+    <li><a href="#sec-series">NEE over time</a></li>
+    <li><a href="#sec-annual">Year by year</a></li>
+    <li><a href="#sec-pairs">Hour by hour: what changes between streams</a></li>
+    <li><a href="#sec-curves">Respiration against soil temperature</a></li>
+    <li><a href="#sec-tas">AU-Tum's TAS under each candidate record</a></li>
+    <li><a href="#sec-findings">Findings</a></li>
+    <li><a href="#sec-recommendation">Recommendation</a></li>
+  </ul>
+
+  <h2 id="sec-processing">How the streams are processed</h2>
+  <p>The pipeline uses only night-time NEE <em>observations</em>: step 01 keeps hours with air temperature, NEE quality
+    flag 0 (measured, passed the u* filter), NIGHT, and −5 &lt; NEE &lt; 30 µmol m⁻² s⁻¹. So what matters is
+    which hours each stream keeps and what flux it reports for them, not its gap filling.</p>
+  <table class="plain">
+    <tr><th></th><th>FLUXNET2015 (published)</th><th>Shuttle TERN product</th><th>TERN L6</th></tr>
+    <tr><th>Processing</th><td>ONEFlux, FLUXNET2015 release (from the OzFlux data of the time)</td>
+      <td>ONEFlux v1.3, FLUXNET-archive shuttle, run on TERN's current data</td>
+      <td>PyFluxPro v3.4 (OzFlux), dataset version 2026_v2</td></tr>
+    <tr><th>Period</th><td>2001–2014</td><td>2002–2022</td><td>2002-01 – 2026-04; no flux 2023–2024, almost none in 2020</td></tr>
+    <tr><th>Time step</th><td colspan="3">hourly in all three</td></tr>
+    <tr><th>u* filter</th><td>VUT (u* threshold varying by year) and CUT (one threshold); the pipeline uses VUT</td>
+      <td>CUT only (no VUT in the product): the strictest, accepted night hours have u* ≥ ~0.35 m s⁻¹</td>
+      <td>TERN's own threshold: accepted night hours reach u* 0.01–0.05 m s⁻¹ through 2019 (5% quantile ~0.08);
+        from 2020, ≥ ~0.58 m s⁻¹</td></tr>
+    <tr><th>NEE for step 01</th><td><code>NEE_VUT_REF</code>, QC 0</td><td><code>NEE_CUT_REF</code>, QC 0</td>
+      <td><code>Fco2</code> where TERN flags it as an observation (identical to TERN's night-time, u*-filtered ER)</td></tr>
+    <tr><th>CO₂ storage</th><td>evidently included (see the night difference by u* below)</td>
+      <td>evidently not included before 2020</td>
+      <td>no storage term before 2020; a storage series (Sco2) only from 2020 (the file does not say whether Fco2 includes it)</td></tr>
+    <tr><th>Soil temperature</th><td><code>TS_F_MDS_1</code></td><td><code>TS_F_MDS_1</code>; 2020–2021 a constant fill (16.8 °C, QC 3)</td>
+      <td><code>Ts</code>, 2 cm (observations; TERN's gap fill flagged)</td></tr>
+    <tr><th>Soil water</th><td><code>SWC_F_MDS_1</code></td><td><code>SWC_F_MDS_1</code>; 2020–2021 constant fill values</td>
+      <td><code>Sws</code> (0–30 cm), × 100</td></tr>
+    <tr><th>Night flag</th><td colspan="2"><code>NIGHT</code> = potential radiation 0 (ONEFlux)</td>
+      <td>computed the same way (agrees with FLUXNET2015's in all but 82 of 122,712 dawn/dusk hours)</td></tr>
+  </table>
+  <div id="streams"></div>
+
+  <h2 id="sec-series">NEE over time</h2>
+  <div class="controls"><label>Series <select id="series-var">
+    <option value="night">night NEE: the observations step 01 selects</option>
+    <option value="nee">NEE: all hours, gap-filled (complete days)</option></select></label></div>
+  <div id="series" class="plot"></div>
+  <p class="small">Monthly means (night: weighted by records, months with ≥ 10). The dotted line marks 2015, where
+    FLUXNET2015 ends.</p>
+
+  <h2 id="sec-annual">Year by year</h2>
+  <div class="controls"><label>Metric <select id="annual-var"></select></label></div>
+  <div id="annual" class="plot"></div>
+
+  <h2 id="sec-pairs">Hour by hour: what changes between streams</h2>
+  <p>For each pair of streams, over their common years: the night hours both select (scatter, coloured by soil
+    temperature), their mean difference by u* bin, and the hours only one of them selects.</p>
+  <div class="controls"><label>Pair <select id="pair"></select></label></div>
+  <div class="grid2">
+    <div id="pair-scatter" class="plot"></div>
+    <div id="pair-ustar" class="plot"></div>
+  </div>
+  <div id="pair-selection" class="plot"></div>
+  <h3>Agreement of every pair</h3>
+  <p class="small">Night NEE: hours both streams select. Drivers: all common hours.</p>
+  <div id="agreement"></div>
+
+  <h2 id="sec-curves">Respiration against soil temperature</h2>
+  <div class="controls"><label>Years <select id="period"></select></label></div>
+  <div id="curves" class="plot"></div>
+
+  <h2 id="sec-tas">AU-Tum's TAS under each candidate record</h2>
+  <p>Step 01 and the main TAS fits (full sampler settings) for AU-Tum with only its <code>source</code> changed, as the
+    pipeline runs them for the latest data.</p>
+  <div id="tas"><div id="tas-table"></div><div id="tas-plot" class="plot"></div></div>
+
+  <h2 id="sec-findings">Findings</h2>
+  <div id="findings-text">
+  <ol>
+    <li><b>The newer records report less night-time respiration than FLUXNET2015 for the same hours</b>: by
+      2.3 µmol m⁻² s⁻¹ on average for TERN L6 and 1.0 for the shuttle, against a FLUXNET2015 night mean of ~7. The
+      gap grows as turbulence falls: 3–4 µmol m⁻² s⁻¹ at u* &lt; 0.4 m s⁻¹, 0.5–1.2 above 0.6. That is the
+      signature of the CO₂ storage term, large in still nights under a tall canopy. FLUXNET2015 evidently includes it.
+      TERN's current data, and the shuttle's ONEFlux run on it, have none before 2020.</li>
+    <li><b>The shuttle and TERN L6 agree</b>: both come from TERN's current data. For the hours both select they differ
+      by 0.24 µmol m⁻² s⁻¹ (r = 0.96). They differ mainly in which hours they keep. The shuttle's constant-u* filter
+      is strict (u* ≥ ~0.35 m s⁻¹, ~40% fewer night records). TERN's filter is lenient through 2019 (hours down to
+      u* ≈ 0.01–0.05 m s⁻¹, which without storage underestimate respiration) and strict from 2020.</li>
+    <li><b>Air temperature, soil temperature and soil water agree</b> between FLUXNET2015 and both newer streams over
+      2002–2014 (hourly r ≥ 0.98, soil water against TERN 0.977). The exception is the shuttle's 2020–2021 soil data, which are constant fill values.</li>
+    <li><b>The temperature sensitivity hardly changes; the base level does.</b> Yearly Q10 from an exponential fit of
+      night NEE on soil temperature varies alike in all streams over 2002–2014 (1.1–2.7), TERN's ~0.15 lower on average.
+      R10 is 5.0–7.2 µmol m⁻² s⁻¹ in FLUXNET2015 against 3.9–5.6 (TERN) and 3.2–4.8 (shuttle) in the same years, and the
+      mean night NEE 6.4–8.1 against 4.6–6.8 and 3.7–5.4. A record that switches from FLUXNET2015 to TERN therefore steps
+      down by about a quarter in night-time respiration at the switch, whatever the temperature.</li>
+    <li><b>The newer data add little after 2014</b>: 2015–2019 (~370–670 night records a year), then 2021–2022 and
+      2025 with ~150–240. There is almost no flux in 2020 and none in 2023–2024.</li>
+  </ol>
+  </div>
+
+  <h2 id="sec-recommendation">Recommendation</h2>
+  <div id="recommendation-text"><p class="note">Pending the TAS fits above.</p></div>
+</main>
+<script type="module" src="js/au-tum.js"></script>
+</body>
+</html>

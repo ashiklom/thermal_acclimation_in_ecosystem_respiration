@@ -8,6 +8,10 @@ Reads (paths relative to the repository root):
   results/<id>/tas_inputs_summary.csv   (optional) each site's fit settings and input hashes
   data-proc/RespirationData/*_ac.parquet   (optional) for mean annual air temperature
   analysis-website/stages/<stage>.html     what each method stage changes and why
+  data-proc/au-tum-sources.json        (optional) AU-Tum's candidate flux records compared
+                                       (scripts/compare-au-tum-sources.py)
+  data-proc/au-tum-options/<option>/   (optional) AU-Tum's TAS under each candidate source
+                                       (scripts/au-tum-source-options.R)
   results/<id>/ts_{columns_summary,quality,ranking,methods_selected}.csv  (optional)
                                        the soil-temperature columns of a run and their quality
 
@@ -27,6 +31,9 @@ Writes analysis-website/data/:
   drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
+  au_tum_sources.json        AU-Tum's candidate flux records compared (a copy)
+  au_tum_options.json        AU-Tum's TAS inputs summary, outcome and site-year tables per
+                             candidate source, by option
   code.json                  the source of every top-level R definition in R/*.R, by name:
                              {file, line, code}, for the documentation pages' code snippets
                              (built from the code alone, never from results)
@@ -265,6 +272,25 @@ def build_screen(sets):
     return out
 
 
+def build_au_tum():
+    """AU-Tum's candidate flux records and its TAS under each candidate source."""
+    src = ROOT / "data-proc" / "au-tum-sources.json"
+    if src.exists():
+        shutil.copy(src, OUT / "au_tum_sources.json")
+    options = {}
+    d = ROOT / "data-proc" / "au-tum-options"
+    for summary in sorted(d.glob("*/tas_inputs_summary.csv")) if d.exists() else []:
+        entry = {"inputs": records(pd.read_csv(summary))[0]}
+        for kind in ("outcome", "siteyear"):
+            for model in ("total", "direct"):
+                f = summary.parent / f"{kind}_{model}.csv"
+                if f.exists():
+                    entry[f"{kind}_{model}"] = records(pd.read_csv(f))
+        options[summary.parent.name] = entry
+    write_json(options, OUT / "au_tum_options.json")
+    return options
+
+
 DEFINITION = re.compile(r"^([A-Za-z.][A-Za-z0-9._]*) <- ")
 CONTINUES = re.compile(r"(\|>|%[^%]*%|<-|[-+*/^&|=,~(\[{])\s*$")
 CLOSERS = {")": "(", "]": "[", "}": "{"}
@@ -357,6 +383,7 @@ def main():
     build_ts(sets)
     build_drivers(sets)
     build_screen(sets)
+    build_au_tum()
     code = build_code()
     copy_plotly()
     print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages, "

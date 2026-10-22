@@ -30,7 +30,8 @@ data-raw/flux/TERN/unzip/TERN_AU-Tum_L6_HR_*.csv; writes one JSON file:
   pairs     per pair of streams over their common years: agreement of the
             night records both select (n, bias, RMSE, r, slope) and of the
             drivers (TA, TS, SWC, USTAR; all hours), the records only one
-            selects, per year, and a sample of the matched night records
+            selects, per year, the mean difference (b - a) of the matched night
+            records by u* bin, and a sample of them
   curves    per stream and period: night NEE by 1 degC TS bin
 """
 
@@ -61,6 +62,7 @@ FILES = {
 PAIRS = [("F15_VUT", "F15_CUT"), ("F15_CUT", "SHUT_CUT"), ("F15_VUT", "SHUT_CUT"), ("F15_VUT", "TERN"),
          ("SHUT_CUT", "TERN")]
 DRIVERS = {"TA": "TA_F_MDS", "TS": "TS_F_MDS_1", "SWC": "SWC_F_MDS_1", "USTAR": "USTAR"}
+USTAR_BINS = [0, 0.2, 0.3, 0.4, 0.6, 1.0, 3.0]
 PERIODS = {"2002-2014": (2002, 2014), "2015-2022": (2015, 2022), "2023-2026": (2023, 2026)}
 
 
@@ -138,8 +140,11 @@ def pair(a, b, ta, tb, rng):
     per_year = (j.assign(only_a=j.night_ok_a & ~j.night_ok_b, only_b=~j.night_ok_a & j.night_ok_b,
                          both=j.night_ok_a & j.night_ok_b)
                 .groupby(j.index.year)[["only_a", "only_b", "both"]].sum().reset_index(names="year"))
+    diff = (both.NEE_b - both.NEE_a).groupby(pd.cut(both.USTAR_a, USTAR_BINS), observed=False).agg(["mean", "count"])
     return {"a": a, "b": b, "years": [int(min(years)), int(max(years))] if years else None,
             "night": agreement(both.NEE_a, both.NEE_b),
+            "by_ustar": {"lower": USTAR_BINS[:-1], "upper": USTAR_BINS[1:], "diff": rnd(diff["mean"]),
+                         "n": diff["count"].astype(int).tolist()},
             "drivers": {k: agreement(j[f"{k}_a"], j[f"{k}_b"]) for k in DRIVERS},
             "selection": per_year.astype(int).to_dict(orient="list"),
             "sample": {"x": rnd(sample.NEE_a), "y": rnd(sample.NEE_b), "ts": rnd(sample.TS_a)}}
