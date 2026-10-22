@@ -280,7 +280,7 @@ ts_screen_series <- function(base, ts, gStart, gEnd, dt_secs) {
     odd <- sapply(names(TS_SCREEN_YEAR_MIN_DEV), function(metric) {
       v <- yearly[[metric]]
       med <- stats::median(v[in_seg])
-      s <- 1.4826 * stats::mad(v[in_seg])
+      s <- stats::mad(v[in_seg])  # (already scaled to a standard deviation)
       reference[[paste(seg, metric)]] <<- med
       dev <- abs(v - med)
       in_seg & dev > TS_SCREEN_YEAR_MIN_DEV[[metric]] & (s == 0 | dev / max(s, 1e-9) > TS_SCREEN_YEAR_Z)
