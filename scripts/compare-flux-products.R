@@ -164,6 +164,7 @@ compare_site <- function(site_id) {
       next
     }
     cmp <- compare_pair(ref[[a_name]], shut[[b_name]])
+    if (cmp$summary$n_years == 0) status <- "no common years"
     rows[[v]] <- cbind(row, cmp$summary, status = status)
     if (!is.null(cmp$yearly)) years[[v]] <- cbind(site_ID = site_id, comparison = v, cmp$yearly)
   }
