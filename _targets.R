@@ -227,6 +227,17 @@ combined <- list(
     path
   }, format = "file"),
   tar_combine(ts_screen_all, per_site[["ts_screen"]], command = combine_ts_screen(list(!!!.x))),
+  # soil drivers the latest data's spliced records took from older products
+  if (data_version == "update") list(
+    tar_combine(source_fills, per_site[["step01"]], command = dplyr::bind_rows(lapply(list(!!!.x), function(p) {
+      if (is.null(p$ts_params$filled)) NULL else cbind(site_ID = p$ts_params$site_ID, p$ts_params$filled)
+    }))),
+    tar_target(source_fills_file, {
+      path <- path_proc("source_fills.csv")
+      utils::write.csv(source_fills, path, row.names = FALSE)
+      path
+    }, format = "file")
+  ),
   tar_target(ts_screen_validation_table, ts_screen_validation(ts_screen_all, site_info, site_settings)),
   tar_target(ts_screen_files, write_ts_screen(ts_screen_all, validation = ts_screen_validation_table), format = "file"),
   tar_combine(ts_quality_all, per_site[["ts_site_quality"]], command = dplyr::bind_rows(!!!.x)),

@@ -205,6 +205,8 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
 
   # connecting multiple data sources
   a <- read_fluxnet_record(name_site, data_source, base_dir)
+  # soil drivers a spliced record took from later products (R/read-raw.R)
+  filled <- attr(a, "filled")
   # -9999 means missing information.
   a[a==-9999] <- NA
 
@@ -330,6 +332,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
     gap_fixed = if (name_site %in% c('ZA-Kru', 'FI-Sod', 'GF-Guy')) c(60, 0.7) else NULL,
     years_removed = years2remove
   )
+  if (!is.null(filled) && nrow(filled)) ts_params$filled <- filled
   ts_ok <- a$TS_F_MDS_1_QC %in% c(0, 1, 2)
   out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, ts_ok)
   list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)

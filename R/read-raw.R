@@ -121,25 +121,57 @@ read_fluxnet <- function(site_id, product, base_dir = path_original("SiteData"))
 #' @return A data frame, one row per record.
 #' @noRd
 read_fluxnet_record <- function(site_id, source, base_dir = path_original("SiteData")) {
-  tables <- lapply(source_products(source), function(product) read_fluxnet(site_id, product, base_dir))
-  if (grepl("+", source, fixed = TRUE)) splice_products(tables) else stitch_products(tables)
+  products <- source_products(source)
+  tables <- stats::setNames(lapply(products, function(product) read_fluxnet(site_id, product, base_dir)), products)
+  if (grepl("+", source, fixed = TRUE)) splice_products(tables) else stitch_products(unname(tables))
 }
+
+#' Variables a spliced record takes from a later product where the earlier one lacks them
+#'
+#' The soil drivers, with their quality flags. Newer FLUXNET-archive products lack soil water (and
+#' at some sites soil temperature) in years the older products have it.
+#' @noRd
+SPLICE_FILL_VARIABLES <- c("TS_F_MDS_1", "TS_F_MDS_2", "SWC_F_MDS_1")
 
 #' Splice product tables, the first one winning
 #'
 #' The first table's records, plus each later table's records before the start or after the end
-#' of the record so far; sorted by time.
+#' of the record so far; sorted by time. Within the record so far, each later table fills the soil
+#' drivers (SPLICE_FILL_VARIABLES, value and quality flag together) where they are missing at the
+#' same TIMESTAMP_START; how many records each table filled is attached as attribute "filled".
 #'
-#' @param tables List of FLUXNET-format data frames with TIMESTAMP_START, the first one winning.
-#' @return A data frame sorted by TIMESTAMP_START.
+#' @param tables List of FLUXNET-format data frames with TIMESTAMP_START, the first one winning,
+#'   named by product.
+#' @return A data frame sorted by TIMESTAMP_START, with attribute "filled": a data frame of
+#'   product, variable and the number of records filled.
 #' @noRd
 splice_products <- function(tables) {
+  missing_value <- function(x) is.null(x) || all(is.na(x) | x == -9999)
   a <- tables[[1]]
-  for (next_table in tables[-1]) {
+  filled <- data.frame(product = character(), variable = character(), n = integer())
+  for (i in seq_along(tables)[-1]) {
+    next_table <- tables[[i]]
+    at <- match(a$TIMESTAMP_START, next_table$TIMESTAMP_START)
+    for (v in SPLICE_FILL_VARIABLES) {
+      if (missing_value(next_table[[v]])) next
+      if (is.null(a[[v]])) a[[v]] <- NA_real_
+      qc <- paste0(v, "_QC")
+      if (!is.null(next_table[[qc]]) && is.null(a[[qc]])) a[[qc]] <- NA_real_
+      gap <- (is.na(a[[v]]) | a[[v]] == -9999) & !is.na(at)
+      new <- next_table[[v]][at[gap]]
+      use <- !is.na(new) & new != -9999
+      rows <- which(gap)[use]
+      if (!length(rows)) next
+      a[[v]][rows] <- new[use]
+      if (!is.null(next_table[[qc]])) a[[qc]][rows] <- next_table[[qc]][at[rows]]
+      filled <- rbind(filled, data.frame(product = names(tables)[i] %||% as.character(i), variable = v, n = length(rows)))
+    }
     outside <- next_table$TIMESTAMP_START < min(a$TIMESTAMP_START) | next_table$TIMESTAMP_START > max(a$TIMESTAMP_START)
     a <- dplyr::bind_rows(a, next_table[outside, , drop = FALSE])
   }
-  a[order(a$TIMESTAMP_START), , drop = FALSE]
+  a <- a[order(a$TIMESTAMP_START), , drop = FALSE]
+  attr(a, "filled") <- filled
+  a
 }
 
 #' Stitch product tables end to end
