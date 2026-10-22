@@ -29,6 +29,11 @@ tar_option_set(
   controller = pipeline_controller(),
   memory = "transient",
   garbage_collection = TRUE,
+  # workers read their dependencies from and write their results to the
+  # store themselves (shared file system on Bouchet): the controller holding
+  # them all ran out of memory with the fit matrix's many branches
+  retrieval = "worker",
+  storage = "worker",
   # a failing site must not stop the others
   error = "continue"
 )
