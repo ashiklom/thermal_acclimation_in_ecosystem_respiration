@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Docs: soil-temperature columns and estimators · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="vendor/plotly.min.js"></script>
+</head>
+<body>
+<main class="docs">
+  <h1>Soil-temperature columns and estimators</h1>
+  <p class="lead">How every site gets several candidate soil-temperature columns, how the estimators among them are
+    trained and scored against the site's own sensor, and how the ones carried forward to the fits are chosen. This
+    page documents the code (<code>R/ts-columns.R</code>, <code>R/ts-ranking.R</code>); it reads no pipeline results.
+    The R snippets are extracted from the code at build time, the thresholds quoted are read from it, and the real-data
+    examples come from the raw DE-Hai record (<code>scripts/make-docs-examples.R</code>).</p>
+  <ul class="toc">
+    <li><a href="#columns">The candidate columns</a></li>
+    <li><a href="#physics">Why air temperature alone is a poor predictor</a></li>
+    <li><a href="#estimators">The estimators</a></li>
+    <li><a href="#training">Training data, gap filling and fitting</a></li>
+    <li><a href="#memory">Memory features</a></li>
+    <li><a href="#cv">Leave-one-year-out cross-validation</a></li>
+    <li><a href="#metrics">Error and plausibility metrics</a></li>
+    <li><a href="#ranking">Ranking and the "top" margin</a></li>
+    <li><a href="#selected">The selected set</a></li>
+  </ul>
+
+  <h2 id="columns">The candidate columns</h2>
+  <p>The manuscript used one soil temperature per site: the sensor, repaired or reconstructed in step 01 at some
+    sites, and replaced in step 02 by a regression on air temperature at the regression sites. Here every site gets
+    every candidate, each qualified the way step 01 qualifies its own (where it is usable, its growing-season start,
+    temperature range, years kept and nighttime fit records), so that a fit can use any of them.</p>
+  <table class="plain">
+    <tr><th>column</th><th>what it is</th><th>scored against the sensor</th></tr>
+    <tr><td><code>TS_original</code></td><td>the site's soil-temperature sensor (<code>site_settings.csv</code>
+      <code>ts_sensor</code>) as recorded; usable where step 01 would use it (FLUXNET-format quality flag 0–2, or
+      present at AmeriFlux BASE sites); all missing where the site has no sensor</td><td>it is the sensor
+      (plausibility only)</td></tr>
+    <tr><td><code>TS_reconstructed</code></td><td>step 01's soil temperature: the sensor, repaired or reconstructed per
+      site as the original workflow did</td><td>as it is (in sample)</td></tr>
+    <tr><td><code>TS_manuscript</code></td><td>what the manuscript's fits used: <code>TS_reconstructed</code>, replaced at
+      the regression sites by step 02's regression on air temperature (recovered exactly from the regressed nighttime
+      records) wherever air temperature is present</td><td>as it is (in sample)</td></tr>
+    <tr><td><code>TS_linear</code></td><td>the estimator <code>linear</code>: <code>lm(TS ~ TA)</code> on records with
+      TA &gt; 0, i.e. step 02's regression, but fitted to the sensor's real readings</td><td>out of fold</td></tr>
+    <tr><td><code>TS_&lt;estimator&gt;</code></td><td>the other estimators of <code>ts_estimators()</code> (below), trained
+      on the sensor's real readings and predicted over the whole record</td><td>out of fold</td></tr>
+  </table>
+  <p><code>TS_original</code>, <code>TS_reconstructed</code>, <code>TS_manuscript</code> and <code>TS_linear</code> are the
+    <em>reference columns</em>, always carried forward to the fits (<a href="#selected">below</a>). Air temperature, NEE,
+    u* filtering and the NEE-uptake days are the same for every column (step 01's); what depends on the column is
+    where it is usable, the growing-season start and temperature range, the years kept and the control year.</p>
+  <div data-code="ts_candidates ts_manuscript_values"></div>
+
+  <h2 id="physics">Why air temperature alone is a poor predictor of buried soil temperature</h2>
+  <p>Soil is heated and cooled from the surface by conduction. For a periodic surface temperature, the heat equation
+    in a uniform soil of thermal diffusivity κ has an exact solution: each period (the day, the year, a passing weather
+    system) is damped exponentially with depth and delayed in proportion to depth, with a damping depth that grows with
+    the period:</p>
+  <math display="block"><mrow>
+    <mi>T</mi><mo>(</mo><mi>z</mi><mo>,</mo><mi>t</mi><mo>)</mo><mo>=</mo>
+    <mover accent="true"><mi>T</mi><mo>¯</mo></mover><mo>+</mo>
+    <munder><mo>∑</mo><mi>k</mi></munder>
+    <msub><mi>A</mi><mi>k</mi></msub>
+    <msup><mi>e</mi><mrow><mo>−</mo><mi>z</mi><mo>/</mo><msub><mi>d</mi><mi>k</mi></msub></mrow></msup>
+    <mi>sin</mi><mo>(</mo><msub><mi>ω</mi><mi>k</mi></msub><mi>t</mi><mo>+</mo><msub><mi>φ</mi><mi>k</mi></msub>
+    <mo>−</mo><mi>z</mi><mo>/</mo><msub><mi>d</mi><mi>k</mi></msub><mo>)</mo><mo>,</mo>
+    <mspace width="1.5em"></mspace>
+    <msub><mi>d</mi><mi>k</mi></msub><mo>=</mo>
+    <msqrt><mrow><mn>2</mn><mi>κ</mi><mo>/</mo><msub><mi>ω</mi><mi>k</mi></msub></mrow></msqrt>
+  </mrow></math>
+  <p>With κ = 0.5 × 10⁻⁶ m² s⁻¹ the daily cycle's damping depth is about 12 cm and the annual cycle's about 2.2 m. At
+    10 cm the daily range of air temperature is cut to less than half and arrives hours late, while the seasonal cycle
+    passes almost unchanged but lags by days. So soil temperature at a given air temperature depends on what air
+    temperature has been: the soil is cooler than the same air temperature in spring and warmer in autumn (a
+    hysteresis loop), and a regression on air temperature alone (<code>TS_linear</code>, the manuscript's step-02
+    regression) overstates the daily cycle, has no lag and mixes spring and autumn. The simulation below is that exact
+    solution for an air temperature made of an annual and a daily cycle and a dozen "weather" periods of 2–30 days.</p>
+  <div class="controls">
+    <label>Sensor depth z <input type="range" id="c-z" min="0" max="80" step="1" value="10"> <output id="c-z-o"></output> cm</label>
+    <label>Diffusivity κ <input type="range" id="c-k" min="0.2" max="1.2" step="0.05" value="0.5"> <output id="c-k-o"></output> ×10⁻⁶ m² s⁻¹</label>
+    <label>Weather variability <input type="range" id="c-w" min="0" max="6" step="0.5" value="3"> <output id="c-w-o"></output> °C</label>
+    <label>Window <select id="c-month"></select></label>
+  </div>
+  <div id="c-readout" class="readout"></div>
+  <div class="grid2">
+    <div id="c-series" class="plot"></div>
+    <div id="c-loop" class="plot"></div>
+  </div>
+  <p class="small">Left: hourly air and soil temperature over four weeks of the second simulated year. Right: daily
+    means of the year, soil against air, coloured by day of year; the line is <code>lm(TS ~ TA)</code> fitted to the
+    hourly records with TA &gt; 0 (the <code>linear</code> estimator). The readout compares the hourly RMSE of that
+    regression with the memory regression <code>lm_memory</code> (the predictors of <a href="#memory">memory
+    features</a>), both in sample over the three simulated years.</p>
+
+  <h3>The same in real data: DE-Hai</h3>
+  <p>DE-Hai (Hainich, a beech forest in Germany) records five soil-temperature sensors, numbered by FLUXNET from the
+    shallowest. Three weeks of June 2016 show the daily cycle shrinking and arriving later with depth; six years of
+    daily means show the seasonal hysteresis loop, wider for the deepest sensor. (Measured readings only: quality
+    flag 0.)</p>
+  <div class="grid2">
+    <div id="r-series" class="plot"></div>
+    <div id="r-loop" class="plot"></div>
+  </div>
+  <div class="controls"><label>Loop of sensor <select id="r-sensor"><option value="TS_F_MDS_1">TS_F_MDS_1 (shallowest)</option>
+    <option value="TS_F_MDS_5">TS_F_MDS_5 (deepest)</option></select></label><span id="r-readout" class="small"></span></div>
+
+  <h2 id="estimators">The estimators</h2>
+  <p>Each estimator is a model kind, a set of predictors and the training records it uses; this table is generated
+    from <code>ts_estimators()</code> itself. <code>lm</code> is ordinary least squares
+    (<code>stats::lm()</code>); <code>rf</code> is a <code>ranger</code> random forest. Every estimator becomes a column
+    <code>TS_&lt;name&gt;</code>.</p>
+  <div id="est-table"></div>
+  <div data-code="ts_estimators TS_MEMORY_PREDICTORS"></div>
+
+  <h2 id="training">Training data, gap filling and fitting</h2>
+  <ul>
+    <li><b>Trained only on real sensor readings</b> (<code>ts_truth()</code>): the column of real readings
+      (<code>site_settings.csv</code> <code>ts_sensor_truth</code>: the sensor itself, or the non-filled counterpart
+      of a PI gap-filled one), where the source flags quality only the measured records (flag 0, not gap-filled),
+      and only from <code>ts_sensor_first_year</code> on where that is set. A site without such readings has all-missing
+      estimator columns.</li>
+    <li><b>Predictors gap-filled first</b> (<code>ts_gapfill_doy()</code>): a missing air temperature or net radiation
+      is replaced by its mean over all years at the same day of year and time of day (as the original 01_01 script did);
+      values with no such mean stay missing, and so does the prediction there.</li>
+    <li><b>Too little training data</b>: an estimator needs at least <code>TS_MIN_TRAIN</code> =
+      <span data-const="TS_MIN_TRAIN"></span> complete training records (after its own subset, e.g. TA &gt; 0), or its
+      column is all missing.</li>
+    <li><b>Forests</b>: 200 trees, one thread, trained on at most 60,000 records (a random subset, sorted back into time
+      order) for the columns and 20,000 within the cross-validation; the seed is a hash of the site, the purpose and
+      the estimator (<code>tas_seed(site, "ts", name)</code>, and <code>tas_seed(site, "ts-cv", name, year)</code> per
+      held-out year), so every run reproduces the same forests.</li>
+    <li><b>Prediction</b>: every record with complete predictors, over the whole record (also where the sensor has
+      readings: the column is the estimator, not a gap-filled sensor).</li>
+  </ul>
+  <div data-code="TS_MIN_TRAIN ts_truth ts_gapfill_doy ts_fit_predict"></div>
+
+  <h2 id="memory">Memory features</h2>
+  <p>The memory estimators give the model what the physics says soil temperature depends on: past air temperature over
+    several time scales and the position in the seasonal and daily cycles. For a record at time of day
+    <i>h</i>:<i>m</i> on calendar day <i>d</i> (air temperature gap-filled first; days on a complete calendar, so a day
+    without data is a missing value, not skipped):</p>
+  <math display="block"><mtable displaystyle="true">
+    <mtr><mtd><msub><mi>TA</mi><mtext>day</mtext></msub><mo>(</mo><mi>d</mi><mo>)</mo></mtd>
+      <mtd><mo>=</mo><mtext>mean of TA over the records of day </mtext><mi>d</mi></mtd></mtr>
+    <mtr><mtd><msub><mi>TA</mi><mtext>lag1</mtext></msub><mo>(</mo><mi>d</mi><mo>)</mo></mtd>
+      <mtd><mo>=</mo><msub><mi>TA</mi><mtext>day</mtext></msub><mo>(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo>)</mo></mtd></mtr>
+    <mtr><mtd><msub><mi>TA</mi><mtext>amp_lag1</mtext></msub><mo>(</mo><mi>d</mi><mo>)</mo></mtd>
+      <mtd><mo>=</mo><mi>max</mi><mi>TA</mi><mo>−</mo><mi>min</mi><mi>TA</mi><mtext> on day </mtext><mi>d</mi><mo>−</mo><mn>1</mn>
+        <mtext> (missing with fewer than 4 values)</mtext></mtd></mtr>
+    <mtr><mtd><msub><mi>TA</mi><mrow><mtext>m</mtext><mi>k</mi></mrow></msub><mo>(</mo><mi>d</mi><mo>)</mo></mtd>
+      <mtd><mo>=</mo><mfrac><mn>1</mn><mrow><mo>|</mo><mi>J</mi><mo>|</mo></mrow></mfrac>
+        <munder><mo>∑</mo><mrow><mi>j</mi><mo>∈</mo><mi>J</mi></mrow></munder>
+        <msub><mi>TA</mi><mtext>day</mtext></msub><mo>(</mo><mi>d</mi><mo>−</mo><mi>j</mi><mo>)</mo><mo>,</mo>
+        <mspace width="0.5em"></mspace><mi>J</mi><mo>=</mo><mo>{</mo><mi>j</mi><mo>∈</mo><mn>0</mn><mo>…</mo><mi>k</mi><mo>−</mo><mn>1</mn>
+        <mo>:</mo><msub><mi>TA</mi><mtext>day</mtext></msub><mo>(</mo><mi>d</mi><mo>−</mo><mi>j</mi><mo>)</mo><mtext> present</mtext><mo>}</mo><mo>,</mo>
+        <mspace width="0.5em"></mspace><mi>k</mi><mo>∈</mo><mo>{</mo><mn>3</mn><mo>,</mo><mn>7</mn><mo>,</mo><mn>30</mn><mo>}</mo></mtd></mtr>
+    <mtr><mtd><msub><mtext>doy_s</mtext><mi>n</mi></msub><mo>,</mo><msub><mtext>doy_c</mtext><mi>n</mi></msub></mtd>
+      <mtd><mo>=</mo><mi>sin</mi><mo>,</mo><mi>cos</mi><mo>(</mo><mi>n</mi><mo>·</mo><mn>2</mn><mi>π</mi><mspace width="0.2em"></mspace>
+        <mtext>yday</mtext><mo>(</mo><mi>d</mi><mo>)</mo><mo>/</mo><mn>365.25</mn><mo>)</mo><mo>,</mo>
+        <mspace width="0.5em"></mspace><mi>n</mi><mo>∈</mo><mo>{</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>}</mo></mtd></mtr>
+    <mtr><mtd><msub><mtext>hr_s</mtext><mn>1</mn></msub><mo>,</mo><msub><mtext>hr_c</mtext><mn>1</mn></msub></mtd>
+      <mtd><mo>=</mo><mi>sin</mi><mo>,</mo><mi>cos</mi><mo>(</mo><mn>2</mn><mi>π</mi><mo>(</mo><mi>h</mi><mo>+</mo><mi>m</mi><mo>/</mo><mn>60</mn><mo>)</mo><mo>/</mo><mn>24</mn><mo>)</mo></mtd></mtr>
+  </mtable></math>
+  <p>The running means are right-aligned (the day itself and the days before it; at the start of the record over the
+    days there are). Note that <i>TA</i><sub>day</sub> and the running means include the whole of the current day, so a
+    record's features include air temperature later that day. Together with the record's own TA these are the 13
+    predictors of <code>lm_memory</code>, <code>rf_memory</code> and (with net radiation) <code>rf_memory_netrad</code>.
+    The figure shows them for DE-Hai in 2014 against the shallowest sensor's daily mean: the 7- and 30-day means
+    follow the soil's seasonal course much more closely than the daily air temperature does.</p>
+  <div id="m-plot" class="plot"></div>
+  <div data-code="ts_memory_features"></div>
+
+  <h2 id="cv">Leave-one-year-out cross-validation</h2>
+  <p>Estimators are scored against the sensor <em>out of fold</em>: for every year with real readings, the estimator is
+    trained on the other years (<code>truth &amp; YEAR != y</code>) and predicts the held-out year; the error metrics are
+    computed over all years' out-of-fold predictions together. A site needs real readings in at least two years, or
+    its estimators' metrics are missing.</p>
+  <p>Why whole years and not a random subset of records? Soil temperature is strongly autocorrelated, and part of its
+    deviation from what air temperature predicts persists for days to months (soil moisture, snow cover, litter,
+    a sensor's slow drift). With a random split, almost every held-out record has its neighbours of the same hours
+    and days in the training set; a flexible model that can match records by their features (a forest, or any
+    local-averaging method) then "predicts" a held-out record from its neighbours, slow anomaly included, and looks far
+    better than it will be on a year it has not seen. Holding out a whole year removes the neighbours. The
+    simulation below shows this with two models fitted to daily means: least squares on memory features, and
+    <i>k</i>-nearest-neighbour regression on the same features (standing in for the forest, which also averages the
+    training records whose predictors are close). The "new years" bars are the true error, on independently
+    simulated years the models never saw.</p>
+  <div class="controls">
+    <label>Data <select id="cv-data"><option value="sim">simulated (8 years)</option><option value="real">DE-Hai daily means, sensor 1 (2012–2017)</option></select></label>
+    <label>Slow anomaly time scale <input type="range" id="cv-tau" min="1" max="90" step="1" value="30"> <output id="cv-tau-o"></output> days</label>
+    <label>its sd <input type="range" id="cv-sig" min="0" max="3" step="0.1" value="1.5"> <output id="cv-sig-o"></output> °C</label>
+    <label>neighbours k <input type="range" id="cv-k" min="1" max="30" step="1" value="5"> <output id="cv-k-o"></output></label>
+    <label><button id="cv-seed">new random draw</button></label>
+  </div>
+  <div id="cv-readout" class="readout"></div>
+  <div class="grid2">
+    <div id="cv-bars" class="plot"></div>
+    <div id="cv-series" class="plot"></div>
+  </div>
+  <p class="small">Predictors: daily mean air temperature, its 7- and 30-day running means, and the first annual
+    harmonic. Simulated soil temperature: a 10-day exponential memory of air temperature plus a slow anomaly (an AR(1)
+    process with the time scale and sd set above, unrelated to air temperature) plus 0.2 °C noise. The right panel shows
+    one year's sensor and the nearest-neighbour model's out-of-fold predictions under both splits: under the random
+    split the predictions follow the slow anomaly they cannot know from air temperature.</p>
+  <div data-code="ts_cv_metrics"></div>
+
+  <h2 id="metrics">Error and plausibility metrics</h2>
+  <h3>Agreement with the sensor</h3>
+  <p>For predictions <i>p<sub>i</sub></i> and the sensor's real readings <i>o<sub>i</sub></i> on the <i>n</i> records
+    where both are present (out of fold for the estimators; as they are for <code>TS_reconstructed</code> and
+    <code>TS_manuscript</code>), with errors <i>e<sub>i</sub></i> = <i>p<sub>i</sub></i> − <i>o<sub>i</sub></i>
+    (all missing with fewer than two pairs):</p>
+  <math display="block"><mtable displaystyle="true">
+    <mtr><mtd><mtext>rmse</mtext></mtd><mtd><mo>=</mo><msqrt><mrow><mfrac><mn>1</mn><mi>n</mi></mfrac><munder><mo>∑</mo><mi>i</mi></munder><msubsup><mi>e</mi><mi>i</mi><mn>2</mn></msubsup></mrow></msqrt></mtd></mtr>
+    <mtr><mtd><mtext>bias</mtext></mtd><mtd><mo>=</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><munder><mo>∑</mo><mi>i</mi></munder><msub><mi>e</mi><mi>i</mi></msub></mtd></mtr>
+    <mtr><mtd><msup><mtext>r</mtext><mn>2</mn></msup></mtd><mtd><mo>=</mo><mi>cor</mi><msup><mrow><mo>(</mo><mi>p</mi><mo>,</mo><mi>o</mi><mo>)</mo></mrow><mn>2</mn></msup></mtd></mtr>
+    <mtr><mtd><mtext>sd_ratio</mtext></mtd><mtd><mo>=</mo><mi>sd</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>/</mo><mi>sd</mi><mo>(</mo><mi>o</mi><mo>)</mo></mtd></mtr>
+    <mtr><mtd><mtext>cell_sd</mtext></mtd><mtd><mo>=</mo><munder><mtext>mean</mtext><mi>c</mi></munder><mspace width="0.2em"></mspace><mi>sd</mi><mo>(</mo><msub><mi>e</mi><mi>i</mi></msub><mo>:</mo><mi>i</mi><mo>∈</mo><mi>c</mi><mo>)</mo><mo>,</mo>
+      <mspace width="0.5em"></mspace><mi>c</mi><mtext> = day of year × hour (cells with one record have no sd and are skipped)</mtext></mtd></mtr>
+    <mtr><mtd><mtext>year_sd</mtext></mtd><mtd><mo>=</mo><munder><mi>sd</mi><mi>y</mi></munder><mo>(</mo><msub><mover accent="true"><mi>e</mi><mo>¯</mo></mover><mi>y</mi></msub><mo>)</mo><mo>,</mo>
+      <mspace width="0.5em"></mspace><msub><mover accent="true"><mi>e</mi><mo>¯</mo></mover><mi>y</mi></msub><mtext> = mean error in year </mtext><mi>y</mi><mtext> (missing with one year)</mtext></mtd></mtr>
+  </mtable></math>
+  <p><code>r²</code> is the squared correlation, not 1 − SSE/SST: a column with the right shape but the wrong level or
+    scale still has a high r²; bias and sd ratio catch those. <code>cell_sd</code> measures the error that is not a
+    systematic function of the season and time of day (which a column could share with the sensor's climatology);
+    <code>year_sd</code> measures how stable the column's bias is from year to year.</p>
+  <div data-code="ts_error_metrics ts_reference_metrics"></div>
+  <h3>Plausibility against air temperature</h3>
+  <p>Over the growing season (day of year gStart … gEnd of step 01), for every column including the sensor:</p>
+  <table class="plain">
+    <tr><th>metric</th><th>definition</th></tr>
+    <tr><td><code>amp_ratio</code></td><td>mean daily range of the column / mean daily range of air temperature (days with
+      at least 12 values; each series over its own days)</td></tr>
+    <tr><td><code>lag_h</code></td><td>hour of the column's mean daily maximum minus air temperature's (hour of the
+      maximum of the mean diurnal cycle), wrapped into −12…12 h</td></tr>
+    <tr><td><code>offset</code></td><td>mean of column − air temperature</td></tr>
+    <tr><td><code>stuck</code></td><td>share of the column's values in runs of ≥ 6 exactly equal consecutive values (3 h
+      of half-hourly records)</td></tr>
+    <tr><td><code>spikes</code></td><td>share of steps between consecutive records larger than 5 °C</td></tr>
+    <tr><td><code>d_amp</code>, <code>d_lag</code>, <code>d_offset</code></td><td>distance from the sensor's own value
+      (<code>TS_original</code>): |ln(amp_ratio / amp_ratio<sub>sensor</sub>)|, |wrap(lag_h − lag_h<sub>sensor</sub>)|,
+      |offset − offset<sub>sensor</sub>|; missing at sites without a sensor</td></tr>
+  </table>
+  <p class="small">These are simpler than the sensor screen's diurnal diagnostics (<a href="docs-sensor-screen.html">sensor
+    screen</a>), which use the median range over common days and the first-harmonic peak hour; the two are separate
+    code.</p>
+  <div data-code="ts_plausibility ts_quality"></div>
+
+  <h2 id="ranking">Ranking and the "top" margin</h2>
+  <p>At every site, the estimators (the <code>TS_&lt;name&gt;</code> columns of <code>ts_estimators()</code>, including
+    <code>TS_linear</code>; not <code>TS_original</code>, <code>TS_reconstructed</code> or <code>TS_manuscript</code>)
+    are ranked under each metric of <code>TS_RANK_METRICS</code>. Each metric is a score of the quality table, lower
+    is better except r²:</p>
+  <div id="rank-metrics"></div>
+  <p>With <i>s<sub>j</sub></i> the score of estimator <i>j</i> (r²: <i>s<sub>j</sub></i> = −r²<sub><i>j</i></sub>),
+    over the estimators with a value:</p>
+  <math display="block"><mtable displaystyle="true">
+    <mtr><mtd><msub><mtext>rank</mtext><mi>j</mi></msub></mtd><mtd><mo>=</mo><mn>1</mn><mo>+</mo><mo>#</mo><mo>{</mo><mi>i</mi><mo>:</mo><msub><mi>s</mi><mi>i</mi></msub><mo>&lt;</mo><msub><mi>s</mi><mi>j</mi></msub><mo>}</mo><mspace width="1em"></mspace><mtext>(ties share the lower rank)</mtext></mtd></mtr>
+    <mtr><mtd><msub><mi>s</mi><mrow><mo>(</mo><mn>3</mn><mo>)</mo></mrow></msub></mtd><mtd><mo>=</mo><mtext>the third smallest score (the largest, with fewer than three values)</mtext></mtd></mtr>
+    <mtr><mtd><msub><mtext>top</mtext><mi>j</mi></msub></mtd><mtd><mo>⇔</mo><msub><mtext>rank</mtext><mi>j</mi></msub><mo>=</mo><mn>1</mn><mspace width="0.5em"></mspace><mo>∨</mo><mspace width="0.5em"></mspace>
+      <msub><mi>s</mi><mi>j</mi></msub><mo>≤</mo><msub><mi>s</mi><mrow><mo>(</mo><mn>3</mn><mo>)</mo></mrow></msub><mo>+</mo><mi>m</mi><mo>,</mo>
+      <mspace width="1em"></mspace><mi>m</mi><mo>=</mo><mrow><mo>{</mo><mtable columnalign="left">
+        <mtr><mtd><mn><span data-const="TS_MARGIN.r2"></span></mn></mtd><mtd><mtext>for r²</mtext></mtd></mtr>
+        <mtr><mtd><mn><span data-const="TS_MARGIN.relative"></span></mn><mo>·</mo><mo>|</mo><msub><mi>s</mi><mrow><mo>(</mo><mn>3</mn><mo>)</mo></mrow></msub><mo>|</mo></mtd><mtd><mtext>otherwise</mtext></mtd></mtr>
+      </mtable></mrow></mtd></mtr>
+  </mtable></math>
+  <p>"Best or within the margin of the third best": since the second and third best are at or below
+    <i>s</i><sub>(3)</sub>, the three best always count as top, plus any estimator within the margin of the third.
+    Edit the values below (one site's quality table; empty = missing) to see the ranks and which estimators are top
+    under each metric. The calculator implements <code>rank_ts_columns()</code> with the metric definitions and margin
+    read from the code.</p>
+  <div id="calc"></div>
+  <div id="calc-out"></div>
+  <div data-code="TS_RANK_METRICS TS_MARGIN rank_ts_columns"></div>
+
+  <h2 id="selected">The selected set</h2>
+  <p>The columns the fits are run with (<code>ts_methods_selected</code>) are the reference columns
+    <code>TS_REFERENCE_COLUMNS</code> (<span id="ref-cols"></span>) and every estimator that is top at <em>some</em> site
+    under <em>some</em> metric, in the order of <code>ts_estimators()</code>. Because the three best estimators are top
+    at every site and metric, an estimator is dropped only if it is never among the three best (or within the margin)
+    at any site under any of the nine metrics: the selection removes estimators that are dominated everywhere, it does
+    not pick one winner. For the single site of the calculator above, the selected set is:</p>
+  <div id="calc-selected"></div>
+  <div data-code="TS_REFERENCE_COLUMNS select_ts_methods"></div>
+</main>
+<script type="module" src="js/docs-ts-estimators.js"></script>
+</body>
+</html>

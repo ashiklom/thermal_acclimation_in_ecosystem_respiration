@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Docs: the soil-temperature sensor screen · thermal acclimation refactor-v2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="vendor/plotly.min.js"></script>
+</head>
+<body>
+<main class="docs">
+  <h1>The soil-temperature sensor screen</h1>
+  <p class="lead">Is a soil-temperature record physically plausible as buried soil temperature, and which parts of it are
+    not? This page documents the screen as implemented in <code>R/ts-screen.R</code>; it reads no pipeline results. The
+    thresholds quoted are read from the R constants, the R snippets are extracted from the code at build time, and the
+    real-data examples are the screen (<code>ts_screen_series()</code>) run on the raw DE-Hai record by
+    <code>scripts/make-docs-examples.R</code> (with a fixed June–August growing season). The simulations on this page
+    re-implement the screen's rules in JavaScript, with the same constants.</p>
+  <p>The screen depends only on the input data (step 01's record and the raw sensor), never on a fit. For each site it
+    screens four series: the sensor as recorded (<code>TS_original</code>, where usable as step 01 would use it), its real
+    readings (<code>TS_real</code>: measured, not gap-filled), step 01's column (<code>TS_reconstructed</code>) and the
+    manuscript's (<code>TS_manuscript</code>). Each gets a verdict (GOOD, SUSPECT, BAD), flags, yearly diagnostics and a
+    table of bad time windows for a later reconstruction step.</p>
+  <ul class="toc">
+    <li><a href="#basis">The heat-conduction basis</a></li>
+    <li><a href="#peak">Peak hour and lag</a></li>
+    <li><a href="#diagnostics">The diurnal diagnostics</a></li>
+    <li><a href="#plane">The range-ratio / lag plane</a></li>
+    <li><a href="#stuck">Stuck runs and the zero curtain</a></li>
+    <li><a href="#yearly">The yearly screen: changepoints and odd years</a></li>
+    <li><a href="#verdict">Verdicts and flags</a></li>
+    <li><a href="#windows">Bad windows and <code>ts_screen_mask()</code></a></li>
+    <li><a href="#validation">The manuscript's corrections: a guideline</a></li>
+  </ul>
+
+  <h2 id="basis">The heat-conduction basis</h2>
+  <p>Heat conduction damps and delays the daily cycle of air temperature with depth <i>z</i>. For a sinusoidal surface
+    temperature in a uniform soil (thermal diffusivity κ), the daily cycle at depth <i>z</i> has its range reduced and its
+    peak delayed by</p>
+  <math display="block"><mrow>
+    <mfrac><mtext>range</mtext><msub><mtext>range</mtext><mtext>air</mtext></msub></mfrac><mo>=</mo>
+    <msup><mi>e</mi><mrow><mo>−</mo><mi>z</mi><mo>/</mo><mi>d</mi></mrow></msup><mo>,</mo><mspace width="1.5em"></mspace>
+    <mtext>lag</mtext><mo>=</mo><mfrac><mi>z</mi><mi>d</mi></mfrac><mo>·</mo><mfrac><mn>24</mn><mrow><mn>2</mn><mi>π</mi></mrow></mfrac><mtext>&#160;h</mtext><mo>,</mo>
+    <mspace width="1.5em"></mspace><mi>d</mi><mo>=</mo><msqrt><mrow><mn>2</mn><mi>κ</mi><mo>/</mo><mi>ω</mi></mrow></msqrt>
+    <mo>≈</mo><mtext>10 cm</mtext>
+  </mrow></math>
+  <p>(<i>d</i>: the damping depth of the daily cycle, ω = 2π / 24 h.) Both observables imply a depth in damping depths,
+    and in a conducting soil the two agree:</p>
+  <math display="block"><mrow>
+    <msub><mi>ẑ</mi><mtext>amp</mtext></msub><mo>=</mo><mo>−</mo><mi>ln</mi><mo>(</mo><mtext>range ratio</mtext><mo>)</mo><mo>,</mo>
+    <mspace width="1.5em"></mspace>
+    <msub><mi>ẑ</mi><mtext>lag</mtext></msub><mo>=</mo><mtext>lag</mtext><mo>·</mo><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mn>24</mn></mfrac><mo>,</mo>
+    <mspace width="1.5em"></mspace>
+    <msub><mi>ẑ</mi><mtext>lag</mtext></msub><mo>=</mo><msub><mi>ẑ</mi><mtext>amp</mtext></msub><mtext>&#160;for conduction</mtext>
+  </mrow></math>
+  <p>So a sensor that reports air temperature (or sits at the surface) has a range ratio near 1 and no lag; one whose
+    peak comes <em>before</em> air's, one without a daily cycle, or one that repeats values is not measuring buried soil.</p>
+  <div class="controls">
+    <label>Sensor depth z <input type="range" id="b-z" min="0" max="50" step="1" value="8"> <output id="b-z-o"></output> cm</label>
+    <label>Damping depth d <input type="range" id="b-d" min="5" max="20" step="0.5" value="10"> <output id="b-d-o"></output> cm</label>
+  </div>
+  <div id="b-readout" class="readout"></div>
+  <div class="grid2">
+    <div id="b-plot" class="plot"></div>
+    <div id="b-real" class="plot"></div>
+  </div>
+  <p class="small">Left: two days of a sinusoidal air temperature and the soil at depth <i>z</i>; the readout shows the
+    lag as the screen computes it (first-harmonic peak hours, wrapped, then unwrapped: see below). Deeper than π damping depths
+    (31 cm at d = 10 cm) the true lag exceeds 12 h and only the unwrapping recovers it. Right: DE-Hai's growing-season mean diurnal cycles of
+    air temperature and its five sensors (June–August, all years, measured readings only); the screen's diagnostics of
+    these series are in the table.</p>
+  <div id="b-table"></div>
+
+  <h2 id="peak">Peak hour and lag</h2>
+  <p>The peak hour of a mean diurnal cycle <i>v</i>(<i>h</i>) is taken from the phase of its first harmonic, which, unlike
+    the hour of the maximum, varies continuously (with values at fewer than 12 times of day it is missing):</p>
+  <math display="block"><mrow>
+    <msub><mi>h</mi><mtext>peak</mtext></msub><mo>=</mo><mfrac><mn>24</mn><mrow><mn>2</mn><mi>π</mi></mrow></mfrac>
+    <mspace width="0.2em"></mspace><mi>atan2</mi><mo>(</mo>
+    <munder><mo>∑</mo><mi>h</mi></munder><mi>v</mi><mo>(</mo><mi>h</mi><mo>)</mo><mi>sin</mi><msub><mi>θ</mi><mi>h</mi></msub><mo>,</mo>
+    <munder><mo>∑</mo><mi>h</mi></munder><mi>v</mi><mo>(</mo><mi>h</mi><mo>)</mo><mi>cos</mi><msub><mi>θ</mi><mi>h</mi></msub>
+    <mo>)</mo><mspace width="0.4em"></mspace><mo>mod</mo><mspace width="0.4em"></mspace><mn>24</mn><mo>,</mo>
+    <mspace width="1.5em"></mspace><msub><mi>θ</mi><mi>h</mi></msub><mo>=</mo><mn>2</mn><mi>π</mi><mi>h</mi><mo>/</mo><mn>24</mn>
+  </mrow></math>
+  <p>The lag is the difference of the series' and air's peak hours, wrapped into [−12, 12) h. Phase is known only
+    modulo 24 h, so the lag is then unwrapped with the lag the damping implies: of the lags that differ by whole days,
+    the one closest to <i>ẑ</i><sub>amp</sub> · 24 / 2π is kept:</p>
+  <math display="block"><mrow>
+    <mtext>lag</mtext><mo>=</mo><mi>w</mi><mo>+</mo><mn>24</mn><mo>·</mo><mi>round</mi><mrow><mo>(</mo><mfrac>
+      <mrow><msub><mi>ẑ</mi><mtext>amp</mtext></msub><mo>·</mo><mn>24</mn><mo>/</mo><mn>2</mn><mi>π</mi><mo>−</mo><mi>w</mi></mrow><mn>24</mn></mfrac><mo>)</mo></mrow><mo>,</mo>
+    <mspace width="1.5em"></mspace><mi>w</mi><mo>=</mo><mo>(</mo><mo>(</mo><msubsup><mi>h</mi><mtext>peak</mtext><mtext>soil</mtext></msubsup><mo>−</mo>
+    <msubsup><mi>h</mi><mtext>peak</mtext><mtext>air</mtext></msubsup><mo>+</mo><mn>12</mn><mo>)</mo><mspace width="0.3em"></mspace><mo>mod</mo><mspace width="0.3em"></mspace><mn>24</mn><mo>)</mo><mo>−</mo><mn>12</mn>
+  </mrow></math>
+  <p>The demo shows why the harmonic is used: a daily cycle with a sharp afternoon peak (a second harmonic) and noise.
+    The hour of the maximum jumps between half-hours as the noise changes; the first-harmonic peak moves smoothly.</p>
+  <div class="controls">
+    <label>Second harmonic <input type="range" id="p-a2" min="0" max="0.8" step="0.05" value="0.35"> <output id="p-a2-o"></output></label>
+    <label>Noise sd <input type="range" id="p-noise" min="0" max="0.6" step="0.05" value="0.15"> <output id="p-noise-o"></output></label>
+    <label><button id="p-seed">new noise</button></label>
+  </div>
+  <div id="p-plot" class="plot" style="min-height:340px"></div>
+  <div data-code="ts_peak_hour ts_wrap_lag"></div>
+
+  <h2 id="diagnostics">The diurnal diagnostics</h2>
+  <p>Over the growing season only (gStart … gEnd of step 01: the period TAS is estimated over, free of snow cover), the
+    screen computes from the series and air temperature (<code>ts_diurnal_diagnostics()</code>):</p>
+  <ul>
+    <li>each day's range (max − min) of each series, on days where the series has at least
+      max(4, ⌊0.8 × records per day⌋) values (38 of 48 half-hours); the days where <em>both</em> have a range (at least 5,
+      else everything is missing);</li>
+    <li><code>amp_ratio</code> = median daily range of the series / median daily range of air temperature, over those
+      common days;</li>
+    <li><code>lag_h</code>: the peak hours of the mean diurnal cycles (mean by time of day over the season), their
+      wrapped difference, unwrapped with the damping as above;</li>
+    <li><code>zd_amp</code> = −ln(amp_ratio) and <code>zd_lag</code> = lag_h · 2π / 24, the two implied depths.</li>
+  </ul>
+  <p>Whole-record diagnostics beside them: <code>coverage</code> (share of records with a value), <code>mean_offset</code>
+    (growing-season mean of series − air), <code>stuck_frac</code> and <code>stuck_max_h</code> (<a href="#stuck">below</a>)
+    and <code>spike_rate</code> (share of steps larger than 2 °C per hour of time step, i.e. 1 °C per half hour; reported,
+    not used by any rule).</p>
+  <div data-code="ts_diurnal_diagnostics"></div>
+
+  <h2 id="plane">The range-ratio / lag plane</h2>
+  <p>Each series is a point in the plane of its range ratio and lag. The whole-record rules carve out regions:
+    <b>air-like</b> (range ratio above <span data-const="TS_SCREEN_AIRLIKE_AMP"></span> and |lag| below
+    <span data-const="TS_SCREEN_AIRLIKE_LAG"></span> h), <b>flat</b> (range ratio below
+    <span data-const="TS_SCREEN_FLAT_AMP"></span>) and <b>leads air</b> (lag below <span data-const="TS_SCREEN_LEADS_H"></span> h).
+    Conduction puts a sensor on the curve lag = −ln(ratio) · 24 / 2π; the <b>non-conductive</b> check (SUSPECT) fires
+    where the series is damped (<i>ẑ</i><sub>amp</sub> &gt; 0.05) but the two implied depths differ by more than a factor
+    of <span data-const="TS_SCREEN_DEPTH_RATIO"></span> or the lag is not positive: outside the green band. A regression on
+    air temperature, for example, is damped but has no lag.</p>
+  <p>The points are simulated sensors (60 days of half-hourly records, run through a JavaScript port of
+    <code>ts_diurnal_diagnostics()</code>), DE-Hai's five real sensors (the R screen's own values) and "your sensor", set
+    with the sliders. Click a point to see its mean diurnal cycle and the rules it triggers.</p>
+  <div class="controls">
+    <label>Your sensor: depth <input type="range" id="u-z" min="0" max="5" step="0.1" value="1.2"> <output id="u-z-o"></output> damping depths</label>
+    <label>clock shift <input type="range" id="u-shift" min="-6" max="6" step="0.5" value="0"> <output id="u-shift-o"></output> h</label>
+    <label>share replaced by a regression on air <input type="range" id="u-w" min="0" max="1" step="0.05" value="0"> <output id="u-w-o"></output></label>
+  </div>
+  <div class="grid2">
+    <div id="plane-plot" class="plot" style="min-height:520px"></div>
+    <div><div id="plane-detail" class="plot" style="min-height:330px"></div><div id="plane-text" class="readout"></div></div>
+  </div>
+
+  <h2 id="stuck">Stuck runs and the zero curtain</h2>
+  <p>A <em>run</em> is a stretch of exactly repeated consecutive values (a missing value breaks a run). Runs whose value is
+    within ±0.5 °C of 0 °C are exempt: under snow, freezing or thawing soil sits at 0 °C for days (the zero curtain), which
+    is physics, not a stuck logger (<code>ts_runs()</code>). Two rules use the runs:</p>
+  <ul>
+    <li><b>stuck</b> (BAD, whole record): the share of the series' values in runs of at least 6 records (3 h at half-hourly
+      records) exceeds <span data-const="TS_SCREEN_STUCK_FRAC"></span>; runs anywhere in the record count, also under
+      snow away from 0 °C (only the stuck-period windows below are restricted to the growing season), so a long snow cover
+      with the soil steady a little above or below the zero band can by itself make a series BAD as stuck.</li>
+    <li><b>stuck_periods</b> (SUSPECT, a bad window): a run of at least <span data-const="TS_SCREEN_STUCK_PERIOD_H"></span> h
+      that lies mostly (more than half of its records) in the growing season becomes a bad window of scale "period";
+      runs less than <span data-const="TS_SCREEN_STUCK_MERGE_H"></span> h apart merge into one window. Under snow, soil
+      temperature can also sit at one logger reading for days away from 0 °C (in the first network screen most stuck-period
+      windows were in November–March), so long runs outside the growing season are not windows.</li>
+  </ul>
+  <p>A slowly changing series read at a coarse resolution repeats values without anything being wrong: at DE-Hai the
+    deepest sensor, <span id="s-real"></span>. Simulate a year of half-hourly records with snow cover in winter and a
+    logger that sticks in summer:</p>
+  <div class="controls">
+    <label><input type="checkbox" id="s-snow" checked> snow cover (Dec–mid-March)</label>
+    <label>soil under snow <input type="range" id="s-snowt" min="-2" max="3" step="0.1" value="1.2"> <output id="s-snowt-o"></output> °C</label>
+    <label>logger stuck in July for <input type="range" id="s-days" min="0" max="10" step="0.5" value="3"> <output id="s-days-o"></output> days</label>
+    <label>logger resolution <select id="s-res"><option value="0.01">0.01 °C</option><option value="0.1" selected>0.1 °C</option><option value="0.5">0.5 °C</option></select></label>
+  </div>
+  <div id="s-readout" class="readout"></div>
+  <div id="s-plot" class="plot"></div>
+  <p class="small">Growing season of the simulation: day of year 120–280 (shaded). Orange: runs of at least 6 records that
+    count towards <code>stuck_frac</code>; grey: runs in the ±0.5 °C band (exempt); red bands: stuck-period windows.</p>
+  <div data-code="ts_runs"></div>
+
+  <h2 id="yearly">The yearly screen: changepoints and odd years</h2>
+  <p>Every growing year is screened separately: its growing-season coverage, mean offset from air temperature and its own
+    diurnal diagnostics (range ratio, lag, number of days with a range). A year is <em>screenable</em> if offset, log range
+    ratio and lag are all finite and it has at least 20 days with a range. Three yearly metrics are compared between
+    years: <code>offset</code> (°C), <code>log_amp</code> = ln(range ratio) (the depth in damping depths) and
+    <code>lag_h</code> (h).</p>
+  <h3>Changepoints</h3>
+  <p>A changepoint is a lasting shift of the diagnostics (a sensor moved or replaced). With at least
+    <span data-const="TS_SCREEN_CHANGE_MIN_YEARS"></span> screenable years, every split into an earlier segment <i>a</i> and
+    a later segment <i>b</i> (at least <span data-const="TS_SCREEN_CHANGE_MIN_SIDE"></span> years each) is scored for each
+    metric:</p>
+  <math display="block"><mrow>
+    <mi>D</mi><mo>=</mo><mi>med</mi><mo>(</mo><mi>b</mi><mo>)</mo><mo>−</mo><mi>med</mi><mo>(</mo><mi>a</mi><mo>)</mo><mo>,</mo><mspace width="1em"></mspace>
+    <mi>S</mi><mo>=</mo><mn>1.4826</mn><mo>·</mo><mi>med</mi><mo>(</mo><mo>|</mo><mi>a</mi><mo>−</mo><mi>med</mi><mo>(</mo><mi>a</mi><mo>)</mo><mo>|</mo><mo>∪</mo><mo>|</mo><mi>b</mi><mo>−</mo><mi>med</mi><mo>(</mo><mi>b</mi><mo>)</mo><mo>|</mo><mo>)</mo><mo>,</mo><mspace width="1em"></mspace>
+    <mtext>score</mtext><mo>=</mo><mfrac><mrow><mo>|</mo><mi>D</mi><mo>|</mo></mrow><mrow><mi>max</mi><mo>(</mo><mi>S</mi><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>9</mn></mrow></msup><mo>)</mo></mrow></mfrac>
+  </mrow></math>
+  <p>A metric <em>agrees</em> if its score exceeds <span data-const="TS_SCREEN_YEAR_Z"></span> and |<i>D</i>| exceeds its minimum
+    shift (offset <span data-const="TS_SCREEN_YEAR_MIN_DEV.offset"></span> °C, log range ratio
+    <span data-const="TS_SCREEN_YEAR_MIN_DEV.log_amp"></span>, lag <span data-const="TS_SCREEN_YEAR_MIN_DEV.lag_h"></span> h). A
+    split counts if at least <span data-const="TS_SCREEN_MIN_METRICS"></span> metrics agree: the range ratio and lag alone vary
+    between years with soil moisture (the damping depth does), while a moved or replaced sensor shifts several together.
+    The counting split with the largest summed score of its agreeing metrics is the changepoint; binary segmentation then
+    searches each of the two segments it leaves (each again needing
+    <span data-const="TS_SCREEN_CHANGE_MIN_YEARS"></span> years), and so on. Everything before the <em>latest</em> changepoint
+    becomes one bad window: by convention the latest segment, the current sensor set-up, is the reference, as physics
+    alone cannot tell which side is wrong.</p>
+  <h3>Odd years</h3>
+  <p>Within each segment with at least 3 screenable years, a year is odd under a metric if its deviation from the
+    segment's median exceeds the metric's minimum shift and either the segment's spread is zero or the deviation exceeds
+    <span data-const="TS_SCREEN_YEAR_Z"></span> spreads; a year is flagged (<code>shift_&lt;metric&gt;</code>) if at least
+    <span data-const="TS_SCREEN_MIN_METRICS"></span> metrics are odd. Runs of consecutive flagged years become bad windows of
+    scale "year". The spread here is <code>1.4826 * stats::mad()</code>; since <code>mad()</code> already scales by 1.4826, it
+    is 1.4826² ≈ 2.2 times the median absolute deviation, a stricter threshold than the changepoint score's.</p>
+  <p>Simulate a site's yearly diagnostics (or load the yearly diagnostics of one of DE-Hai's sensors, as the R screen
+    computed them): a step after a given year, noise around it and optionally one odd year. The left panels show the
+    metrics with the segments' medians; the right panel shows the scores of every split of the whole record (the first
+    step of the binary segmentation).</p>
+  <div class="controls">
+    <label>Data <select id="y-data"><option value="sim">simulated</option></select></label>
+    <label>years <input type="range" id="y-n" min="4" max="24" step="1" value="14"> <output id="y-n-o"></output></label>
+    <label>change after year <input type="range" id="y-k" min="1" max="23" step="1" value="8"> <output id="y-k-o"></output></label>
+    <label><button id="y-seed">new noise</button></label>
+  </div>
+  <div class="controls">
+    <label>step: offset <input type="number" id="y-s-offset" value="2" step="0.1"> °C</label>
+    <label>log_amp <input type="number" id="y-s-log_amp" value="0.5" step="0.05"></label>
+    <label>lag <input type="number" id="y-s-lag_h" value="1.0" step="0.1"> h</label>
+    <label>noise sd: offset <input type="number" id="y-n-offset" value="0.3" step="0.05"> °C</label>
+    <label>log_amp <input type="number" id="y-n-log_amp" value="0.08" step="0.01"></label>
+    <label>lag <input type="number" id="y-n-lag_h" value="0.3" step="0.05"> h</label>
+    <label>odd year <input type="number" id="y-odd" value="0" min="0" max="24" step="1"> (0: none; shifted by 2 °C, 0.5 and 2 h)</label>
+  </div>
+  <div id="y-readout" class="readout"></div>
+  <div class="grid2">
+    <div id="y-series" class="plot" style="min-height:520px"></div>
+    <div id="y-scores" class="plot" style="min-height:520px"></div>
+  </div>
+  <div data-code="ts_changepoint ts_changepoints TS_SCREEN_YEAR_Z TS_SCREEN_YEAR_MIN_DEV TS_SCREEN_MIN_METRICS TS_SCREEN_CHANGE_MIN_SIDE TS_SCREEN_CHANGE_MIN_YEARS"></div>
+
+  <h2 id="verdict">Verdicts and flags</h2>
+  <p>A series is <b>BAD</b> if any whole-record rule fires (these rules and thresholds follow the <code>alexey</code> branch's
+    screen, calibrated there against the project's hand-made calls); else <b>SUSPECT</b> if only the newer checks fire (the
+    heat-equation consistency check, or a part of the record is bad: a window); else <b>GOOD</b>. <code>flags</code> lists every
+    rule that fired, BAD rules first; <code>bad_fraction</code> is the share of the series' records inside bad windows.</p>
+  <div id="rules-table"></div>
+  <p>The R screen of DE-Hai's five sensors (raw record, June–August as the growing season): the shallowest sensor is
+    SUSPECT, non-conductive, because its lag is shorter than its damping implies (a near-surface sensor is heated by
+    radiation at the soil surface, which peaks before air temperature does, so it lags air less than conduction from air
+    would predict); the two deepest sensors have almost no daily cycle and are BAD as <em>flat</em>, the deepest also as
+    <em>stuck</em> (coarse readings of a slowly changing temperature). The screen asks whether a series behaves like soil
+    temperature near the surface, where respiration happens; it does not judge whether a deep sensor works.</p>
+  <div id="real-verdicts"></div>
+  <div data-code="ts_screen_series" ></div>
+
+  <h2 id="windows">Bad windows and <code>ts_screen_mask()</code></h2>
+  <p>The bad windows are machine-readable (<code>ts_screen_windows.csv</code>; time stamps "YYYY-MM-DD HH:MM:SS" on the
+    record's own clock, start and end inclusive), one row per window and series:</p>
+  <table class="plain">
+    <tr><th>column</th><th>meaning</th></tr>
+    <tr><td><code>site_ID</code>, <code>column</code></td><td>the site and the series screened</td></tr>
+    <tr><td><code>start</code>, <code>end</code></td><td>first and last time stamp of the window (inclusive)</td></tr>
+    <tr><td><code>scale</code></td><td><code>changepoint</code> (all growing years before the latest changepoint, whole
+      years), <code>year</code> (a run of consecutive odd growing years) or <code>period</code> (stuck runs)</td></tr>
+    <tr><td><code>rule</code></td><td><code>changepoint_&lt;metric&gt;</code> for every metric of every changepoint;
+      <code>shift_&lt;metric&gt;</code> for odd years; <code>stuck</code></td></tr>
+    <tr><td><code>value</code></td><td>changepoint: the earlier segment's median of the latest change's strongest metric;
+      year: the flagged years' median of their first metric; period: total length of the merged runs (h)</td></tr>
+    <tr><td><code>reference</code></td><td>changepoint: the later segment's median; year: the segment's median of that metric;
+      period: <code>TS_SCREEN_STUCK_PERIOD_H</code></td></tr>
+  </table>
+  <p>A reconstruction step needs only <code>ts_screen_mask()</code>: TRUE for every record outside all windows. A toy example
+    (the windows as they would be written for one series):</p>
+  <pre class="sample" id="w-csv"></pre>
+  <div id="w-plot" class="plot" style="min-height:300px"></div>
+  <div id="w-readout" class="readout"></div>
+  <div data-code="ts_screen_mask" data-open></div>
+
+  <h2 id="validation">The manuscript's corrections: a guideline, not a target</h2>
+  <p><code>ts_screen_validation()</code> sets the screen beside what the manuscript did by hand, one row per site: the
+    screen's verdict, flags and windows for the sensor (its real readings where they have a range ratio, else the sensor as
+    recorded), and the share of the sensor's records that step 01's column and the fits' column replace (differ by more
+    than 0.01 °C or are missing), the site's regression on air temperature, its sensor first-year cut-off and its removed
+    years. The manuscript "acted" on a site if its fits replace more than 5% of the sensor, it set a first year, or it
+    removed years. The comparison is a guideline, not a target: automated physical checks and hand-made calls can
+    legitimately disagree, so the screen is not tuned to reproduce the manuscript's choices. (One systematic difference
+    is by design: where the manuscript's fits used its regression on air temperature, <code>TS_manuscript</code> is damped
+    but not delayed, exactly what the non-conductive check flags.)</p>
+  <div data-code="ts_screen_validation ts_screen_site"></div>
+</main>
+<script type="module" src="js/docs-sensor-screen.js"></script>
+</body>
+</html>

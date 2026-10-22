@@ -30,3 +30,31 @@ table.plain { border-collapse: collapse; margin: 0.5rem 0; }
 table.plain th, table.plain td { border: 1px solid var(--line); padding: 0.25rem 0.6rem; text-align: left; vertical-align: top; }
 table.plain th { background: var(--panel); }
 code { background: var(--panel); padding: 0 0.25rem; border-radius: 3px; }
+/* documentation pages (docs-*.html) */
+main.docs { max-width: 1100px; }
+main.docs p, main.docs li { max-width: 52rem; }
+details.code { margin: 0.5rem 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+details.code summary { cursor: pointer; padding: 0.3rem 0.6rem; }
+details.code pre { margin: 0; padding: 0.6rem 0.8rem; overflow-x: auto; background: #fff; border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; }
+pre code, details.code pre code { background: none; padding: 0; font-size: 0.8rem; line-height: 1.4; }
+pre.sample { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem 0.8rem; overflow-x: auto; font-size: 0.8rem; }
+math[display="block"] { margin: 0.6rem 0; font-size: 1.1em; }
+.controls input[type="range"] { vertical-align: middle; width: 9rem; }
+.controls input[type="number"] { width: 5rem; }
+.controls output { display: inline-block; min-width: 3rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; margin: 0.4rem 0; }
+.readout b { font-weight: 600; }
+.toc { columns: 2; font-size: 0.9rem; }
+table.plain td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.calc input { width: 4.5rem; font: inherit; font-size: 0.85rem; text-align: right; }
+table.calc td, table.calc th { padding: 0.15rem 0.35rem; font-size: 0.85rem; }
+td.best { background: #1a7f37; color: #fff; font-weight: 600; }
+td.top { background: #aceebb; }
+td.na { color: var(--muted); }
+.pill { display: inline-block; border-radius: 10px; padding: 0 0.5rem; font-size: 0.85rem; font-weight: 600; color: #fff; }
+main.docs .grid2 > * { min-width: 0; }
+header nav { display: flex; flex-wrap: wrap; }
+header nav a { white-space: nowrap; }
+main.docs mtd { text-align: left; padding: 0.15em 0.2em; }
+main.docs mtr > mtd:first-child { text-align: right; }
+td.best .small { color: #fff; }

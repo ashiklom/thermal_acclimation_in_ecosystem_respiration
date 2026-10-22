@@ -9,6 +9,8 @@ export const PAGES = [
   ["ts.html", "Soil temperature"],
   ["matrix.html", "TAS by column"],
   ["site.html", "Site explorer"],
+  ["docs-ts-estimators.html", "Docs: TS estimators"],
+  ["docs-sensor-screen.html", "Docs: sensor screen"],
 ];
 
 // Threshold for "TAS changed" (refactor-v2-log.md, S9): 4 x the robust sd of
