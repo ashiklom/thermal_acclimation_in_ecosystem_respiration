@@ -114,7 +114,31 @@
   </div>
 
   <h2 id="sec-recommendation">Recommendation</h2>
-  <div id="recommendation-text"><p class="note">Pending the TAS fits above.</p></div>
+  <div id="recommendation-text">
+  <p><b>Use FLUXNET2015 through 2014, then TERN L6</b> (<code>FLUXNET2015+TERN</code>), as originally proposed. The
+    alternatives are worse:</p>
+  <ul>
+    <li><b>TERN alone</b> (or the shuttle alone) would replace the published years with data that lack the storage term
+      and, for TERN, keep low-turbulence nights. That changes AU-Tum's answer, not just its precision. The direct TAS
+      moves from −0.018 (n.s.) to +0.032 (significantly positive), about 3 standard errors; the total TAS from −0.022 to
+      +0.019.</li>
+    <li><b>The shuttle's ONEFlux product between FLUXNET2015 and TERN</b> adds nothing TERN does not have for
+      2015–2022. It is the same underlying data without storage, with a third u* method (constant u*, the strictest:
+      ~40% fewer night records). Its soil temperature and soil water for 2020–2021 are constant fill values, which step
+      01 would use for soil water. (Not fitted, for these reasons.)</li>
+    <li><b>FLUXNET2015 → TERN</b> keeps the published years unchanged and adds the growing years 2014–2019, 2021 and 2025 (2014 straddles the switch; 8,946 night
+      records instead of 5,413; 19 years instead of 11). Its TAS stays within one standard error of the published one
+      and keeps its class: total −0.022 → −0.018, direct −0.018 → −0.008, both not significant.</li>
+  </ul>
+  <p class="note"><b>Caveat.</b> The TERN years carry no storage term, so their night-time respiration is about a quarter
+    lower than FLUXNET2015's would be. The splice is a step in the record that the TAS model can partly read as a
+    response to the years' temperatures. The extension's effect on AU-Tum's TAS is small here, but it is a data-level
+    inconsistency, not noise. Two further points: the control year becomes 2025, a sparse TERN year (180 night records),
+    because it is the year closest to the mean growing-season soil temperature; and keeping AU-Tum on FLUXNET2015 alone
+    remains a defensible alternative. A possible refinement, not done: apply a stricter, ONEFlux-like u* threshold
+    (~0.4 m s⁻¹) to the TERN years: over 2002–2014 that narrows TERN's mean night gap to FLUXNET2015 from about 2.3 to
+    about 1.6 µmol m⁻² s⁻¹ (see the night difference by u* above), at the cost of fewer records.</p>
+</div>
 </main>
 <script type="module" src="js/au-tum.js"></script>
 </body>
