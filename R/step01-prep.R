@@ -513,8 +513,13 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
     }
     # deal with special cases
     if (name_site %in% c('US-NR1', 'US-ICh', "US-ICs")) {
-      # use PI gap-filled data
-      ac$TS[is.na(ac$TS)] <- a$TS_PI_1[is.na(ac$TS)]
+      # use PI gap-filled data (where the release has it: later US-ICs
+      # releases dropped TS_PI_1)
+      if ("TS_PI_1" %in% names(a)) {
+        ac$TS[is.na(ac$TS)] <- a$TS_PI_1[is.na(ac$TS)]
+      } else {
+        message(name_site, ": no TS_PI_1 in this release; sensor gaps not filled")
+      }
     } else if (name_site == "US-Cwt") {
       # this site has no TS measurements, so we used TS-TA relationships from nearby US-xGB of the same DBF category.
       ac$TS  <- ac$TA * 0.64718 + 5.13873

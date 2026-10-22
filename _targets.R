@@ -34,8 +34,9 @@ tar_option_set(
   # them all ran out of memory with the fit matrix's many branches
   retrieval = "worker",
   storage = "worker",
-  # a failing site must not stop the others
-  error = "continue"
+  # a failing site (or a site's column of the fit matrix) must not stop the
+  # others: its value is NULL, which the combining steps leave out
+  error = "null"
 )
 
 # input data version (refactor-v2 stage S18)

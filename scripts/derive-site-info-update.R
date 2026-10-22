@@ -78,6 +78,11 @@ declared <- function(row) {
   if (is.null(b)) return(unique(cols))
   unique(c(setdiff(cols, names(b)), unlist(strsplit(unname(b[intersect(cols, names(b))]), " "))))
 }
+# columns step 01 reads at particular sites beyond those declared
+extra_columns <- list("US-NR1" = c("TS_PI_1", "SWC_PI_1"), "US-ICh" = "TS_PI_1", "US-ICs" = "TS_PI_1",
+                      "US-KM4" = "SW_IN_PI_F", "US-Jo2" = "T_SONIC", "US-Myb" = "TS_2_2_1")
+# of which step 01 can do without (it then skips that site-specific fix)
+optional_columns <- c("TS_PI_1")
 problems <- character()
 for (s in update$site_ID[update$source == "AmeriFlux_BASE"]) {
   row <- update[update$site_ID == s, ]
@@ -86,6 +91,10 @@ for (s in update$site_ID[update$source == "AmeriFlux_BASE"]) {
     next
   }
   h <- header(s)
+  for (col in setdiff(extra_columns[[s]], h)) {
+    if (col %in% optional_columns) message(s, ": ", col, " missing; step 01 skips its gap fill") else
+      problems <- c(problems, paste0(s, ": ", col, " (read by step 01 at this site) missing"))
+  }
   for (col in setdiff(declared(row), h)) {
     stem <- sub("_.*$", "", col)
     problems <- c(problems, paste0(s, ": ", col, " missing; similar: ", paste(grep(paste0("^", stem, "_"), h, value = TRUE), collapse = " ")))
