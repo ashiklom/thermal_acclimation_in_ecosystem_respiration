@@ -57,8 +57,10 @@ record_times <- function(tab) {
 
 #' The VUT and CUT streams of a FLUXNET-format table (missing values -9999)
 fluxnet_streams <- function(tab, prefix) {
-  tab[tab == -9999] <- NA
+  used <- intersect(c("TA_F_MDS", "NIGHT", "NEE_VUT_REF", "NEE_VUT_REF_QC", "NEE_CUT_REF", "NEE_CUT_REF_QC"), names(tab))
+  for (col in used) tab[[col]][tab[[col]] %in% -9999] <- NA
   tm <- record_times(tab)
+  year <- as.POSIXlt(tm$time)$year + 1900L
   streams <- list()
   for (v in c("VUT", "CUT")) {
     col <- paste0("NEE_", v, "_REF")
@@ -66,7 +68,7 @@ fluxnet_streams <- function(tab, prefix) {
     nee <- tab[[col]]
     obs <- !is.na(nee) & tab[[paste0(col, "_QC")]] %in% 0
     sel <- obs & !is.na(tab$TA_F_MDS) & tab$NIGHT %in% 1 & nee > -5 & nee < 30
-    streams[[paste0(prefix, "_", v)]] <- data.frame(time = tm$time, NEE = nee, sel = sel, day = obs & tab$NIGHT %in% 0)
+    streams[[paste0(prefix, "_", v)]] <- data.frame(time = tm$time, year = year, NEE = nee, sel = sel, day = obs & tab$NIGHT %in% 0)
   }
   attr(streams, "dt") <- tm$dt
   streams
@@ -85,7 +87,8 @@ read_shuttle <- function(site_id) {
 manuscript_stream <- function(site_id) {
   s1 <- targets::tar_read_raw(paste0("step01_", gsub("-", "_", site_id)), store = store)
   b <- s1$ts_base
-  out <- list(MS = data.frame(time = as.POSIXct(format(b$TIMESTAMP, "%Y-%m-%d %H:%M:%S"), tz = "UTC"), NEE = b$NEE,
+  time <- as.POSIXct(format(b$TIMESTAMP, "%Y-%m-%d %H:%M:%S"), tz = "UTC")
+  out <- list(MS = data.frame(time = time, year = as.POSIXlt(time)$year + 1900L, NEE = b$NEE,
                               sel = b$night_ok, day = !is.na(b$NEE) & b$daytime %in% TRUE))
   attr(out, "dt") <- s1$ts_params$dt_secs
   out
@@ -99,14 +102,12 @@ agree <- function(x, y) {
 }
 
 compare_pair <- function(a, b) {
-  j <- merge(a, b, by = "time", suffixes = c("_a", "_b"))
-  year <- as.integer(format(j$time, "%Y"))
+  j <- merge(a, b[, setdiff(names(b), "year")], by = "time", suffixes = c("_a", "_b"))
+  year <- j$year
   both <- j$sel_a & j$sel_b
-  years_a <- unique(as.integer(format(a$time[a$sel], "%Y")))
-  years_b <- unique(as.integer(format(b$time[b$sel], "%Y")))
-  overlap <- sort(intersect(years_a, years_b))
-  own_a <- a$NEE[a$sel & as.integer(format(a$time, "%Y")) %in% overlap]
-  own_b <- b$NEE[b$sel & as.integer(format(b$time, "%Y")) %in% overlap]
+  overlap <- sort(intersect(unique(a$year[a$sel]), unique(b$year[b$sel])))
+  own_a <- a$NEE[a$sel & a$year %in% overlap]
+  own_b <- b$NEE[b$sel & b$year %in% overlap]
   m <- agree(j$NEE_a[both], j$NEE_b[both])
   day <- j$day_a & j$day_b
   dm <- agree(j$NEE_a[day], j$NEE_b[day])
@@ -120,8 +121,8 @@ compare_pair <- function(a, b) {
   summary$diff_own <- summary$mean_shuttle_own - summary$mean_ref_own
   yearly <- do.call(rbind, lapply(overlap, function(y) {
     k <- both & year == y
-    oa <- a$NEE[a$sel & format(a$time, "%Y") == y]
-    ob <- b$NEE[b$sel & format(b$time, "%Y") == y]
+    oa <- a$NEE[a$sel & a$year == y]
+    ob <- b$NEE[b$sel & b$year == y]
     data.frame(year = y, n_both = sum(k), diff = if (any(k)) mean(j$NEE_b[k] - j$NEE_a[k]) else NA,
                mean_ref = if (any(k)) mean(j$NEE_a[k]) else NA, n_ref_own = length(oa), n_shuttle_own = length(ob),
                diff_own = if (length(oa) && length(ob)) mean(ob) - mean(oa) else NA)
