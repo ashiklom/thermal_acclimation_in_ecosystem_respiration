@@ -33,8 +33,9 @@ Writes analysis-website/data/:
   drivers.json, drivers/<id>.json   steps 03-04 tables (driver data, variable importance,
                              partial dependence, future respiration) of the published analysis
                              and of every fit set of every run
-  update.json                the data update (S18): each latest-data run with the run on the
-                             published data it is compared with (the latest S17 run), the sites
+  update.json                the data update (S18, S19): each latest-data run (id with "update") with
+                             the run on the published data it is compared with (that of its own
+                             stage, else the latest S17 run), the sites
                              whose TAS inputs changed between them, the soil drivers filled from
                              older products (source_fills.csv), the ERA5 extension offsets, and
                              the ERA5 nearest-cell sensitivity runs (ids containing
@@ -75,7 +76,7 @@ ROOT = SITE.parent
 OUT = SITE / "data"
 
 STAGE_ORDER = ["published", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13",
-               "S14", "S15", "S16", "S17", "S18"]
+               "S14", "S15", "S16", "S17", "S18", "S19"]
 
 
 def records(df):
@@ -286,22 +287,29 @@ def build_screen(sets):
 
 def build_update(sets):
     """The data update: latest-data runs against the latest run on the published data."""
-    reference = [s for s in sets if s.get("stage") == "S17"]
-    runs = [s for s in sets if s.get("stage") == "S18" and "era5-nearest" not in s["id"]]
-    nearest = [s for s in sets if s.get("stage") == "S18" and "era5-nearest" in s["id"]]
-    if not reference or not runs:
+    def latest_data(s):
+        return "update" in s["id"] and "era5-nearest" not in s["id"]
+    runs = [s for s in sets if latest_data(s)]
+    nearest = [s for s in sets if "era5-nearest" in s["id"]]
+    published = [s for s in sets if s.get("stage") in ("S17", "S19") and not latest_data(s) and "era5" not in s["id"]]
+    if not runs or not published:
         write_json({}, OUT / "update.json")
         return None
+
+    def reference(run):
+        same = [s for s in published if s.get("stage") == run.get("stage")]
+        return (same or [s for s in published if s.get("stage") == "S17"] or published)[-1]["id"]
 
     def optional(run_id, name):
         path = ROOT / "results" / run_id / name
         return records(pd.read_csv(path)) if path.exists() else None
 
-    ref = reference[-1]["id"]
-    out = {"reference": ref, "runs": [{
-        "run": r["id"], "inputs": input_changes(ROOT / "results" / ref, ROOT / "results" / r["id"]),
+    out = {"reference": reference(runs[-1]), "runs": [{
+        "run": r["id"], "reference": reference(r),
+        "inputs": input_changes(ROOT / "results" / reference(r), ROOT / "results" / r["id"]),
         "fills": optional(r["id"], "source_fills.csv"), "era5_offsets": optional(r["id"], "era5_extension_offsets.csv"),
-    } for r in runs], "era5_nearest": [{"run": n["id"], "reference": runs[-1]["id"]} for n in nearest]}
+    } for r in runs], "era5_nearest": [{"run": n["id"], "reference": [r for r in runs if r.get("stage") == n.get("stage")][-1]["id"]}
+                                       for n in nearest if any(r.get("stage") == n.get("stage") for r in runs)]}
     write_json(out, OUT / "update.json")
     return out
 

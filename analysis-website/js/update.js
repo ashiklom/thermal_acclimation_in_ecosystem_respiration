@@ -20,7 +20,6 @@ runSel.value = p.get("run") || update.runs[update.runs.length - 1].run;
 document.getElementById("model").value = p.get("model") || "total";
 if (p.get("threshold")) document.getElementById("threshold").value = p.get("threshold");
 const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
-const ref = update.reference;
 let siteTable, fillsTable, columnsTable;
 
 async function draw() {
@@ -28,6 +27,7 @@ async function draw() {
   const threshold = Number(document.getElementById("threshold").value);
   setParams({ run, model, threshold });
   const entry = update.runs.find((r) => r.run === run);
+  const ref = entry.reference ?? update.reference;
   const [pub, old, now] = [await getTas("published"), await getTas(ref), await getTas(run)];
   const method = new Map(compare(pub, old, model, threshold).map((r) => [r.site_ID, r]));
   const data = compare(old, now, model, threshold);
@@ -133,7 +133,7 @@ async function draw() {
   }
 
   // ERA5 sensitivity
-  const near = (update.era5_nearest || []).find((e) => e.reference === run) || (update.era5_nearest || [])[0];
+  const near = (update.era5_nearest || []).find((e) => e.reference === run);
   const offsets = entry.era5_offsets || [];
   if (near) {
     const rowsE = compare(await getTas(near.reference), await getTas(near.run), model, threshold)
