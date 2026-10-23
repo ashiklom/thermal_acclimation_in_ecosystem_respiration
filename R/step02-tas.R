@@ -152,7 +152,7 @@ use_stan_cache <- function(dir = path_proc("stan-cache")) {
 #' @noRd
 compile_tas_models <- function() {
   data <- data.frame(NEE = c(1, 2, 3, 2), TS = c(5, 10, 15, 20), SWC = c(20, 25, 30, 35), NEE_daytime = c(1, 2, 3, 4))
-  models <- list(tas_model("total"), tas_model("direct", swc = TRUE))
+  models <- list(tas_model("total"), tas_model("direct"))
   for (m in models) {
     brms::brm(brms::bf(m$frmu, m$param, nl = TRUE), prior = m$priors + prior_sigma, data = data,
               stanvars = tas_stanvars(prior_defaults, m$priors, brms::bf(m$frmu, m$param, nl = TRUE), data),
@@ -181,12 +181,11 @@ new_outcome <- function() {
 #' `pars` are the nonlinear parameters whose prior means are re-centred window by window.
 #'
 #' @param model_type "direct" or "total".
-#' @param swc Whether the direct model includes soil water.
 #' @return list(frmu, param, priors, frmu_nls, stprm, pars): the brms formula and the formula of
 #'   its nonlinear parameters, their priors, the gsl_nls formula (log-scale parameters) and its
 #'   starting values, and `pars`.
 #' @noRd
-tas_model <- function(model_type = c("direct", "total"), swc = TRUE) {
+tas_model <- function(model_type = c("direct", "total")) {
   model_type <- match.arg(model_type)
   # The priors below are combined with brms's `+` method, which only exists
   # once brms is loaded (not yet the case in a fresh pipeline worker).
@@ -203,7 +202,7 @@ tas_model <- function(model_type = c("direct", "total"), swc = TRUE) {
       stprm = c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9),
       pars = c("alpha", "beta", "C0")
     )
-  } else if (swc) {
+  } else {
     list(
       frmu = NEE ~ exp(alpha * TS + beta*TS^2) * SWC / (Hs + SWC) * (C0 + NEE_daytime * k2),
       param = alpha+beta+C0+Hs+k2 ~ 1,
@@ -212,15 +211,6 @@ tas_model <- function(model_type = c("direct", "total"), swc = TRUE) {
       frmu_nls = NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * SWC / (exp(Hs_ln) + SWC) * (exp(C0_ln) + NEE_daytime * exp(k2_ln)),
       stprm = c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6, Hs_ln = 2.3),
       pars = c("alpha", "beta", "C0", "k2", "Hs")
-    )
-  } else {
-    list(
-      frmu = NEE ~ exp(alpha * TS + beta*TS^2) * (C0 + NEE_daytime * k2),
-      param = alpha+beta+C0+k2 ~ 1,
-      priors = priors_temp + priors_gpp,
-      frmu_nls = NEE ~ exp(exp(alpha_ln) * TS - exp(beta_ln)*TS^2) * (exp(C0_ln) + NEE_daytime * exp(k2_ln)),
-      stprm = c(C0_ln = 0.7, alpha_ln = -2.99, beta_ln = -6.9, k2_ln = -1.6),
-      pars = c("alpha", "beta", "C0", "k2")
     )
   }
 }
@@ -300,7 +290,7 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
   nwindow <- max(round((gEnd - gStart + 1) / window_size), 1)
 
   #------------------------------------PREPARE FOR formula, stprm, priors of ER models---------------------------------
-  model <- tas_model(model_type, swc = TRUE)
+  model <- tas_model(model_type)
   frmu <- model$frmu
   param <- model$param
   priors <- model$priors
