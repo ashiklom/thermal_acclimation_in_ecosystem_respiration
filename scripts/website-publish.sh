@@ -41,7 +41,18 @@ if ! gh release view "$release" >/dev/null 2>&1; then
   gh release create "$release" --prerelease --target main \
     --title "Analysis website (latest build)" --notes "Created by scripts/website-publish.sh"
 fi
-gh release upload "$release" "$tarball" --clobber
+# gh can retry an upload that already went through and then fail with
+# "ReleaseAsset.name already exists"; the asset is good if its digest matches.
+if ! gh release upload "$release" "$tarball" --clobber; then
+  local_digest=sha256:$(shasum -a 256 "$tarball" | awk '{print $1}')
+  remote_digest=$(gh api "repos/$GH_REPO/releases/tags/$release" \
+    --jq ".assets[] | select(.name == \"$(basename "$tarball")\") | .digest")
+  if [[ $remote_digest != "$local_digest" ]]; then
+    echo "error: uploading $tarball failed" >&2
+    exit 1
+  fi
+  echo "The uploaded asset matches $tarball; continuing."
+fi
 gh release edit "$release" --notes "Built from $branch@$sha at $built by scripts/website-publish.sh."
 
 gh workflow run pages.yml --ref main
