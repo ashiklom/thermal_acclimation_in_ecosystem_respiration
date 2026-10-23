@@ -409,12 +409,11 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
   sunrise_set$sunrise <- as.POSIXct(as.character(sunrise_set$sunrise), tz='GMT') + difftime(sunrise_set$date[iday_sun], lubridate::as_date(sunrise_set$sunset[iday_sun]))
   sunrise_set$sunset <- as.POSIXct(as.character(sunrise_set$sunset), tz='GMT') + difftime(sunrise_set$date[iday_sun], lubridate::as_date(sunrise_set$sunset[iday_sun]))
 
-  # if in southern Hemisphere, so we need to change DOY values
+  # day of year is never shifted for AmeriFlux sites: the original script's
+  # list of sites whose growing season wraps the year end was empty here
+  # (prep_site_euroflux() shifts AU-Tum and ZA-Kru; its list's BR-Sa1 is an
+  # AmeriFlux site, so is not shifted either, as in the original scripts)
   southern_hemisphere = FALSE
-  if (name_site %in% c()) {
-    a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
-    southern_hemisphere = TRUE
-  }
 
   # create ancillary df
   ac <- a[, c("YEAR", "MONTH", "DAY", "DOY", "HOUR", "MINUTE", "TIMESTAMP")]
