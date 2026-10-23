@@ -85,6 +85,7 @@ caddy = "*"
 website-build = { cmd = "python analysis-website/build.py", default-environment = "website", description = "Build the analysis website's data files" }
 website-serve = { cmd = "caddy run --config analysis-website/Caddyfile --adapter caddyfile", default-environment = "website", description = "Serve the analysis website on 127.0.0.1" }
 website-bundle = { cmd = "bash scripts/website-bundle.sh", depends-on = ["website-build"], default-environment = "website", description = "Build the website data and pack the site into a shareable tarball (optional argument: bundle directory)" }
+website-publish = { cmd = "bash scripts/website-publish.sh", depends-on = ["website-bundle"], default-environment = "website", description = "Build the website and deploy it to GitHub Pages (uploads the bundle as the 'website' release asset, then runs the Pages workflow)" }
 
 # --------------------------------------------------------------- download env
 # The data update's downloads (refactor-v2 stage S18): flux releases
