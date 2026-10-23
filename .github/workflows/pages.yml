@@ -1,0 +1,38 @@
+# Deploys the analysis website to GitHub Pages. The site is built locally
+# (its data come from pipeline results that are not in git) and uploaded as
+# the asset of the `website` release by `pixi run website-publish`
+# (scripts/website-publish.sh), which then runs this workflow on main.
+
+name: Deploy analysis website
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download the website bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download website -R "${{ github.repository }}" -p thermal-acclimation-website.tar.gz
+          tar -xzf thermal-acclimation-website.tar.gz
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: thermal-acclimation-website
+      - id: deployment
+        uses: actions/deploy-pages@v4
