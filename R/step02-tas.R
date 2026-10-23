@@ -428,8 +428,10 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
       # model parameters
       df_site_year_window[icount, sub("_Intercept$", "", names(brms::fixef(mod)[, "Estimate"]))] <- brms::fixef(mod)[, "Estimate"]
 
-      # average TS of moving window at each year
-      df_site_year_window$TS[icount] <- ac_yearly_window$TS[ac_yearly_window$growing_year == iyear]
+      # average TS of moving window at each year (NA if the year has no records
+      # of the full table in this window)
+      ts_year <- ac_yearly_window$TS[ac_yearly_window$growing_year == iyear]
+      df_site_year_window$TS[icount] <- if (length(ts_year)) ts_year else NA_real_
 
       # ER at reference temperature, water, and NEEday conditions
       df_ERref <- fitted(mod, newdata=data_ref)
@@ -462,15 +464,29 @@ estimate_tas <- function(site_id, night, ac, ac_day, gStart, gEnd, tStart, tEnd,
   # end of each window
 
   outcome[1, "site_ID"] <- name_site
-  outcome[1, c("RMSE", "R2")] <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)[1:2]
   outcome[1, c("control_year", "window_size", "nwindow")] <- c(control_year, window_size, nwindow)
+  # no window fitted (e.g. every window skipped): the site's outcome stays NA
+  if (nrow(ER_obs_pred) == 0) {
+    warning(name_site, " (", model_type, "): no window could be fitted; TAS is NA", call. = FALSE)
+    return(list(outcome = outcome, siteyear = df_site_year_window, fit_profile = sampler$profile))
+  }
+  outcome[1, c("RMSE", "R2")] <- caret::postResample(pred = ER_obs_pred$NEE_pred, obs = ER_obs_pred$NEE)[1:2]
 
-  # take account of potential autocorrelation across years
-  mod_ar1 <- nlme::gls(lnRatio ~ TS + window,
-                 data = df_site_year_window,
-                 correlation = nlme::corAR1(form = ~ growing_year | window),
-                 na.action = na.omit)
-  outcome[1, c("TAS", "TASp", "TAS_se")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value", "Std.Error")]
+  # take account of potential autocorrelation across years; where the
+  # site-years cannot support the model (e.g. a single year or window, or a
+  # singular fit) TAS stays NA
+  mod_ar1 <- tryCatch(nlme::gls(lnRatio ~ TS + window,
+                                data = df_site_year_window,
+                                correlation = nlme::corAR1(form = ~ growing_year | window),
+                                na.action = na.omit),
+                      error = function(e) {
+                        warning(name_site, " (", model_type, "): TAS model not estimable (", conditionMessage(e), "); TAS is NA",
+                                call. = FALSE)
+                        NULL
+                      })
+  if (!is.null(mod_ar1)) {
+    outcome[1, c("TAS", "TASp", "TAS_se")] <- summary(mod_ar1)$tTable["TS", c("Value", "p-value", "Std.Error")]
+  }
 
   list(outcome = outcome, siteyear = df_site_year_window, fit_profile = sampler$profile)
 }
