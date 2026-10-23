@@ -14,7 +14,7 @@
 #   Rscript scripts/save-results.R --from=DIR --id=ID --label=LABEL --stage=S9
 #       --description=TEXT [--sha=GITSHA] [--data=TEXT] [--machine=TEXT]
 #
-# DIR holds TAS_sites/<model>/<site>.rds (step-02 runners, tests/run-step02.R)
+# DIR holds TAS_sites/<model>/<site>.rds (the step-02 scripts in workflows/)
 # or the pipeline's combined outcome_*.csv tables.
 
 source(file.path("R", "paths.R"))
