@@ -154,7 +154,10 @@ async function draw() {
       text: rowsE.map((r) => r.site_ID), hovertemplate: "%{text}: offset %{x:.2f}, Δ %{y:.5f}<extra></extra>", marker: { size: 8, color: "#0969da" } }],
     baseLayout({ xaxis: { title: "ERA5 offset applied (percentage points of soil water)", zeroline: true }, yaxis: { title: "ΔTAS, uncorrected − corrected (°C⁻¹)", zeroline: true } }), PLOT_CONFIG);
   } else {
-    document.getElementById("era5-stats").innerHTML = `<p class="note">No ERA5 sensitivity run saved yet.</p>`;
+    const others = (update.era5_nearest || []).map((e) => label(e.reference));
+    document.getElementById("era5-stats").innerHTML = `<p class="note">No ERA5 sensitivity run for this run${others.length
+      ? ` (one exists for: ${others.join(", ")}; choose it above)` : ""}.</p>`;
+    for (const id of ["era5-scatter", "era5-offsets"]) Plotly.purge(id);
   }
 }
 for (const id of ["run", "model", "threshold"]) document.getElementById(id).addEventListener("change", draw);
