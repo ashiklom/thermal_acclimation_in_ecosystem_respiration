@@ -8,13 +8,14 @@
 #   TAS_FIT_PROFILE  "full" (default; the published sampler settings) or
 #                    "fast" (only checks that everything runs)
 #   TAS_WORKERS, TAS_SLURM_*  worker settings, see R/controllers.R
-#   TAR_PROJECT      "main" (default; the published input data) or "update"
-#                    (the latest flux releases, data/site_info_update.csv;
-#                    its own store, _targets.yaml; set THERMAL_DATA_PROC too,
-#                    e.g. data-proc-update, to keep its outputs apart);
-#                    "update_era5_nearest": the same, with the ERA5 soil-water
-#                    extension as extracted rather than shifted to the
-#                    published series' level (a sensitivity test)
+#   TAR_PROJECT      unset (default; the latest data: newest flux releases
+#                    and new sites; outputs in data-proc/), "original" (the
+#                    manuscript's input data; its own store, _targets.yaml;
+#                    set THERMAL_DATA_PROC=data-proc-original to keep its
+#                    outputs apart) or "era5_nearest" (the latest data with
+#                    the ERA5 soil-water extension as extracted rather than
+#                    shifted to the published series' level; a sensitivity
+#                    test)
 
 library(targets)
 library(tarchetypes)
@@ -40,8 +41,8 @@ tar_option_set(
 )
 
 # input data version (refactor-v2 stage S18)
-data_version <- if (startsWith(Sys.getenv("TAR_PROJECT"), "update")) "update" else "published"
-era5_offset_correction <- Sys.getenv("TAR_PROJECT") != "update_era5_nearest"
+data_version <- if (Sys.getenv("TAR_PROJECT") == "original") "published" else "update"
+era5_offset_correction <- Sys.getenv("TAR_PROJECT") != "era5_nearest"
 
 all_sites <- utils::read.csv(file.path("data", "site_info.csv"))$site_ID
 selected <- Sys.getenv("TAS_SITES", "all")
@@ -243,9 +244,10 @@ combined <- list(
   tar_combine(ts_quality_all, per_site[["ts_site_quality"]], command = dplyr::bind_rows(!!!.x)),
   tar_target(ts_ranking, rank_ts_columns(ts_quality_all)),
   # the soil-temperature columns the fits are run with (with the latest
-  # data, the published data's, so that both are run with the same columns)
+  # data, the original data's selection, data/ts_methods_selected.csv, so
+  # that both are run with the same columns)
   if (data_version == "update") list(
-    tar_target(ts_methods_selected_file, file.path("data-proc", "ts_methods_selected.csv"), format = "file"),
+    tar_target(ts_methods_selected_file, file.path("data", "ts_methods_selected.csv"), format = "file"),
     tar_target(ts_methods_selected, utils::read.csv(ts_methods_selected_file)$column)
   ) else tar_target(ts_methods_selected, select_ts_methods(ts_ranking)),
   # every selected column's TAS estimates, climate statistics and scenario

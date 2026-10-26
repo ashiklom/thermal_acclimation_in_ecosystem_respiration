@@ -21,7 +21,7 @@
 #                  columns the manuscript sums)
 #
 # Usage (on Bouchet, from a checkout; stores and data-raw given):
-#   Rscript scripts/compare-ameriflux-releases.R --store=_targets --update-store=_targets_update
+#   Rscript scripts/compare-ameriflux-releases.R --store=_targets_original --update-store=_targets
 #       [--sites=A,B] [--out=data-proc/flux-products] [--cores=8]
 # Writes ameriflux_releases.csv and ameriflux_releases_yearly.csv to --out.
 
@@ -35,8 +35,8 @@ opt <- function(name, default) {
 site_info <- utils::read.csv(file.path("data", "site_info.csv"))
 ameriflux <- site_info$site_ID[site_info$source == "AmeriFlux_BASE"]
 sites <- if (nzchar(opt("sites", ""))) strsplit(opt("sites", ""), ",")[[1]] else ameriflux
-store <- opt("store", "_targets")
-update_store <- opt("update-store", "_targets_update")
+store <- opt("store", "_targets_original")
+update_store <- opt("update-store", "_targets")
 out_dir <- opt("out", path_proc("flux-products"))
 cores <- as.integer(opt("cores", "8"))
 TOL <- 1e-6

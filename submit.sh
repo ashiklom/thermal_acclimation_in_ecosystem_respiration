@@ -4,6 +4,8 @@
 # each worker as its own Slurm job (R/controllers.R). Override any setting
 # below on the command line, e.g.
 #   sbatch --export=ALL,TAS_SITES=dev,TAS_FIT_PROFILE=fast submit.sh
+# The default project is the latest data; the manuscript's input data:
+#   sbatch --export=ALL,TAR_PROJECT=original,THERMAL_DATA_PROC=data-proc-original submit.sh
 #SBATCH --job-name=v2-targets
 #SBATCH --partition=day
 #SBATCH --time=23:30:00

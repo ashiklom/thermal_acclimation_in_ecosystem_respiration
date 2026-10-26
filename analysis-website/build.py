@@ -6,6 +6,8 @@ Reads (paths relative to the repository root):
   results/<id>/manifest.json           each saved result set (scripts/save-results.R)
   results/<id>/{outcome,siteyear}_{total,direct}.csv
   results/<id>/tas_inputs_summary.csv   (optional) each site's fit settings and input hashes
+  data-proc[-original]/...             the outputs of the default (latest-data) project, then
+                                       the original project's, whichever has the file:
   data-proc/RespirationData/*_ac.parquet   (optional) for mean annual air temperature
   analysis-website/stages/<stage>.html     what each method stage changes and why
   data-proc/flux-products/{summary,siteyear,monthly}.csv  (optional) the manuscript's records
@@ -95,8 +97,18 @@ def write_json(obj, path):
         json.dump(obj, f, separators=(",", ":"))
 
 
+def proc_path(*parts):
+    """A workflow output: the default (latest-data) project's data-proc/ if it has it, else the
+    original project's data-proc-original/ (the published records' analyses live there)."""
+    for d in ("data-proc", "data-proc-original"):
+        path = ROOT.joinpath(d, *parts)
+        if path.exists():
+            return path
+    return ROOT.joinpath("data-proc", *parts)
+
+
 def mean_annual_temperature(site_id):
-    path = ROOT / "data-proc" / "RespirationData" / f"{site_id}_ac.parquet"
+    path = proc_path("RespirationData", f"{site_id}_ac.parquet")
     if not path.exists():
         return None
     ac = pq.read_table(path, columns=["YEAR", "TA"]).to_pandas()
@@ -316,7 +328,7 @@ def build_update(sets):
 
 def build_flux_products():
     """The manuscript's flux records against the shuttle's ONEFlux products."""
-    d = ROOT / "data-proc" / "flux-products"
+    d = proc_path("flux-products")
     if not (d / "summary.csv").exists():
         write_json({}, OUT / "flux_products.json")
         return None
@@ -333,11 +345,11 @@ def build_flux_products():
 
 def build_au_tum():
     """AU-Tum's candidate flux records and its TAS under each candidate source."""
-    src = ROOT / "data-proc" / "au-tum-sources.json"
+    src = proc_path("au-tum-sources.json")
     if src.exists():
         shutil.copy(src, OUT / "au_tum_sources.json")
     options = {}
-    d = ROOT / "data-proc" / "au-tum-options"
+    d = proc_path("au-tum-options")
     for summary in sorted(d.glob("*/tas_inputs_summary.csv")) if d.exists() else []:
         entry = {"inputs": records(pd.read_csv(summary))[0]}
         for kind in ("outcome", "siteyear"):

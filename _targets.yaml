@@ -1,8 +1,13 @@
-# targets projects (TAR_PROJECT): the published input data (default) and the
-# latest flux releases (refactor-v2 stage S18), each with its own store.
+# targets projects (TAR_PROJECT), each with its own store:
+#   main (default)  the latest data: newest flux releases, new sites (the
+#                   site table data/site_info_new.csv); outputs in data-proc/
+#   original        the manuscript's input data (data/site_info_original.csv);
+#                   set THERMAL_DATA_PROC=data-proc-original
+#   era5_nearest    the latest data with the ERA5 soil-water extension as
+#                   extracted (a sensitivity test, refactor-v2 S18)
 main:
   store: _targets
-update:
-  store: _targets_update
-update_era5_nearest:
-  store: _targets_update_era5_nearest
+original:
+  store: _targets_original
+era5_nearest:
+  store: _targets_era5_nearest

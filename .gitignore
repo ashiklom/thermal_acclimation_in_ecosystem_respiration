@@ -50,7 +50,8 @@ scripts/.DS_Store
 !/analysis-website/**/*.html
 /analysis-website/vendor/plotly.min.js
 /website-bundle/
-/_targets_update/
-/data-proc-update/
-/data-proc-update-dev/
-/_targets_update_era5_nearest/
+/_targets_original/
+/data-proc-original/
+/_targets_era5_nearest/
+/data-proc-era5-nearest/
+/data-proc-dev/
