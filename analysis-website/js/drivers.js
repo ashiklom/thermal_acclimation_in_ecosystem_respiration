@@ -1,4 +1,4 @@
-import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, fmt, siteCell, filterSites, siteSymbol, siteLabel, includeNew } from "./common.js";
+import { isNew, NEW_SYMBOL, header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, fmt, siteCell, filterSites, siteSymbol, siteLabel, includeNew } from "./common.js";
 
 header("drivers.html");
 const index = await loadJSON("data/drivers.json");
@@ -26,8 +26,8 @@ async function draw() {
   const a = document.getElementById("a").value, b = document.getElementById("b").value, trs = document.getElementById("trs").value;
   setParams({ a, b, trs });
   const [ra, rb] = [resolve(a), resolve(b)];
-  const [A, B] = [await get(ra), await get(rb)];
-  for (const T of [A, B]) T.future = filterSites(T.future || []);
+  // (copies: the cached tables stay whole for the added-sites section)
+  const [A, B] = (await Promise.all([get(ra), get(rb)])).map((T) => ({ ...T, future: filterSites(T.future || []), n_future: (T.future || []).length }));
   const swapped = [[a, ra], [b, rb]].filter(([x, y]) => x !== y);
   document.getElementById("swapnote").innerHTML = swapped.length
     ? `<div class="note">Added sites excluded: showing ${swapped.map(([x, y]) => `<b>${byId.get(y)?.label ?? y}</b> for ${byId.get(x)?.label ?? x}`).join("; ")} (the manuscript's sites only).</div>`
@@ -61,6 +61,8 @@ async function draw() {
     yaxis: { title: "increase with total TAS, analysis", tickformat: ".0%" } }), PLOT_CONFIG);
   document.getElementById("future").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
 
+  await drawAdded(b, trs, pct);
+
   const pd = (T) => (T.partial || []).filter((r) => r.TRS_type === trs);
   const pvars = [...new Set([...pd(A), ...pd(B)].map((r) => r.var))];
   const root = document.getElementById("partial");
@@ -91,3 +93,42 @@ async function draw() {
 }
 for (const id of ["a", "b", "trs"]) document.getElementById(id).addEventListener("change", draw);
 draw();
+
+// The added sites' effect on steps 03-04: analysis `b` over all sites vs its
+// run over the manuscript's sites only (whatever the toggle).
+async function drawAdded(b, trs, pct) {
+  const sec = document.getElementById("added");
+  const orig = byId.get(b)?.original_sites_id;
+  if (!orig) { sec.style.display = "none"; return; }
+  sec.style.display = "";
+  const [All, Orig] = [await get(b), await get(orig)];
+  const fut = All.future || [];
+  const groups = { "manuscript's sites": fut.filter((r) => !isNew(r.site_ID)), "all sites": fut, "added sites": fut.filter((r) => isNew(r.site_ID)) };
+  const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+  document.getElementById("addedstats").innerHTML = Object.entries(groups).map(([k, rows]) =>
+    stat(`${pct(mean(increase(rows, "NEE_night_mod_f")))} / ${pct(mean(increase(rows, "NEE_night_mod_fa")))}`,
+      `${k} (${rows.length}): mean future increase without / with total TAS`)).join("") +
+    stat(`${pct(mean(increase(Orig.future || [], "NEE_night_mod_fa")))}`, "with total TAS, the manuscript's-sites run");
+  const vi = (T) => (T.varimp || []).filter((r) => r.TRS_type === trs);
+  const vars = [...new Set([...vi(Orig), ...vi(All)].map((r) => r.var))];
+  const val = (T, v) => (vi(T).find((r) => r.var === v) || {}).varImp ?? null;
+  Plotly.newPlot("addedvarimp", [
+    { type: "bar", name: "manuscript's sites", x: vars, y: vars.map((v) => val(Orig, v)), marker: { color: "#8c959f" } },
+    { type: "bar", name: "all sites", x: vars, y: vars.map((v) => val(All, v)), marker: { color: "#0969da" } },
+  ], baseLayout({ title: { text: `Variable importance, ${trs}: manuscript's vs all sites`, font: { size: 13 } },
+    xaxis: { title: "predictor" }, yaxis: { title: "% increase in MSE" }, barmode: "group", legend: { orientation: "h", y: -0.25 } }), PLOT_CONFIG);
+  const drv = All.drivers || [];
+  const col = trs === "TAS_direct" ? "TAS" : trs === "TAS_app" ? null : "TAS_tot";
+  const tasOf = (r) => (col ? r[col] : (r.TAS_tot ?? NaN) - (r.TAS ?? NaN));
+  Plotly.newPlot("addedtas", ["manuscript's sites", "added sites"].map((k, i) => {
+    const rows = drv.filter((r) => isNew(r.site_ID) === (i === 1)).filter((r) => Number.isFinite(tasOf(r)));
+    return { type: "box", name: k, y: rows.map(tasOf), text: rows.map((r) => r.site_ID), boxpoints: "all", jitter: 0.4, pointpos: 0,
+      marker: { size: 5, symbol: i ? NEW_SYMBOL : "circle", color: i ? "#0969da" : "#8c959f" }, hovertemplate: "%{text}: %{y:.4f}<extra></extra>" };
+  }), baseLayout({ title: { text: `${RESPONSES[trs] || trs} of the sites`, font: { size: 13 } }, yaxis: { title: "TAS (°C⁻¹)", zeroline: true }, showlegend: false }), PLOT_CONFIG);
+  const skill = All.new_sites_effect || [];
+  document.getElementById("addedskill").innerHTML = skill.length ? `<table class="plain"><tr><th>TAS</th><th>forest fitted to (n)</th><th>scored on added sites (n)</th>
+    <th>r² on added sites</th><th>r</th><th>RMSE</th><th>bias</th><th>OOB r², manuscript's sites</th><th>mean ± sd, manuscript's</th><th>mean ± sd, added</th></tr>${
+    skill.map((r) => `<tr><td>${RESPONSES[r.type] || r.type}</td><td>${r.n_original}</td><td>${r.n_added}</td><td>${fmt(r.r2, 2)}</td><td>${fmt(r.r, 2)}</td>
+      <td>${fmt(r.rmse, 4)}</td><td>${fmt(r.bias, 4)}</td><td>${fmt(r.oob_r2_original, 2)}</td><td>${fmt(r.mean_original, 4)} ± ${fmt(r.sd_original, 4)}</td>
+      <td>${fmt(r.mean_added, 4)} ± ${fmt(r.sd_added, 4)}</td></tr>`).join("")}</table>` : "";
+}

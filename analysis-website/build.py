@@ -289,6 +289,13 @@ def build_drivers(sets):
         tables = {k: records(pd.read_csv(e["dir"] / f)) for k, f in STEP0304_FILES.items() if (e["dir"] / f).exists()}
         if not tables:
             continue
+        # forests fitted to the manuscript's sites, scored on the added ones (scripts/new-sites-effect.R)
+        effect = e["dir"].parent.parent / "new_sites_effect.csv"
+        if effect.exists():
+            ne = pd.read_csv(effect)
+            ne = ne[ne["set"] == f"{e['dir'].parent.name}/{e['dir'].name}"]
+            if len(ne):
+                tables["new_sites_effect"] = records(ne)
         write_json(tables, OUT / "drivers" / f"{e['id']}.json")
         index.append({k: e[k] for k in ("id", "label", "original_sites_id") if k in e})
     write_json(index, OUT / "drivers.json")

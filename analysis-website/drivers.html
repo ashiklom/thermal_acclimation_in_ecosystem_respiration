@@ -26,6 +26,19 @@
     <div id="varimp" class="plot"></div>
     <div id="future" class="plot"></div>
   </div>
+  <section id="added">
+    <h2>Effect of the added sites</h2>
+    <p class="small">The analysis over all sites against the same code and data over the manuscript's sites only
+      (its <code>original_sites_run</code>): step 03's variable importance, the forests' skill on the added sites
+      (fitted to the manuscript's sites, scored on the added ones), the sites' TAS, and step 04's mean future
+      increase. Shown for the analysis selected above when it has such a counterpart.</p>
+    <div id="addedstats" class="stats"></div>
+    <div class="grid2">
+      <div id="addedvarimp" class="plot"></div>
+      <div id="addedtas" class="plot"></div>
+    </div>
+    <div id="addedskill"></div>
+  </section>
   <h2>Partial dependence</h2>
   <p class="small">Median and 90% band over bootstrap forests: reference in grey, analysis in blue.</p>
   <div id="partial" class="grid2"></div>
