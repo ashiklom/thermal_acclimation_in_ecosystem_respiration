@@ -13,12 +13,19 @@
 # Usage (from the repository root):
 #   Rscript scripts/save-results.R --from=DIR --id=ID --label=LABEL --stage=S9
 #       --description=TEXT [--sha=GITSHA] [--data=TEXT] [--machine=TEXT]
+#       [--original-sites-run=ID]
+#
+# --original-sites-run names the saved run with the same code and data over
+# the manuscript's sites only (TAS_SITES=original), whose steps 03-04 the
+# website shows when the added sites are excluded. Sites are ordered as in
+# the site table (THERMAL_SITE_INFO, default data/site_info_new.csv).
 #
 # DIR holds TAS_sites/<model>/<site>.rds (the step-02 scripts in workflows/)
 # or the pipeline's combined outcome_*.csv tables.
 
 source(file.path("R", "paths.R"))
 source(file.path("R", "step02-tas.R"))
+source(file.path("R", "pipeline.R"))
 
 args <- commandArgs(trailingOnly = TRUE)
 opt <- function(name, default = NULL) {
@@ -31,7 +38,8 @@ stopifnot(!is.null(from), !is.null(id))
 out <- file.path("results", id)
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
 
-site_order <- utils::read.csv(file.path("data", "site_info.csv"))$site_ID
+site_table <- read_site_info(Sys.getenv("THERMAL_SITE_INFO", file.path("data", "site_info_new.csv")))
+site_order <- site_table$site_ID
 files_out <- c(total = "outcome_temp.csv", direct = "outcome_temp_water_gpp.csv")
 siteyear_out <- c(total = "outcome_siteyear_temp.csv", direct = "outcome_siteyear_temp_water_gpp.csv")
 profiles <- character()
@@ -74,6 +82,8 @@ manifest <- list(
   data = opt("data", "published step-01 outputs"),
   machine = opt("machine", Sys.info()[["nodename"]]),
   n_sites = length(sites),
+  n_sites_added = sum(sites %in% site_table$site_ID[site_table$added != ""]),
+  original_sites_run = opt("original-sites-run", ""),
   created = format(Sys.time(), "%Y-%m-%d %H:%M %Z")
 )
 jsonlite::write_json(manifest, file.path(out, "manifest.json"), auto_unbox = TRUE, pretty = TRUE)
