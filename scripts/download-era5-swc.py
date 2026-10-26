@@ -1,9 +1,10 @@
 """Daily ERA5-Land top-layer soil water (%) at every site, for extending
-ERA5_daily_swc_1990_2024_allsites.csv past 2024 (refactor-v2 stage S18).
+ERA5_daily_swc_1990_2024_allsites.csv past 2024 (refactor-v2 stage S18) and
+for the sites it does not have (sites added later).
 
 Reads volumetric soil water of layer 1 (swvl1, 0-7 cm, m3/m3) from ECMWF's
 analysis-ready (ARCO) ERA5-Land store, at the grid cell nearest each site
-(data/site_info.csv LAT/LONG), averages it per UTC day and converts it to %
+(the site table's LAT/LONG), averages it per UTC day and converts it to %
 (x 100), the units of the published file. Where that cell is sea (no soil
 water over the period, e.g. IT-Noe on the coast), the nearest land cell (one
 with soil water at any of a sample of times) within MAX_RADIUS cells is used
@@ -15,9 +16,18 @@ Usage (from the repository root):
   python scripts/download-era5-swc.py --start 2024-01-01 --out data-raw/era5/ERA5_daily_swc_2024_latest.csv
   [--end YYYY-MM-DD]   last day (default: the store's last complete day)
   [--sites A,B]        only these sites
+  [--site-info FILE]   the site table (default data/site_info_new.csv)
+  [--skip-in FILE]     leave out the sites FILE has (a CSV with column name;
+                       repeatable)
+  [--append]           keep --out's sites and add only the others
+
+The added sites' whole series, for example:
+  python scripts/download-era5-swc.py --start 1990-01-01 --append \
+    --skip-in ../original-data/ERA5_daily_swc_1990_2024_allsites.csv \
+    --skip-in data-raw/era5/ERA5_daily_swc_update.csv --out data-raw/era5/ERA5_daily_swc_new.csv
 
 Writes a CSV with columns date, name, SWC (the published file's), sites in
-site_info order, then by date.
+site-table order, then by date.
 """
 
 import argparse
@@ -83,15 +93,28 @@ def main():
     ap.add_argument("--end")
     ap.add_argument("--sites")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--site-info", default="data/site_info_new.csv")
+    ap.add_argument("--skip-in", action="append", default=[])
+    ap.add_argument("--append", action="store_true")
     a = ap.parse_args()
 
-    sites = pd.read_csv("data/site_info.csv", encoding="utf-8-sig")[["site_ID", "LAT", "LONG"]]
+    sites = pd.read_csv(a.site_info, encoding="utf-8-sig")[["site_ID", "LAT", "LONG"]]
     if a.sites:
         keep = a.sites.split(",")
         missing = set(keep) - set(sites.site_ID)
         if missing:
             sys.exit(f"unknown sites: {sorted(missing)}")
         sites = sites[sites.site_ID.isin(keep)]
+    for path in a.skip_in:
+        have = set(pd.read_csv(path, usecols=["name"])["name"])
+        sites = sites[~sites.site_ID.isin(have)]
+    earlier = None
+    if a.append and pathlib.Path(a.out).exists():
+        earlier = pd.read_csv(a.out)
+        sites = sites[~sites.site_ID.isin(set(earlier["name"]))]
+    if sites.empty:
+        print("no sites to extract")
+        return
 
     ds = xr.open_zarr(STORE, consolidated=True,
                       storage_options={"headers": {"Authorization": f"Bearer {cds_key()}"}})
@@ -117,6 +140,8 @@ def main():
                                     "name": site, "SWC": daily.values * 100}))
         print(f"{site}: {len(daily.time)} days", flush=True)
     out = pd.concat(frames, ignore_index=True)
+    if earlier is not None:
+        out = pd.concat([earlier[["date", "name", "SWC"]], out], ignore_index=True)
     empty = out.groupby("name")["SWC"].apply(lambda v: v.isna().all())
     if empty.any():
         print(f"WARNING: no land value (sea cell?) at {', '.join(empty[empty].index)}", file=sys.stderr)

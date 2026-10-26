@@ -90,6 +90,24 @@ extend_era5_swc <- function(swc_ERA5, extension, correct = TRUE) {
   out
 }
 
+#' Add ERA5-Land soil water of sites a series lacks
+#'
+#' ERA5-Land soil water with the series of the sites it lacks appended from another extraction
+#' (scripts/download-era5-swc.py: the added sites' whole records). These sites have no published
+#' series, so nothing is shifted. Sites `swc_ERA5` has are left exactly as they are.
+#'
+#' @param swc_ERA5 ERA5-Land daily soil water (read_era5_swc() or extend_era5_swc()).
+#' @param added The other extraction (read_era5_swc()).
+#' @return `swc_ERA5` with the rows of `added`'s other sites appended (columns shared with
+#'   `swc_ERA5`), keeping `swc_ERA5`'s attributes (e.g. "offsets").
+#' @noRd
+add_era5_sites <- function(swc_ERA5, added) {
+  added <- added[!added$name %in% swc_ERA5$name, intersect(names(swc_ERA5), names(added))]
+  out <- dplyr::bind_rows(swc_ERA5, added)
+  attr(out, "offsets") <- attr(swc_ERA5, "offsets")
+  out
+}
+
 #' Prepare a site's TAS-fit inputs (step 02, part 1)
 #'
 #' Turns a site's step-01 tables into the inputs of the TAS fits, making every site-specific

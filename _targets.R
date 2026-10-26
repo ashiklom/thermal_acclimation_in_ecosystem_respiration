@@ -76,7 +76,10 @@ inputs <- list(
   if (data_version == "update") list(
     # ERA5-Land soil water after 2024 (scripts/download-era5-swc.py)
     tar_target(era5_update_file, path_raw("era5", "ERA5_daily_swc_update.csv"), format = "file"),
-    tar_target(era5_swc, extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file), era5_offset_correction)),
+    # the whole series of the sites the published file lacks (added sites)
+    tar_target(era5_added_file, path_raw("era5", "ERA5_daily_swc_new.csv"), format = "file"),
+    tar_target(era5_swc, add_era5_sites(extend_era5_swc(read_era5_swc(era5_file), read_era5_swc(era5_update_file), era5_offset_correction),
+                                        read_era5_swc(era5_added_file))),
     tar_target(era5_offsets_file, {
       path <- path_proc("era5_extension_offsets.csv")
       utils::write.csv(attr(era5_swc, "offsets"), path, row.names = FALSE)
