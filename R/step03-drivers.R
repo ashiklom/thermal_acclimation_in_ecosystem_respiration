@@ -128,6 +128,16 @@ soil_carbon <- function(site_info, bif_file, gsoc_file) {
   GSOCmap <- terra::rast(gsoc_file)
   xy <- data.frame(x=site_info$LONG, y=site_info$LAT)
   stat.soil$GSOC <- terra::extract(GSOCmap, xy)$GSOCmap1.5.0
+  # a site in a cell without a value (e.g. JP-Spp, at the edge of a city):
+  # the mean of the cell and its four neighbours, as for future_tmin_change()
+  no_value <- which(is.na(stat.soil$GSOC))
+  if (length(no_value)) {
+    icell <- terra::adjacent(GSOCmap, terra::cellFromXY(GSOCmap, as.matrix(xy[no_value, ])), directions = "rook", include = TRUE)
+    near <- matrix(terra::extract(GSOCmap, c(icell))[[1]], nrow = length(no_value))
+    stat.soil$GSOC[no_value] <- rowMeans(near, na.rm = TRUE)
+    stat.soil$GSOC[is.nan(stat.soil$GSOC)] <- NA
+    warning("GSOC from the neighbouring cells at ", paste(stat.soil$site_ID[no_value], collapse = ", "), call. = FALSE)
+  }
   tmp <- BIF.site |> dplyr::left_join(stat.soil, by=c('SITE_ID'='site_ID'))
   model <- stats::lm(data=tmp, GSOC ~ soc_obs)
   BIF.site$GSOC_obs <- stats::predict(model, tmp[c("soc_obs")])
@@ -142,46 +152,90 @@ soil_carbon <- function(site_info, bif_file, gsoc_file) {
 #' m-2 yr-1): monthly means of good-quality values, interpolated over months without any, then
 #' averaged.
 #'
-#' @param mod13_file MOD13A2 extraction (CSV).
-#' @param mod15_file MOD15A2H extraction (CSV).
-#' @param myd17_file MYD17A2HGF extraction (CSV).
+#' Each product may come in several files of the same layout (AppEEARS's point samples, or the
+#' later sites' extractions, scripts/download-modis-ornl.py); their rows are bound. Dates are
+#' month/day/2-digit year or ISO. A site without a good-quality value in any month gets NA for
+#' that index.
+#'
+#' @param mod13_file MOD13A2 extraction(s) (CSV).
+#' @param mod15_file MOD15A2H extraction(s) (CSV).
+#' @param myd17_file MYD17A2HGF extraction(s) (CSV).
 #' @return A data frame, one row per site: ID, EVI, NDVI, Fpar, LAI, GPP.
 #' @noRd
 spectral_indices <- function(mod13_file, mod15_file, myd17_file) {
-  file1    <- utils::read.csv(mod13_file)  ##EVI and NDVI
+  read_modis <- function(files) {
+    tables <- lapply(files, function(f) {
+      x <- utils::read.csv(f)
+      x$Date <- modis_date(x$Date)
+      x
+    })
+    if (length(tables) == 1) tables[[1]] else dplyr::bind_rows(tables)
+  }
+  na_approx <- function(x) if (all(is.na(x))) rep(NA_real_, length(x)) else zoo::na.approx(x, rule = 2)
+  file1    <- read_modis(mod13_file)  ##EVI and NDVI
   good_vi <- file1$MOD13A2_061__1_km_16_days_VI_Quality_MODLAND_Description %in% c("VI produced, good quality", "VI produced, but check other QA")
   file1$MOD13A2_061__1_km_16_days_EVI[!good_vi]  <- NA
   file1$MOD13A2_061__1_km_16_days_NDVI[!good_vi] <- NA
-  file1$Date <- as.Date(file1$Date, format = "%m/%d/%y")
   file1_interp <- file1 |> dplyr::mutate(month = lubridate::month(.data$Date)) |> dplyr::group_by(.data$ID, .data$month) |>
     dplyr::summarise(NDVI = max(mean(.data$MOD13A2_061__1_km_16_days_NDVI, na.rm=T), 0.0), n_NDVI = sum(!is.na(.data$MOD13A2_061__1_km_16_days_NDVI)),
                      EVI = max(mean(.data$MOD13A2_061__1_km_16_days_EVI, na.rm=T), 0.0), n_EVI = sum(!is.na(.data$MOD13A2_061__1_km_16_days_EVI)), .groups = 'drop')
   file1_interp <- file1_interp |> dplyr::group_by(.data$ID) |>
-    dplyr::mutate(NDVI_interp = zoo::na.approx(.data$NDVI, rule = 2), EVI_interp = zoo::na.approx(.data$EVI, rule = 2))
+    dplyr::mutate(NDVI_interp = na_approx(.data$NDVI), EVI_interp = na_approx(.data$EVI))
 
-  file2    <- utils::read.csv(mod15_file)  ## Fpar and LAI
+  file2    <- read_modis(mod15_file)  ## Fpar and LAI
   bad_lai <- file2$MOD15A2H_061_FparLai_QC_MODLAND_Description == "Other Quality (back-up algorithm or fill values)"
   file2$MOD15A2H_061_Fpar_500m[bad_lai] <- NA
   file2$MOD15A2H_061_Lai_500m[bad_lai] <- NA
-  file2$Date <- as.Date(file2$Date, format = "%m/%d/%y")
   file2_interp <- file2 |> dplyr::mutate(month = lubridate::month(.data$Date)) |> dplyr::group_by(.data$ID, .data$month) |>
     dplyr::summarise(Fpar = max(mean(.data$MOD15A2H_061_Fpar_500m, na.rm=T), 0.0), n_Fpar = sum(!is.na(.data$MOD15A2H_061_Fpar_500m)),
                      Lai = max(mean(.data$MOD15A2H_061_Lai_500m, na.rm=T), 0.0), n_Lai = sum(!is.na(.data$MOD15A2H_061_Lai_500m)), .groups = 'drop')
   file2_interp <- file2_interp |> dplyr::group_by(.data$ID) |>
-    dplyr::mutate(Fpar_interp = zoo::na.approx(.data$Fpar, rule = 2), Lai_interp = zoo::na.approx(.data$Lai, rule = 2))
+    dplyr::mutate(Fpar_interp = na_approx(.data$Fpar), Lai_interp = na_approx(.data$Lai))
 
-  file3  <- utils::read.csv(myd17_file)  ##GPP
+  file3  <- read_modis(myd17_file)  ##GPP
   file3$MYD17A2HGF_061_Gpp_500m[file3$MYD17A2HGF_061_Psn_QC_500m_MODLAND_Description == "Other quality (back-up algorithm or fill values)"] <- NA
-  file3$Date <- as.Date(file3$Date, format = "%m/%d/%y")
   file3_interp <- file3 |> dplyr::mutate(month = lubridate::month(.data$Date)) |> dplyr::group_by(.data$ID, .data$month) |>
     dplyr::summarise(GPP = max(mean(.data$MYD17A2HGF_061_Gpp_500m, na.rm=T), 0.0), n_GPP = sum(!is.na(.data$MYD17A2HGF_061_Gpp_500m)), .groups = 'drop')
-  file3_interp <- file3_interp |> dplyr::group_by(.data$ID) |> dplyr::mutate(GPP_interp = zoo::na.approx(.data$GPP, rule = 2))
+  file3_interp <- file3_interp |> dplyr::group_by(.data$ID) |> dplyr::mutate(GPP_interp = na_approx(.data$GPP))
 
   VI <- file1_interp |> dplyr::group_by(.data$ID) |> dplyr::summarise(EVI=mean(.data$EVI_interp, na.rm=T), NDVI=mean(.data$NDVI_interp, na.rm=T))
   LAI <- file2_interp |> dplyr::group_by(.data$ID) |> dplyr::summarise(Fpar=mean(.data$Fpar_interp, na.rm=T), LAI=mean(.data$Lai_interp, na.rm=T))
   # GPP: kgC/m2/8d -> convert to kgC/m2/year
   GPP <- file3_interp |> dplyr::group_by(.data$ID) |> dplyr::summarise(GPP=mean(.data$GPP_interp, na.rm=T)/8*365.25)
   VI |> dplyr::left_join(LAI, by='ID') |> dplyr::left_join(GPP, by="ID")
+}
+
+#' Dates of MODIS extractions
+#'
+#' AppEEARS's point samples write month/day/2-digit year (2/18/00), other extractions ISO dates.
+#'
+#' @param x Character dates.
+#' @return Dates.
+#' @noRd
+modis_date <- function(x) {
+  iso <- grepl("^[0-9]{4}-", x)
+  out <- as.Date(x, format = "%m/%d/%y")
+  out[iso] <- as.Date(x[iso])
+  out
+}
+
+#' Sites the driver analysis can use
+#'
+#' The rows of a driver table (driver_data()) with both TAS and every predictor of
+#' driver_analysis() (ELEV, MATA, LAI, SOC, warm_rate); warns naming the sites with TAS but a
+#' missing predictor.
+#'
+#' @param drivers The driver table.
+#' @return Its complete rows.
+#' @noRd
+driver_sites <- function(drivers) {
+  has_tas <- !is.na(drivers$TAS) & !is.na(drivers$TAS_tot)
+  complete <- stats::complete.cases(drivers[, c("ELEV", "MATA", "LAI", "SOC", "warm_rate")])
+  if (any(has_tas & !complete)) {
+    warning("driver analysis without ", paste(drivers$site_ID[has_tas & !complete], collapse = ", "),
+            " (a predictor missing)", call. = FALSE)
+  }
+  drivers[has_tas & complete, ]
 }
 
 #' The driver-analysis table

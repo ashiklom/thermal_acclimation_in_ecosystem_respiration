@@ -96,6 +96,8 @@ inputs <- list(
   tar_target(gsoc_file, path_original("GSOCmap1.5.0.tif"), format = "file"),
   tar_target(modis_files, path_original(c("towers-MOD13A2-061-results.csv", "towers-MOD15A2H-061-results.csv",
                                           "towers-MYD17A2HGF-061-results.csv")), format = "file"),
+  # the added sites' MODIS (scripts/download-modis-ornl.py; none: no files)
+  tar_target(modis_added_files, sort(list.files(path_raw("modis"), "^towers-new-.*\\.csv$", full.names = TRUE)), format = "file"),
   tar_target(worldclim, download_worldclim()),
   tar_target(worldclim_files, unlist(worldclim), format = "file"),
   tar_target(published_tas_files, file.path("data", c("outcome_temp.csv", "outcome_temp_water_gpp.csv")), format = "file"),
@@ -280,7 +282,7 @@ combined <- list(
   tar_target(ts_drivers, driver_data(pipeline_site_info, ts_climate_all[[ts_methods_selected]], spectral, soil,
                                      ts_fit_sets_total[[ts_methods_selected]]$outcome, ts_fit_sets_direct[[ts_methods_selected]]$outcome),
              pattern = map(ts_methods_selected), iteration = "list"),
-  tar_target(ts_driver_results, driver_analysis(ts_drivers[!is.na(ts_drivers$TAS) & !is.na(ts_drivers$TAS_tot), ]),
+  tar_target(ts_driver_results, driver_analysis(driver_sites(ts_drivers)),
              pattern = map(ts_drivers), iteration = "list"),
   tar_target(ts_future, scenario_data(ts_drivers, tmin_month, ts_scenario_all[[ts_methods_selected]]),
              pattern = map(ts_drivers, ts_methods_selected), iteration = "list"),
@@ -299,7 +301,9 @@ combined <- list(
   tar_combine(climate_all, per_site[["climate_stats"]], command = dplyr::bind_rows(!!!.x)),
   tar_combine(scenario_all, per_site[["scenario"]], command = dplyr::bind_rows(!!!.x)),
   tar_target(soil, soil_carbon(site_info, bif_file, gsoc_file)),
-  tar_target(spectral, spectral_indices(modis_files[1], modis_files[2], modis_files[3])),
+  tar_target(spectral, spectral_indices(c(modis_files[1], grep("MOD13", modis_added_files, value = TRUE)),
+                                       c(modis_files[2], grep("MOD15", modis_added_files, value = TRUE)),
+                                       c(modis_files[3], grep("MYD17", modis_added_files, value = TRUE)))),
   tar_target(tmin_month, future_tmin_change(site_info, worldclim$baseline, worldclim$future)),
   # sets of TAS estimates the step 03-04 analyses are run for
   tar_target(fits_published, list(total = utils::read.csv(published_tas_files[1]), direct = utils::read.csv(published_tas_files[2]))),
@@ -311,9 +315,9 @@ by_fit_set <- tar_map(
   values = list(fit_set = c("published", "v2"), fits = rlang::syms(c("fits_published", "fits_v2"))),
   names = "fit_set",
   tar_target(drivers, driver_data(pipeline_site_info, climate_all, spectral, soil, fits$total, fits$direct)),
-  # (over the sites with both TAS: a site's fit can be missing, e.g. US-BZS
-  # with the latest data)
-  tar_target(driver_results, driver_analysis(drivers[!is.na(drivers$TAS) & !is.na(drivers$TAS_tot), ])),
+  # (over the sites with both TAS and every predictor: a site's fit can be
+  # missing, e.g. US-BZS with the latest data)
+  tar_target(driver_results, driver_analysis(driver_sites(drivers))),
   tar_target(future, scenario_data(drivers, tmin_month, scenario_all)),
   tar_target(step0304_files, write_step0304_outputs(fit_set, drivers, driver_results, future, tmin_month), format = "file")
 )
