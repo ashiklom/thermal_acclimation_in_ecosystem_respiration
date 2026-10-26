@@ -1,7 +1,9 @@
 """Build the analysis website's data files.
 
 Reads (paths relative to the repository root):
-  data/site_info.csv                   site metadata
+  data/site_info_new.csv               site metadata (all sites; `added`: sites added after the
+                                       manuscript's), with data/site_info_overrides.csv and
+                                       data/site_info_excluded.csv
   data/outcome_*.csv                   the published TAS estimates ("published")
   results/<id>/manifest.json           each saved result set (scripts/save-results.R)
   results/<id>/{outcome,siteyear}_{total,direct}.csv
@@ -117,10 +119,18 @@ def mean_annual_temperature(site_id):
 
 
 def build_sites():
-    info = pd.read_csv(ROOT / "data" / "site_info.csv", encoding="utf-8-sig")
+    info = pd.read_csv(ROOT / "data" / "site_info_new.csv", encoding="utf-8-sig")
+    info["added"] = info["added"].fillna("")
     keep = ["site_ID", "LAT", "LONG", "ELEV", "IGBP", "Climate_class", "MAP", "source",
-            "estimate_Ts", "SWC_use"]
+            "estimate_Ts", "SWC_use", "added"]
     sites = info[keep].copy()
+    overrides = ROOT / "data" / "site_info_overrides.csv"
+    if overrides.exists():
+        o = pd.read_csv(overrides)
+        sites["overrides"] = [", ".join(f"{r.field} {r.declared} → {r.used} ({r.reason})" for r in o[o.site_ID == s].itertuples())
+                              for s in sites["site_ID"]]
+    excluded = ROOT / "data" / "site_info_excluded.csv"
+    write_json(records(pd.read_csv(excluded)) if excluded.exists() else [], OUT / "sites_excluded.json")
     settings_path = ROOT / "data" / "site_settings.csv"
     if settings_path.exists():
         sites = sites.merge(pd.read_csv(settings_path), on="site_ID", how="left")
@@ -267,14 +277,20 @@ def build_drivers(sets):
             d = ROOT / "results" / s["id"] / sub
             if d.exists():
                 for fs in sorted(p.name for p in d.iterdir() if p.is_dir()):
-                    entries.append({"id": f"{s['id']}--{fs}", "label": f"{s['label']}: {what} {fs}", "dir": d / fs})
+                    entry = {"id": f"{s['id']}--{fs}", "label": f"{s['label']}: {what} {fs}", "dir": d / fs}
+                    # the same analysis over the manuscript's sites only (the run's
+                    # original_sites_run, scripts/save-results.R), for the added-sites toggle
+                    orig = s.get("original_sites_run")
+                    if orig and (ROOT / "results" / orig / sub / fs).exists():
+                        entry["original_sites_id"] = f"{orig}--{fs}"
+                    entries.append(entry)
     index = []
     for e in entries:
         tables = {k: records(pd.read_csv(e["dir"] / f)) for k, f in STEP0304_FILES.items() if (e["dir"] / f).exists()}
         if not tables:
             continue
         write_json(tables, OUT / "drivers" / f"{e['id']}.json")
-        index.append({"id": e["id"], "label": e["label"]})
+        index.append({k: e[k] for k in ("id", "label", "original_sites_id") if k in e})
     write_json(index, OUT / "drivers.json")
     return index
 

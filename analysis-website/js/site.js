@@ -1,4 +1,4 @@
-import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, tasClass, numberFormatter, siteMaps, loadScreen, VERDICT_COLORS } from "./common.js";
+import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, tasClass, numberFormatter, siteMaps, loadScreen, VERDICT_COLORS, siteLabel, isNew } from "./common.js";
 
 header("site.html");
 const sites = await loadJSON("data/sites.json");
@@ -8,7 +8,7 @@ const siteyearCache = {};
 const getSiteyear = async (id) => (siteyearCache[id] ??= await loadJSON(`data/siteyear/${id}.json`));
 
 const siteSel = document.getElementById("site");
-for (const s of sites) siteSel.insertAdjacentHTML("beforeend", `<option value="${s.site_ID}">${s.site_ID}</option>`);
+for (const s of sites) siteSel.insertAdjacentHTML("beforeend", `<option value="${s.site_ID}">${siteLabel(s.site_ID)}</option>`);
 const setSel = document.getElementById("set");
 for (const s of sets) setSel.insertAdjacentHTML("beforeend", `<option value="${s.id}">${s.label}</option>`);
 const p = params();
@@ -60,7 +60,7 @@ async function draw() {
   const model = document.getElementById("model").value;
   setParams({ site, set, model });
   const meta = sites.find((s) => s.site_ID === site);
-  document.getElementById("title").textContent = site;
+  document.getElementById("title").innerHTML = isNew(site) ? `${site} <span class="small">(added ${meta.added}, FLUXNET shuttle)</span>` : site;
   document.getElementById("meta").innerHTML = [
     `${meta.IGBP}, ${meta.Climate_class}`, `${fmt(meta.LAT, 3)}°, ${fmt(meta.LONG, 3)}°, ${meta.ELEV} m`,
     `MAT ${fmt(meta.MAT, 1)} °C, MAP ${meta.MAP} mm`, `data: ${meta.source}`,

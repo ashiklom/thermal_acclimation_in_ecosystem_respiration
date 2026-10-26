@@ -1,5 +1,4 @@
-import { header, loadJSON, compare, summarise, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS,
-  numberFormatter, tasClass } from "./common.js";
+import { header, loadJSON, compare, summarise, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, numberFormatter, tasClass, siteCell, filterSites, siteSymbol, siteLabel } from "./common.js";
 
 header("update.html");
 const update = await loadJSON("data/update.json");
@@ -29,9 +28,9 @@ async function draw() {
   const entry = update.runs.find((r) => r.run === run);
   const ref = entry.reference ?? update.reference;
   const [pub, old, now] = [await getTas("published"), await getTas(ref), await getTas(run)];
-  const method = new Map(compare(pub, old, model, threshold).map((r) => [r.site_ID, r]));
-  const data = compare(old, now, model, threshold);
-  const inputs = new Map((entry.inputs || []).map((r) => [r.site_ID, r]));
+  const method = new Map(filterSites(compare(pub, old, model, threshold)).map((r) => [r.site_ID, r]));
+  const data = filterSites(compare(old, now, model, threshold));
+  const inputs = new Map(filterSites(entry.inputs || []).map((r) => [r.site_ID, r]));
   const sm = summarise([...method.values()].filter((r) => r.dTAS !== null));
   const sd = summarise(data.filter((r) => r.dTAS !== null));
   document.getElementById("stats").innerHTML = [
@@ -52,9 +51,10 @@ async function draw() {
   const groups = Object.keys(CLASS_COLORS).map((c) => {
     const g = rows.filter((r) => r.class_new === c);
     return { type: "scatter", mode: "markers", name: `latest data: ${c}`, x: g.map((r) => r.method), y: g.map((r) => r.dTAS),
-      text: g.map((r) => `${r.site_ID}<br>method Δ ${fmt(r.method, 5)}<br>data Δ ${fmt(r.dTAS, 5)}<br>${r.class_ref} → ${r.class_new}`),
+      text: g.map((r) => `${siteLabel(r.site_ID)}<br>method Δ ${fmt(r.method, 5)}<br>data Δ ${fmt(r.dTAS, 5)}<br>${r.class_ref} → ${r.class_new}`),
       hoverinfo: "text", customdata: g.map((r) => r.site_ID),
-      marker: { color: CLASS_COLORS[c], size: g.map((r) => (r.flip ? 13 : 8)), line: { width: g.map((r) => (r.flip ? 2 : 0.5)), color: "#000" } } };
+      marker: { color: CLASS_COLORS[c], symbol: g.map((r) => siteSymbol(r.site_ID)), size: g.map((r) => (r.flip ? 13 : 8)),
+        line: { width: g.map((r) => (r.flip ? 2 : 0.5)), color: "#000" } } };
   });
   const lim = Math.max(...rows.flatMap((r) => [Math.abs(r.method), Math.abs(r.dTAS)])) * 1.1 || 0.05;
   Plotly.newPlot("effects", groups, baseLayout({
@@ -65,7 +65,7 @@ async function draw() {
   Plotly.newPlot("records", [{ type: "scatter", mode: "markers",
     x: withInputs.map((r) => 100 * (inputs.get(r.site_ID).n_night_new / inputs.get(r.site_ID).n_night_ref - 1)), y: withInputs.map((r) => r.dTAS),
     text: withInputs.map((r) => { const i = inputs.get(r.site_ID); return `${r.site_ID}<br>night records ${i.n_night_ref} → ${i.n_night_new}<br>years ${i.n_years_ref} → ${i.n_years_new}<br>data Δ ${fmt(r.dTAS, 5)}`; }),
-    hoverinfo: "text", customdata: withInputs.map((r) => r.site_ID), marker: { color: withInputs.map((r) => CLASS_COLORS[r.class_new]), size: 8, line: { width: 0.5, color: "#333" } } }],
+    hoverinfo: "text", customdata: withInputs.map((r) => r.site_ID), marker: { color: withInputs.map((r) => CLASS_COLORS[r.class_new]), symbol: withInputs.map((r) => siteSymbol(r.site_ID)), size: 8, line: { width: 0.5, color: "#333" } } }],
   baseLayout({ xaxis: { title: "change in night-time records (%)", zeroline: true }, yaxis: { title: "data effect: ΔTAS (°C⁻¹)", zeroline: true } }), PLOT_CONFIG);
   for (const id of ["effects", "records"]) document.getElementById(id).on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
 
@@ -76,7 +76,7 @@ async function draw() {
     const o = new Map(tsOld[`outcome_${model}`].map((r) => [key(r), r]));
     const cols = [...new Set(tsNew[`outcome_${model}`].map((r) => r.column))];
     const per = cols.map((c) => {
-      const pairs = tsNew[`outcome_${model}`].filter((r) => r.column === c).map((r) => [o.get(key(r)), r]).filter(([a, b]) => a && a.TAS !== null && b.TAS !== null);
+      const pairs = filterSites(tsNew[`outcome_${model}`]).filter((r) => r.column === c).map((r) => [o.get(key(r)), r]).filter(([a, b]) => a && a.TAS !== null && b.TAS !== null);
       const d = pairs.map(([a, b]) => b.TAS - a.TAS);
       const cl = pairs.map(([a, b]) => [tasClass(a.TAS, a.TASp), tasClass(b.TAS, b.TASp)]);
       const sorted = d.map(Math.abs).sort((x, y) => x - y);
@@ -108,7 +108,7 @@ async function draw() {
   });
   const f = numberFormatter(4);
   const cols = [
-    { title: "Site", field: "site_ID", formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "Site", field: "site_ID", formatter: siteCell },
     { title: "published", field: "published", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "refactored", field: "refactored", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "latest data", field: "latest", formatter: f, hozAlign: "right", headerFilter: false },
@@ -123,7 +123,7 @@ async function draw() {
   if (siteTable) siteTable.replaceData(siteRows); else siteTable = table("table", siteRows, cols, { height: "520px" });
 
   // fills
-  const fills = entry.fills || [];
+  const fills = filterSites(entry.fills || []);
   if (fills.length) {
     const fcols = [{ title: "Site", field: "site_ID" }, { title: "product", field: "product" }, { title: "variable", field: "variable" },
       { title: "records filled", field: "n", hozAlign: "right", headerFilter: false }];

@@ -1,4 +1,4 @@
-import { header, loadJSON, compare, summarise, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, numberFormatter } from "./common.js";
+import { header, loadJSON, compare, summarise, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, numberFormatter, siteCell, filterSites, siteSymbol, siteLabel, siteHTML } from "./common.js";
 
 header("compare.html");
 const sets = await loadJSON("data/resultsets.json");
@@ -23,7 +23,7 @@ async function draw() {
   const model = document.getElementById("model").value;
   const threshold = Number(document.getElementById("threshold").value);
   setParams({ a, b, model, threshold });
-  const rows = compare(await getTas(a), await getTas(b), model, threshold).filter((r) => r.TAS_new !== null && r.TAS_ref !== null);
+  const rows = filterSites(compare(await getTas(a), await getTas(b), model, threshold).filter((r) => r.TAS_new !== null && r.TAS_ref !== null));
   const s = summarise(rows);
   const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
   document.getElementById("stats").innerHTML = [
@@ -31,16 +31,17 @@ async function draw() {
     stat(s.changed, `|ΔTAS| ≥ ${threshold}`), stat(s.transitions, "class changes"), stat(s.flips.length, "significant sign flips"),
   ].join("");
   document.getElementById("flipnote").innerHTML = s.flips.length
-    ? `<div class="note"><span class="flip">Significant sign flips:</span> ${s.flips.map((x) => `<a href="site.html?site=${x}">${x}</a>`).join(", ")}</div>` : "";
+    ? `<div class="note"><span class="flip">Significant sign flips:</span> ${s.flips.map((x) => siteHTML(x)).join(", ")}</div>` : "";
 
   const lim = Math.max(...rows.flatMap((r) => [Math.abs(r.TAS_ref), Math.abs(r.TAS_new)])) * 1.1 || 0.1;
   const groups = Object.keys(CLASS_COLORS).map((c) => {
     const g = rows.filter((r) => r.class_new === c);
     return { type: "scatter", mode: "markers", name: `run: ${c}`, x: g.map((r) => r.TAS_ref), y: g.map((r) => r.TAS_new),
       error_y: { type: "data", array: g.map((r) => r.se ?? 0), visible: true, thickness: 0.6, width: 0, color: "#bbb" },
-      text: g.map((r) => `${r.site_ID}<br>ref ${fmt(r.TAS_ref)} (${r.class_ref})<br>run ${fmt(r.TAS_new)} (${r.class_new})<br>Δ ${fmt(r.dTAS, 5)}`),
+      text: g.map((r) => `${siteLabel(r.site_ID)}<br>ref ${fmt(r.TAS_ref)} (${r.class_ref})<br>run ${fmt(r.TAS_new)} (${r.class_new})<br>Δ ${fmt(r.dTAS, 5)}`),
       hoverinfo: "text", customdata: g.map((r) => r.site_ID),
-      marker: { color: CLASS_COLORS[c], size: g.map((r) => (r.flip ? 13 : 8)), line: { width: g.map((r) => (r.flip ? 2 : 0.5)), color: "#000" } } };
+      marker: { color: CLASS_COLORS[c], symbol: g.map((r) => siteSymbol(r.site_ID)), size: g.map((r) => (r.flip ? 13 : 8)),
+        line: { width: g.map((r) => (r.flip ? 2 : 0.5)), color: "#000" } } };
   });
   const line = { type: "scatter", mode: "lines", x: [-lim, lim], y: [-lim, lim], line: { dash: "dash", color: "#666" }, showlegend: false, hoverinfo: "skip" };
   const band = { type: "scatter", x: [-lim, lim, lim, -lim], y: [-lim - threshold, lim - threshold, lim + threshold, -lim + threshold], fill: "toself",
@@ -59,7 +60,7 @@ async function draw() {
 
   const f = numberFormatter(5);
   const cols = [
-    { title: "Site", field: "site_ID", formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "Site", field: "site_ID", formatter: siteCell },
     { title: "TAS ref", field: "TAS_ref", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "TAS run", field: "TAS_new", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "ΔTAS", field: "dTAS", formatter: f, hozAlign: "right", headerFilter: false },

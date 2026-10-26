@@ -1,4 +1,4 @@
-import { header, loadJSON, compare, summarise, table, params, setParams, numberFormatter } from "./common.js";
+import { header, loadJSON, compare, summarise, table, params, setParams, numberFormatter, siteCell, filterSites } from "./common.js";
 
 header("stages.html");
 const stages = await loadJSON("data/stages.json");
@@ -21,8 +21,8 @@ async function draw() {
   for (const st of stages) {
     const text = await fetch(`stages/${st.stage}.html`).then((r) => (r.ok ? r.text() : ""));
     const [ref, run] = [await getTas(st.reference), await getTas(st.run)];
-    const byModel = Object.fromEntries(["total", "direct"].map((m) => [m, compare(ref, run, m, threshold)]));
-    const inputs = st.inputs || [];
+    const byModel = Object.fromEntries(["total", "direct"].map((m) => [m, filterSites(compare(ref, run, m, threshold))]));
+    const inputs = filterSites(st.inputs || []);
     const affected = new Set(inputs.map((r) => r.site_ID));
     const sec = document.createElement("section");
     sec.innerHTML = `<h2 id="${st.stage}">${st.stage}: ${st.title}</h2>${text}
@@ -63,7 +63,7 @@ async function draw() {
       { title: "ref", field: `${field}_ref`, formatter: numberFormatter(digits), hozAlign: "right", headerFilter: false },
       { title: "new", field: `${field}_new`, formatter: numberFormatter(digits), hozAlign: "right", headerFilter: false }] });
     const cols = [
-      { title: "Site", field: "site_ID", frozen: true, formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+      { title: "Site", field: "site_ID", frozen: true, formatter: siteCell },
       { title: "inputs changed", field: "changed" },
       { title: "ΔTAS total", field: "dTAS_total", formatter: numberFormatter(5), hozAlign: "right", headerFilter: false },
       { title: "class total", field: "trans_total" },

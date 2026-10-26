@@ -41,11 +41,58 @@ export async function loadJSON(path) {
   return r.json();
 }
 
+// Sites added after the manuscript's 117 (the site table's `added`, e.g. the
+// FLUXNET-shuttle sites): marked NEW_MARK in tables and drawn as NEW_SYMBOL in
+// figures (same colours), and left out of figures, tables and statistics when
+// the header's toggle excludes them (URL parameter `new=0`, remembered across
+// pages). Steps 03-04 are refitted without them, see drivers.js.
+export const NEW_SYMBOL = "triangle-up";
+export const NEW_MARK = "*";
+export const SITES = new Map((await loadJSON("data/sites.json").catch(() => [])).map((s) => [s.site_ID, s]));
+export const isNew = (id) => Boolean(SITES.get(id)?.added);
+export const ADDED_DATES = [...new Set([...SITES.values()].map((s) => s.added).filter(Boolean))].sort();
+
+export function includeNew() {
+  const v = new URLSearchParams(window.location.search).get("new");
+  if (v !== null) return v !== "0";
+  return localStorage.getItem("thermal.includeNew") !== "0";
+}
+
+// Rows whose site (field `key`) the toggle keeps.
+export function filterSites(rows, key = "site_ID") {
+  return includeNew() ? rows : rows.filter((r) => !isNew(typeof r === "string" ? r : r[key]));
+}
+
+export const siteSymbol = (id, base = "circle") => (isNew(id) ? NEW_SYMBOL : base);
+export const siteLabel = (id) => (isNew(id) ? `${id}${NEW_MARK}` : id);
+const newTitle = (id) => `added ${SITES.get(id)?.added} (FLUXNET shuttle)`;
+export const siteHTML = (id, href = `site.html?site=${id}`) =>
+  `<a href="${href}">${id}</a>${isNew(id) ? `<sup class="newsite" title="${newTitle(id)}">${NEW_MARK}</sup>` : ""}`;
+// Tabulator formatter for a site-ID column.
+export const siteCell = (cell) => siteHTML(cell.getValue());
+
 export function header(active) {
   const links = PAGES.map(([href, label]) =>
     `<a href="${href}"${href === active ? ' class="active"' : ""}>${label}</a>`).join("");
+  const nNew = [...SITES.values()].filter((s) => s.added).length;
+  const toggle = nNew ? `<label class="newtoggle" title="Sites added ${ADDED_DATES.join(", ")} from the FLUXNET shuttle: ` +
+    `triangles in figures, ${NEW_MARK} in tables; excluded, they are left out of every figure, table and statistic, ` +
+    `and steps 03-04 show the run over the manuscript's sites"><input type="checkbox" id="include-new"${includeNew() ? " checked" : ""}> ` +
+    `include the ${nNew} added sites (▲, ${NEW_MARK})</label>` : "";
   document.body.insertAdjacentHTML("afterbegin",
-    `<header><span class="title">Thermal acclimation · refactor-v2</span><nav>${links}</nav></header>`);
+    `<header><span class="title">Thermal acclimation · refactor-v2</span><nav>${links}</nav>${toggle}</header>`);
+  document.getElementById("include-new")?.addEventListener("change", (e) => {
+    localStorage.setItem("thermal.includeNew", e.target.checked ? "1" : "0");
+    setParams({ new: e.target.checked ? "1" : "0" });
+    location.reload();
+  });
+  if (nNew) {
+    const note = `<p class="small footnote"><sup class="newsite">${NEW_MARK}</sup> / ▲ site added ${ADDED_DATES.join(", ")} ` +
+      `from the FLUXNET shuttle (${nNew} sites; not in the manuscript); ` +
+      `${includeNew() ? "included" : "excluded"} here (toggle at the top).</p>`;
+    // (module scripts run once the page is parsed: <main> exists)
+    document.querySelector("main")?.insertAdjacentHTML("beforeend", note);
+  }
 }
 
 export function params() {
@@ -91,7 +138,8 @@ export function compare(a, b, model, threshold = DEFAULT_THRESHOLD) {
       class_ref: cx, class_new: cy,
       transition: cx === cy ? "" : `${cx} → ${cy}`,
       flip,
-      changed: d === null ? (x.TAS ?? null) !== (y.TAS ?? null) : Math.abs(d) >= threshold,
+      // (a site in only one of the two, e.g. an added site, is not "changed")
+      changed: d === null ? (x.TAS ?? null) !== (y.TAS ?? null) && ra.has(site) && rb.has(site) : Math.abs(d) >= threshold,
       nwindow_ref: x.nwindow ?? null, nwindow_new: y.nwindow ?? null,
     };
   }).sort((p, q) => (q.flip - p.flip) || ((q.transition !== "") - (p.transition !== "")) ||
@@ -135,10 +183,11 @@ export function baseLayout(extra = {}) {
 // the flux record vs annual precipitation, over Whittaker biomes), with
 // points coloured by `value(site)` (numeric) or `category(site)`. With
 // `focus`, for one site: the map zoomed in and centred on it, and the site
-// labelled in both.
-export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick, focus = false, colors = CLASS_COLORS } = {}) {
+// labelled in both (and shown whatever the added-sites toggle).
+export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick, focus = false, colors = CLASS_COLORS, filter = !focus } = {}) {
   const biomes = await loadJSON("static/whittaker_biomes.json");
-  const text = sites.map((s) => `${s.site_ID}<br>${s.IGBP}, ${s.Climate_class}<br>${label}: ${value ? fmt(value(s)) : category(s)}`);
+  if (filter) sites = filterSites(sites);
+  const text = sites.map((s) => `${siteLabel(s.site_ID)}<br>${s.IGBP}, ${s.Climate_class}<br>${label}: ${value ? fmt(value(s)) : category(s)}`);
   let marker;
   if (value) {
     const v = sites.map(value);
@@ -150,6 +199,7 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, label 
     marker = { color: cats.map((c) => colors[c] || "#8c959f"), size: 9, line: { width: 0.5, color: "#333" } };
   }
   if (focus) Object.assign(marker, { size: 14, line: { width: 1.5, color: "#000" } });
+  marker.symbol = sites.map((s) => siteSymbol(s.site_ID));
   const mode = focus ? "markers+text" : "markers";
   const labels = { text: sites.map((s) => s.site_ID), textposition: "top center", textfont: { size: 12 } };
   const geo = [{ type: "scattergeo", lon: sites.map((s) => s.LONG), lat: sites.map((s) => s.LAT), hovertext: text, hoverinfo: "text",

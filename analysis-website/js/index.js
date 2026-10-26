@@ -1,4 +1,4 @@
-import { header, loadJSON, compare, summarise, siteMaps, table, fmt, tasClass, params, setParams, loadScreen, VERDICT_COLORS } from "./common.js";
+import { header, loadJSON, compare, summarise, siteMaps, table, fmt, tasClass, params, setParams, loadScreen, VERDICT_COLORS, filterSites } from "./common.js";
 
 header("index.html");
 const sites = await loadJSON("data/sites.json");
@@ -8,9 +8,9 @@ const tas = Object.fromEntries(await Promise.all(sets.map(async (s) => [s.id, aw
 // Result-set table, each compared with the published estimates.
 const rows = sets.map((s) => {
   const out = { id: s.id, label: s.label, stage: s.stage, description: s.description, sha: s.git_sha,
-    profile: [].concat(s.fit_profile || []).join(","), n_sites: s.n_sites };
+    profile: [].concat(s.fit_profile || []).join(","), n_sites: s.n_sites_added ? `${s.n_sites} (${s.n_sites_added} added)` : s.n_sites };
   for (const model of ["total", "direct"]) {
-    const sum = summarise(compare(tas.published, tas[s.id], model).filter((r) => r.TAS_new !== null));
+    const sum = summarise(filterSites(compare(tas.published, tas[s.id], model).filter((r) => r.TAS_new !== null && r.TAS_ref !== null)));
     out[`${model}_median`] = sum.median_abs;
     out[`${model}_changed`] = sum.changed;
     out[`${model}_flips`] = sum.flips.length;

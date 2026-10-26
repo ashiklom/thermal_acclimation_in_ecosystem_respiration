@@ -1,4 +1,4 @@
-import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, loadScreen, siteMaps, VERDICT_COLORS, fmt } from "./common.js";
+import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, loadScreen, siteMaps, VERDICT_COLORS, fmt, siteCell, filterSites, siteLabel, siteHTML } from "./common.js";
 
 header("ts.html");
 const runs = await loadJSON("data/ts_runs.json");
@@ -27,13 +27,13 @@ async function draw() {
   const run = runSel.value, metric = metricSel.value;
   setParams({ run, metric });
   const d = await loadJSON(`data/ts/${run}.json`);
-  const q = d.quality || [];
+  const q = filterSites(d.quality || []);
   const selected = (d.methods_selected || []).map((r) => r.column ?? Object.values(r)[0]);
   document.getElementById("selected").innerHTML = selected.length
     ? `<div class="note"><b>Carried forward to the fits (${selected.length}):</b> ${selected.map((c) => `<code>${c}</code>`).join(" ")}</div>` : "";
 
   // top counts per estimator and metric
-  const rk = d.ranking || [];
+  const rk = filterSites(d.ranking || []);
   const metrics = [...new Set(rk.map((r) => r.metric))];
   const cols = [...new Set(rk.map((r) => r.column))];
   Plotly.newPlot("tops", metrics.map((m) => ({ type: "bar", name: m, x: cols,
@@ -54,13 +54,13 @@ async function draw() {
     zmin: kind === "diverging" ? -vmax : undefined, zmax: kind === "diverging" ? vmax : undefined,
     colorbar: { title: { text: METRICS[metric][0] }, thickness: 12 } }],
   baseLayout({ margin: { l: 80, r: 20, t: 20, b: 140 }, xaxis: { tickangle: -45, title: "soil-temperature column" },
-    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site" },
+    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site", tickvals: sites, ticktext: sites.map(siteLabel) },
     plot_bgcolor: "#e5e5e5", height: Math.max(500, sites.length * 11 + 200) }), PLOT_CONFIG);
   document.getElementById("heat").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].y}`; });
 
   const f = numberFormatter(3);
   const tcols = [
-    { title: "Site", field: "site_ID", frozen: true, formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "Site", field: "site_ID", frozen: true, formatter: siteCell },
     { title: "Column", field: "column" },
     ...Object.entries(METRICS).map(([k, [name]]) => ({ title: k, field: k, formatter: f, hozAlign: "right", headerFilter: false, headerTooltip: name })),
   ];
@@ -73,7 +73,7 @@ if (runs.length) draw();
 const screen = await loadScreen();
 if (screen) {
   const sites = await loadJSON("data/sites.json");
-  const v = screen.data.validation || [];
+  const v = filterSites(screen.data.validation || []);
   const count = (pred) => v.filter(pred).length;
   const stat = (n, k) => `<div class="stat"><div class="v">${n}</div><div class="k">${k}</div></div>`;
   document.getElementById("screenstats").innerHTML = ["GOOD", "SUSPECT", "BAD"].map((x) => stat(count((r) => r.verdict === x), `sensor ${x}`)).join("") +
@@ -84,7 +84,7 @@ if (screen) {
     category: (s) => screen.sensor.get(s.site_ID).verdict, label: "sensor", colors: VERDICT_COLORS,
     onClick: (id) => { location.href = `site.html?site=${id}#screen`; } });
   const pct = (c) => (c.getValue() === null ? "–" : `${Math.round(100 * c.getValue())}%`);
-  const link = (c) => `<a href="site.html?site=${c.getValue()}#screen">${c.getValue()}</a>`;
+  const link = (c) => siteHTML(c.getValue(), `site.html?site=${c.getValue()}#screen`);
   const verdict = (c) => `<span style="color:${VERDICT_COLORS[c.getValue()] || "#000"};font-weight:600">${c.getValue()}</span>`;
   table("screentable", v, [
     { title: "Site", field: "site_ID", formatter: link, frozen: true },
@@ -100,7 +100,7 @@ if (screen) {
     { title: "years removed", field: "year_removed" },
     { title: "manuscript corrected", field: "manuscript_acted", formatter: "tickCross", headerFilter: "tickCross" },
   ], { height: "520px" });
-  table("windowstable", screen.data.windows || [], [
+  table("windowstable", filterSites(screen.data.windows || []), [
     { title: "Site", field: "site_ID", formatter: link },
     { title: "column", field: "column" },
     { title: "start", field: "start" },

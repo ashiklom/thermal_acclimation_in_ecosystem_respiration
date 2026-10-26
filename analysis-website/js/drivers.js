@@ -1,7 +1,12 @@
-import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, fmt } from "./common.js";
+import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, fmt, siteCell, filterSites, siteSymbol, siteLabel, includeNew } from "./common.js";
 
 header("drivers.html");
 const index = await loadJSON("data/drivers.json");
+const byId = new Map(index.map((e) => [e.id, e]));
+// with the added sites excluded, an analysis over all sites is shown by its
+// counterpart run over the manuscript's sites (same code and data; the
+// forests refitted without the added sites)
+const resolve = (id) => (!includeNew() && byId.get(id)?.original_sites_id) || id;
 const cache = {};
 const get = async (id) => (cache[id] ??= await loadJSON(`data/drivers/${id}.json`));
 for (const id of ["a", "b"]) for (const e of index) document.getElementById(id).insertAdjacentHTML("beforeend", `<option value="${e.id}">${e.label}</option>`);
@@ -20,7 +25,13 @@ const mean = (v) => { const x = v.filter((y) => y !== null && Number.isFinite(y)
 async function draw() {
   const a = document.getElementById("a").value, b = document.getElementById("b").value, trs = document.getElementById("trs").value;
   setParams({ a, b, trs });
-  const [A, B] = [await get(a), await get(b)];
+  const [ra, rb] = [resolve(a), resolve(b)];
+  const [A, B] = [await get(ra), await get(rb)];
+  for (const T of [A, B]) T.future = filterSites(T.future || []);
+  const swapped = [[a, ra], [b, rb]].filter(([x, y]) => x !== y);
+  document.getElementById("swapnote").innerHTML = swapped.length
+    ? `<div class="note">Added sites excluded: showing ${swapped.map(([x, y]) => `<b>${byId.get(y)?.label ?? y}</b> for ${byId.get(x)?.label ?? x}`).join("; ")} (the manuscript's sites only).</div>`
+    : (!includeNew() && [A, B].some((T) => T.future.length < (T.n_future ?? 0)) ? `<div class="note">Added sites excluded from the figures; this analysis has no run over the manuscript's sites only, so its forests include them.</div>` : "");
   const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
   const pct = (x) => (x === null ? "–" : `${(100 * x).toFixed(2)}%`);
   document.getElementById("stats").innerHTML = [
@@ -43,8 +54,8 @@ async function draw() {
   const lim = Math.max(...both.flatMap((r) => [Math.abs(r.ref ?? 0), Math.abs(r.new ?? 0)])) * 1.1 || 0.1;
   Plotly.newPlot("future", [
     { type: "scatter", mode: "lines", x: [-lim, lim], y: [-lim, lim], line: { dash: "dash", color: "#666" }, showlegend: false, hoverinfo: "skip" },
-    { type: "scatter", mode: "markers", x: both.map((r) => r.ref), y: both.map((r) => r.new), text: both.map((r) => `${r.site_ID}<br>ref ${pct(r.ref)}<br>new ${pct(r.new)}`), hoverinfo: "text",
-      customdata: both.map((r) => r.site_ID), marker: { size: 8, color: "#0969da" }, showlegend: false },
+    { type: "scatter", mode: "markers", x: both.map((r) => r.ref), y: both.map((r) => r.new), text: both.map((r) => `${siteLabel(r.site_ID)}<br>ref ${pct(r.ref)}<br>new ${pct(r.new)}`), hoverinfo: "text",
+      customdata: both.map((r) => r.site_ID), marker: { size: 8, color: "#0969da", symbol: both.map((r) => siteSymbol(r.site_ID)) }, showlegend: false },
   ], baseLayout({ title: { text: "Future nighttime respiration increase, with total TAS", font: { size: 13 } },
     xaxis: { title: "increase with total TAS, reference", tickformat: ".0%" },
     yaxis: { title: "increase with total TAS, analysis", tickformat: ".0%" } }), PLOT_CONFIG);
@@ -69,7 +80,7 @@ async function draw() {
 
   const f = numberFormatter(4);
   const cols = [
-    { title: "Site", field: "site_ID", formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "Site", field: "site_ID", formatter: siteCell },
     { title: "TAS_tot ref", field: "TAS_ref", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "TAS_tot", field: "TAS_new", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "soil Tmin change, GS (°C)", field: "TSmin_c_gs", formatter: numberFormatter(2), hozAlign: "right", headerFilter: false },

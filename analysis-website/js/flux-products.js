@@ -1,4 +1,4 @@
-import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter } from "./common.js";
+import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, siteCell } from "./common.js";
 
 header("flux-products.html");
 const data = await loadJSON("data/flux_products.json");
@@ -81,7 +81,7 @@ function drawTable() {
     { title: "show", field: "site_ID", headerSort: false, headerFilter: false, hozAlign: "center", width: 60,
       formatter: (c) => `<input type="radio" name="flux-site" ${c.getValue() === picked ? "checked" : ""}>`,
       cellClick: (e, c) => pick(c.getValue()) },
-    { title: "Site", field: "site_ID", formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "Site", field: "site_ID", formatter: siteCell },
     { title: "network", field: "network" },
     { title: "reference", field: "reference_product" },
     { title: "shuttle product", field: "shuttle_file" },

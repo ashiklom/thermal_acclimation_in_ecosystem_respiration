@@ -1,4 +1,4 @@
-import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, tasClass, fmt, loadScreen, VERDICT_COLORS } from "./common.js";
+import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, tasClass, fmt, loadScreen, VERDICT_COLORS, siteCell, filterSites, siteSymbol, siteLabel, siteHTML } from "./common.js";
 
 header("matrix.html");
 const runs = await loadJSON("data/ts_runs.json");
@@ -37,7 +37,7 @@ async function draw() {
   const sensor = document.getElementById("sensor").value;
   setParams({ run, model, ref, sensor });
   const keep = (s) => sensor === "all" || (sensor === "notBAD" ? verdictOf(s) !== "BAD" : verdictOf(s) === sensor);
-  const sites = [...new Set(rows.map((r) => r.site_ID))].filter(keep).sort();
+  const sites = filterSites([...new Set(rows.map((r) => r.site_ID))].filter(keep).sort());
   const get = new Map(rows.map((r) => [`${r.site_ID}|${r.column}`, r]));
   const cls = (r) => (r ? tasClass(r.TAS, r.TASp) : "NA");
 
@@ -72,7 +72,7 @@ async function draw() {
     stat(both, "sites significantly + under one column and − under another")].join("");
   const flipSites = siteRows.filter((r) => r.flips.length);
   document.getElementById("interpretation").innerHTML = flipSites.length
-    ? `<div class="note"><span class="flip">Significant sign flips against ${ref}:</span> ${flipSites.map((r) => `<a href="site.html?site=${r.site_ID}">${r.site_ID}</a> (${r.flips.join(", ")})`).join("; ")}</div>` : "";
+    ? `<div class="note"><span class="flip">Significant sign flips against ${ref}:</span> ${flipSites.map((r) => `${siteHTML(r.site_ID)} (${r.flips.join(", ")})`).join("; ")}</div>` : "";
 
   // heatmap
   const order = siteRows.map((r) => r.site_ID);
@@ -91,7 +91,7 @@ async function draw() {
     { type: "scatter", mode: "text", x: marks.x, y: marks.y, text: marks.text, textfont: { size: 9, color: "#111" }, hoverinfo: "skip", showlegend: false },
     { type: "scatter", mode: "markers", x: flipsXY.x, y: flipsXY.y, marker: { symbol: "square-open", size: 14, color: "#d1242f", line: { width: 2 } }, hoverinfo: "skip", showlegend: false },
   ], baseLayout({ margin: { l: 80, r: 20, t: 20, b: 150 }, xaxis: { tickangle: -45, title: "soil-temperature column" },
-    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site" },
+    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site", tickvals: order, ticktext: order.map(siteLabel) },
     plot_bgcolor: "#e5e5e5", height: Math.max(450, order.length * 12 + 220) }), PLOT_CONFIG);
   document.getElementById("heat").on("plotly_click", (e) => { if (e.points[0].y) location.href = `site.html?site=${e.points[0].y}`; });
 
@@ -106,16 +106,17 @@ async function draw() {
     const isFlip = ([a, b]) => { const x = cls(a), y = cls(b); return (x === "sig-" && y === "sig+") || (x === "sig+" && y === "sig-"); };
     Plotly.newPlot(`pair-${c}`, [
       { type: "scatter", mode: "lines", x: [-lim, lim], y: [-lim, lim], line: { dash: "dash", color: "#999" }, hoverinfo: "skip", showlegend: false },
-      { type: "scatter", mode: "markers", x: pts.map(([a]) => a.TAS), y: pts.map(([, b]) => b.TAS), text: pts.map(([a, b, s]) => `${s}<br>${ref} ${fmt(a.TAS)} (${cls(a)})<br>${c} ${fmt(b.TAS)} (${cls(b)})`),
+      { type: "scatter", mode: "markers", x: pts.map(([a]) => a.TAS), y: pts.map(([, b]) => b.TAS), text: pts.map(([a, b, s]) => `${siteLabel(s)}<br>${ref} ${fmt(a.TAS)} (${cls(a)})<br>${c} ${fmt(b.TAS)} (${cls(b)})`),
         hoverinfo: "text", customdata: pts.map(([, , s]) => s),
-        marker: { size: pts.map((x) => (isFlip(x) ? 11 : 7)), color: pts.map((x) => (isFlip(x) ? "#d1242f" : "#0969da")), line: { width: 0.5, color: "#333" } }, showlegend: false },
+        marker: { size: pts.map((x) => (isFlip(x) ? 11 : 7)), color: pts.map((x) => (isFlip(x) ? "#d1242f" : "#0969da")), symbol: pts.map(([, , s]) => siteSymbol(s)),
+          line: { width: 0.5, color: "#333" } }, showlegend: false },
     ], baseLayout({ title: { text: c, font: { size: 12 } }, xaxis: { title: `TAS (°C⁻¹), ${ref}`, range: [-lim, lim] }, yaxis: { title: `TAS (°C⁻¹), ${c}`, range: [-lim, lim] }, margin: { l: 55, r: 10, t: 30, b: 40 } }), PLOT_CONFIG);
     document.getElementById(`pair-${c}`).on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
   }
 
   const f = numberFormatter(4);
   const cols = [
-    { title: "Site", field: "site_ID", formatter: (c) => `<a href="site.html?site=${c.getValue()}">${c.getValue()}</a>` },
+    { title: "Site", field: "site_ID", formatter: siteCell },
     { title: "sensor", field: "sensor", formatter: (c) => `<span style="color:${VERDICT_COLORS[c.getValue()] || "#000"};font-weight:600">${c.getValue()}</span>` },
     { title: `TAS (${ref})`, field: "ref_TAS", formatter: f, hozAlign: "right", headerFilter: false },
     { title: "class", field: "ref_class" },

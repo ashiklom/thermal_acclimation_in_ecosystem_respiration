@@ -58,3 +58,8 @@ header nav a { white-space: nowrap; }
 main.docs mtd { text-align: left; padding: 0.15em 0.2em; }
 main.docs mtr > mtd:first-child { text-align: right; }
 td.best .small { color: #fff; }
+
+/* sites added after the manuscript (common.js) */
+sup.newsite { color: var(--accent); font-weight: 700; margin-left: 1px; }
+header .newtoggle { margin-left: auto; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+p.footnote { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
