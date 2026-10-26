@@ -309,6 +309,9 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   } else {
     tmp <- NEE_yearly |> dplyr::filter(.data$NEE < max(min(NEE_yearly$NEE, na.rm=T) * 0.2, -0.8))
   }
+  if (nrow(tmp) < 7) {
+    stop(name_site, ": only ", nrow(tmp), " days of year with NEE uptake (the growing season needs 7)", call. = FALSE)
+  }
 
   gEnd   <- as.integer(mean(tmp$DOY[(nrow(tmp)-6)])) + 4
   if (!is.na(site$gEnd)) {
@@ -345,6 +348,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   )
   if (!is.null(filled) && nrow(filled)) ts_params$filled <- filled
   if (nee_cut) ts_params$nee_column <- "NEE_CUT_REF"
+  if (!"TS_F_MDS_1" %in% names(a)) stop(name_site, ": the record has no soil temperature (TS_F_MDS_1)", call. = FALSE)
   ts_ok <- a$TS_F_MDS_1_QC %in% c(0, 1, 2)
   out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, ts_ok)
   list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)
