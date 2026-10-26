@@ -71,6 +71,7 @@ requests = "*"
 r-dependencies = { cmd = "Rscript scripts/install-r-deps.R", description = "Install R packages that are not on conda-forge" }
 check-deps = { cmd = "Rscript scripts/check-deps.R", description = "Load every R package the workflow needs" }
 targets = { cmd = "Rscript -e 'targets::tar_make()'", description = "Run the targets pipeline (steps 01-02); see _targets.R" }
+results-publish = { cmd = "bash scripts/publish-results.sh", description = "Publish results/<id>/ snapshots as GitHub releases tied to their stage tags (arguments: snapshot ids; default all)" }
 
 # ---------------------------------------------------------------- website env
 # Kept separate so the analysis environment stays lean.
