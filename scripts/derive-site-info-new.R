@@ -11,8 +11,8 @@
 #
 # Both gain
 #   - season_wrap: TRUE where the growing season spans New Year, so that
-#     step 01 counts the days from 1 July (the manuscript's AU-Tum, ZA-Kru,
-#     BR-Sa1; added sites south of 10 S); FALSE elsewhere
+#     step 01 counts the days from 1 July (the manuscript's AU-Tum and ZA-Kru;
+#     added sites south of 10 S); FALSE elsewhere
 #   - added: the date a site was added ("" for the manuscript's sites)
 # The added sites' Koppen classes take the manuscript's spelling (Bsk, not
 # BSk), and a MAP of 0 (no value) becomes NA.
@@ -41,7 +41,9 @@ shuttle <- read_table(shuttle_list)
 stopifnot(identical(published$site_ID, latest$site_ID), identical(names(published), names(latest)),
           identical(names(shuttle), names(published)))
 
-wrapped <- c("AU-Tum", "ZA-Kru", "BR-Sa1")  # the manuscript's (step 01)
+# the manuscript's (step 01); its list's BR-Sa1 is an AmeriFlux site, which
+# the original scripts did not wrap
+wrapped <- c("AU-Tum", "ZA-Kru")
 manuscript_columns <- function(x) {
   x$season_wrap <- x$site_ID %in% wrapped
   x$added <- ""

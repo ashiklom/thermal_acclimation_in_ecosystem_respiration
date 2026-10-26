@@ -263,9 +263,11 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
     a$SWC_F_MDS_1_QC[!is.na(a$SWC_Mean)] <- 1
   }
 
-  # Southern Hemisphere, so we need to change DOY values
+  # Southern Hemisphere, so we need to change DOY values (the site table's
+  # season_wrap: the growing season spans New Year)
   southern_hemisphere = FALSE
-  if (name_site %in% c('AU-Tum', 'ZA-Kru', "BR-Sa1")) {
+  if (!isTRUE(site$season_wrap) && !isFALSE(site$season_wrap)) stop(name_site, ": season_wrap must be TRUE or FALSE", call. = FALSE)
+  if (site$season_wrap) {
     a$DOY[a$DOY < 183] <- a$DOY[a$DOY < 183] + 366
     southern_hemisphere = TRUE
   }
@@ -411,8 +413,9 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 
   # day of year is never shifted for AmeriFlux sites: the original script's
   # list of sites whose growing season wraps the year end was empty here
-  # (prep_site_euroflux() shifts AU-Tum and ZA-Kru; its list's BR-Sa1 is an
-  # AmeriFlux site, so is not shifted either, as in the original scripts)
+  # (prep_site_euroflux() shifted AU-Tum and ZA-Kru; its list's BR-Sa1 is an
+  # AmeriFlux site, so was not shifted either, as in the original scripts)
+  if (!isFALSE(site$season_wrap)) stop(name_site, ": season_wrap must be FALSE at AmeriFlux BASE sites (not implemented)", call. = FALSE)
   southern_hemisphere = FALSE
 
   # create ancillary df
