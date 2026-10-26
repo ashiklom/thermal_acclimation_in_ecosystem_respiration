@@ -25,13 +25,26 @@
 #                         NETRAD_PI_F, NETRAD_1_1_1, NETRAD_PI_F_1_1_1, and any
 #                         other NETRAD_* column
 #
-# Usage (from the repository root): Rscript scripts/derive-ts-sensor-settings.R
+# Sites of the site table (default data/site_info_new.csv) without a row in
+# data/site_settings.csv (sites added later) get one, with the settings of a
+# site without the manuscript's corrections: ts_regression "none",
+# trim_last_growing_year = season_wrap (the wrapped season's last, incomplete
+# year, as at AU-Tum and ZA-Kru), tstart_floor 0; the rows already there are
+# left as they are. --all derives the four columns above for every site of the
+# table instead (the manuscript's sites: --site-info=data/site_info.csv).
+#
+# Usage (from the repository root):
+#   Rscript scripts/derive-ts-sensor-settings.R [--site-info=FILE] [--all]
 
 source(file.path("R", "paths.R"))
 source(file.path("R", "read-raw.R"))
 
-site_info <- utils::read.csv(file.path("data", "site_info.csv"))
+args <- commandArgs(trailingOnly = TRUE)
+hit <- grep("^--site-info=", args, value = TRUE)
+site_info <- utils::read.csv(if (length(hit)) sub("^--site-info=", "", hit) else file.path("data", "site_info_new.csv"))
 settings <- utils::read.csv(file.path("data", "site_settings.csv"))
+all_sites <- "--all" %in% args
+derive_sites <- if (all_sites) site_info$site_ID else setdiff(site_info$site_ID, settings$site_ID)
 
 raw_columns <- function(site) {
   if (site$source == "AmeriFlux_BASE") {
@@ -54,7 +67,7 @@ manuscript_netrad <- c("US-Los" = "NETRAD_1_1_1", "US-Ced" = "NETRAD_1_1_1", "US
                        "CA-Man" = "NETRAD", "US-Ho1" = "NETRAD_2_1_1")
 first_year <- c("FI-Sod" = 2006, "FR-Bil" = 2021, "FR-Pue" = 2016)
 
-derived <- do.call(rbind, lapply(site_info$site_ID, function(s) {
+derived <- do.call(rbind, lapply(derive_sites, function(s) {
   site <- site_info[site_info$site_ID == s, ]
   cols <- raw_columns(site)
   if (site$source == "AmeriFlux_BASE") {
@@ -87,9 +100,16 @@ derived <- do.call(rbind, lapply(site_info$site_ID, function(s) {
              netrad = netrad)
 }))
 
-settings <- settings[, setdiff(names(settings), c("ts_sensor", "ts_sensor_truth", "ts_sensor_first_year", "netrad"))]
-settings <- merge(settings, derived, by = "site_ID", sort = FALSE)
-settings <- settings[match(site_info$site_ID, settings$site_ID), ]
+if (all_sites) {
+  settings <- settings[, setdiff(names(settings), c("ts_sensor", "ts_sensor_truth", "ts_sensor_first_year", "netrad"))]
+  settings <- merge(settings, derived, by = "site_ID", sort = FALSE)
+  settings <- settings[match(site_info$site_ID, settings$site_ID), ]
+} else if (length(derive_sites)) {
+  wrap <- site_info$season_wrap[match(derived$site_ID, site_info$site_ID)]
+  added <- data.frame(site_ID = derived$site_ID, ts_regression = "none", trim_last_growing_year = wrap, tstart_floor = 0L)
+  settings <- rbind(settings, merge(added, derived, by = "site_ID", sort = FALSE)[, names(settings)])
+  message(length(derive_sites), " sites added: ", paste(derive_sites, collapse = ", "))
+}
 utils::write.csv(settings, file.path("data", "site_settings.csv"), row.names = FALSE)
 message("sites without a soil-temperature sensor: ", paste(settings$site_ID[settings$ts_sensor == ""], collapse = ", "))
 message("sites without its real readings: ", paste(settings$site_ID[settings$ts_sensor_truth == ""], collapse = ", "))
