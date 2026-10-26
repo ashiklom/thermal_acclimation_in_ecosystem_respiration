@@ -209,6 +209,15 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   filled <- attr(a, "filled")
   # -9999 means missing information.
   a[a==-9999] <- NA
+  # products with only the constant-u* (CUT) NEE (e.g. TERN's ONEFlux runs):
+  # NEE and daytime GPP from that
+  nee_cut <- !"NEE_VUT_REF" %in% names(a)
+  if (nee_cut) {
+    if (!"NEE_CUT_REF" %in% names(a)) stop(name_site, ": the record has neither NEE_VUT_REF nor NEE_CUT_REF", call. = FALSE)
+    a$NEE_VUT_REF <- a$NEE_CUT_REF
+    a$NEE_VUT_REF_QC <- a$NEE_CUT_REF_QC
+    a$GPP_DT_VUT_REF <- a$GPP_DT_CUT_REF
+  }
 
   # add more columns
   dt <- lubridate::ymd_hm(a$TIMESTAMP_START[2]) - lubridate::ymd_hm(a$TIMESTAMP_START[1])
@@ -335,6 +344,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
     years_removed = years2remove
   )
   if (!is.null(filled) && nrow(filled)) ts_params$filled <- filled
+  if (nee_cut) ts_params$nee_column <- "NEE_CUT_REF"
   ts_ok <- a$TS_F_MDS_1_QC %in% c(0, 1, 2)
   out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, ts_ok)
   list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)
