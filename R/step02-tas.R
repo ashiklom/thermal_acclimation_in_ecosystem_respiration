@@ -109,9 +109,11 @@ tas_fit_settings <- function(profile = Sys.getenv("TAS_FIT_PROFILE", "full")) {
 #' water: US-Uaf; TS ~ TA regression, TS >= 2 floor and ERA5 soil water: US-GLE; estimated soil
 #' temperature and TS >= 2 floor: CH-Dav; TS ~ TA regression and the NEE < 0 season rule:
 #' DE-RuC; the night-data regression domain: US-Tw1; random-forest soil temperature and PI soil
-#' water: FR-Pue).
+#' water: FR-Pue; sites added from the FLUXNET shuttle: AU-How (TERN product with only
+#' constant-u* NEE, wrapped season), JP-Fhk (an Asian ICOS-hub product), US-Seg (dryland: few
+#' NEE-uptake days), CH-Oe1 (measured soil water)).
 #' @noRd
-DEV_SITES <- c("AU-Tum", "US-Uaf", "US-GLE", "CH-Dav", "DE-RuC", "US-Tw1", "FR-Pue")
+DEV_SITES <- c("AU-Tum", "US-Uaf", "US-GLE", "CH-Dav", "DE-RuC", "US-Tw1", "FR-Pue", "AU-How", "JP-Fhk", "US-Seg", "CH-Oe1")
 
 #' Reproducible seed of one fit
 #'

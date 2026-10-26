@@ -3,7 +3,11 @@
 # workers on this machine; on YCRC Bouchet: Slurm jobs, see submit.sh).
 #
 # Environment variables:
-#   TAS_SITES        "all" (default), "dev" (DEV_SITES in R/step02-tas.R), or
+#   THERMAL_SITE_INFO  the site table to run on (scripts/derive-site-info-new.R):
+#                    data/site_info_new.csv (default) or, with
+#                    TAR_PROJECT=original, data/site_info_original.csv
+#   TAS_SITES        "all" (default), "original" (the manuscript's sites: an
+#                    empty `added`), "dev" (DEV_SITES in R/step02-tas.R), or
 #                    a comma-separated list of site IDs
 #   TAS_FIT_PROFILE  "full" (default; the published sampler settings) or
 #                    "fast" (only checks that everything runs)
@@ -44,11 +48,15 @@ tar_option_set(
 data_version <- if (Sys.getenv("TAR_PROJECT") == "original") "published" else "update"
 era5_offset_correction <- Sys.getenv("TAR_PROJECT") != "era5_nearest"
 
-all_sites <- utils::read.csv(file.path("data", "site_info.csv"))$site_ID
+site_info_path <- Sys.getenv("THERMAL_SITE_INFO",
+                             file.path("data", if (data_version == "update") "site_info_new.csv" else "site_info_original.csv"))
+all_site_info <- read_site_info(site_info_path)
+all_sites <- all_site_info$site_ID
 selected <- Sys.getenv("TAS_SITES", "all")
 pipeline_sites <- switch(selected,
   all = all_sites,
-  dev = DEV_SITES,
+  original = all_sites[all_site_info$added == ""],
+  dev = intersect(DEV_SITES, all_sites),
   strsplit(selected, ",")[[1]]
 )
 stopifnot(all(pipeline_sites %in% all_sites))
@@ -58,8 +66,8 @@ site_values <- data.frame(
 )
 
 inputs <- list(
-  tar_target(site_info_file, file.path("data", if (data_version == "update") "site_info_update.csv" else "site_info.csv"), format = "file"),
-  tar_target(site_info, utils::read.csv(site_info_file)),
+  tar_target(site_info_file, site_info_path, format = "file"),
+  tar_target(site_info, read_site_info(site_info_file)),
   tar_target(site_settings_file, file.path("data", "site_settings.csv"), format = "file"),
   tar_target(site_settings, read_site_settings(site_settings_file)),
   tar_target(coordinates_file, file.path("data", "ameriflux_coordinates.csv"), format = "file"),

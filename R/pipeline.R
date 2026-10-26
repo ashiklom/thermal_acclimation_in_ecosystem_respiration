@@ -1,5 +1,29 @@
 # Helpers for the targets pipeline (_targets.R).
 
+#' Read the site table the pipeline runs on
+#'
+#' The site table (THERMAL_SITE_INFO; scripts/derive-site-info-new.R writes them): one row per
+#' site, with every column step 01 reads, `season_wrap` (TRUE/FALSE: whether the growing season
+#' spans New Year) and `added` (the date a site was added; empty for the manuscript's sites).
+#' Stops if a site lacks either or a site is listed twice.
+#'
+#' @param path Path of the site table.
+#' @return The table, as utils::read.csv() reads it.
+#' @noRd
+read_site_info <- function(path) {
+  site_info <- utils::read.csv(path)
+  for (col in c("season_wrap", "added")) {
+    if (!col %in% names(site_info)) stop(path, ": no column `", col, "` (scripts/derive-site-info-new.R)", call. = FALSE)
+  }
+  bad <- site_info$site_ID[!is.logical(site_info$season_wrap) | is.na(site_info$season_wrap)]
+  if (!is.logical(site_info$season_wrap)) bad <- site_info$site_ID
+  if (length(bad)) stop(path, ": season_wrap must be TRUE or FALSE; not at ", paste(bad, collapse = ", "), call. = FALSE)
+  dup <- unique(site_info$site_ID[duplicated(site_info$site_ID)])
+  if (length(dup)) stop(path, ": sites listed twice: ", paste(dup, collapse = ", "), call. = FALSE)
+  site_info$added[is.na(site_info$added)] <- ""
+  site_info
+}
+
 #' Raw files of a site's step-01 preparation
 #'
 #' The raw files a site's step-01 preparation reads, for file targets: its products' files, plus
