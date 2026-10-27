@@ -4,7 +4,8 @@
 # the tables as read, once with their rows and columns randomly permuted.
 # Requires identical results.
 #
-# Usage (from the repository root):
+# Usage (from the repository root; on the manuscript's data, data/site_info_original.csv,
+# so step 02 reads the original project's step-01 outputs: THERMAL_DATA_PROC=data-proc-original):
 #   Rscript tests/test-shuffle.R [--steps=01,02] [--sites01=FI-Sod,US-Jo2] [--sites02=AU-Tum,US-Tw1]
 
 source(file.path("R", "paths.R"))
@@ -30,7 +31,7 @@ shuffle <- function(x) {
   x
 }
 
-site_info <- utils::read.csv(file.path("data", "site_info.csv"))
+site_info <- utils::read.csv(file.path("data", "site_info_original.csv"))
 n_bad <- 0
 # Row names are not data (the CSV outputs never include them).
 drop_rownames <- function(x) {

@@ -3,7 +3,8 @@
 # and direct models for two sites with different data and prior means, and
 # requires identical code.
 #
-# Usage (from the repository root, with step-01 outputs in data-proc/):
+# Usage (from the repository root, with step-01 outputs of two dev sites (DEV_SITES) in
+# data-proc/, or THERMAL_DATA_PROC):
 #   Rscript tests/test-stan-code.R
 
 source(file.path("R", "paths.R"))
@@ -29,7 +30,7 @@ models <- list(
   )
 )
 set.seed(1)
-datasets <- list(site_data("US-Kon"), site_data("DE-Hai")[1:500, ])
+datasets <- list(site_data("US-Tw1"), site_data("AU-Tum")[1:500, ])
 values <- list(prior_defaults, prior_defaults * c(1.3, 1, 0.7, 1, 1.1, 1, 2, 1, 0.4, 1))
 
 for (model in names(models)) {
