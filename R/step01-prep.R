@@ -177,6 +177,22 @@ estimate_ts_site <- function(site, base_dir = path_original("SiteData")) {
   data
 }
 
+#' Stop where no growing year passes the gap screen
+#'
+#' Step 01 without a growing year has nothing to fit (e.g. FI-Var, whose growing season lies in
+#' polar day: its nighttime records have gaps longer than ts_good_years() allows).
+#'
+#' @param out ts_column_tables()'s result for the site's soil temperature.
+#' @param name_site Site ID.
+#' @noRd
+check_good_years <- function(out, name_site) {
+  if (out$feature$nyear == 0) {
+    stop(name_site, ": no growing year passes the gap screen (ts_good_years(): nighttime records with ",
+         "usable soil temperature have too long gaps in the growing season, DOY ", out$feature$gStart, "-",
+         out$feature$gEnd, ")", call. = FALSE)
+  }
+}
+
 #' Prepare a FLUXNET-format site's step-01 tables (01_02a)
 #'
 #' The per-site body of 01_02a (FLUXNET/ICOS sites). Reads and combines the site's record and
@@ -351,6 +367,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   if (!"TS_F_MDS_1" %in% names(a)) stop(name_site, ": the record has no soil temperature (TS_F_MDS_1)", call. = FALSE)
   ts_ok <- a$TS_F_MDS_1_QC %in% c(0, 1, 2)
   out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, ts_ok)
+  check_good_years(out, name_site)
   list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)
 }
 
@@ -727,6 +744,7 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
   )
   ts_ok <- !is.na(ac$TS)
   out <- ts_column_tables(ts_base, ts_params, ac$TS, ts_ok)
+  check_good_years(out, name_site)
   list(ac = out$ac, night = out$night, feature = out$feature, climatology = out$climatology, ts_base = ts_base, ts_params = ts_params, ts_ok = ts_ok)
 }
 
