@@ -14,6 +14,10 @@
 #     step 01 counts the days from 1 July (the manuscript's AU-Tum and ZA-Kru;
 #     added sites south of 10 S); FALSE elsewhere
 #   - added: the date a site was added ("" for the manuscript's sites)
+# and every FLUXNET-format site (not AmeriFlux BASE) gets its NEE column, which
+# step 01 reads (prep_site_euroflux()): NEE_VUT_REF where one of its products has
+# it (read_fluxnet_record() combines their columns), else NEE_CUT_REF (e.g.
+# TERN's ONEFlux runs).
 # The added sites' Koppen classes take the manuscript's spelling (Bsk, not
 # BSk), and a MAP of 0 (no value) becomes NA.
 #
@@ -47,6 +51,21 @@ wrapped <- c("AU-Tum", "ZA-Kru")
 manuscript_columns <- function(x) {
   x$season_wrap <- x$site_ID %in% wrapped
   x$added <- ""
+  x
+}
+
+fluxnet_nee <- function(site_id, source) {
+  header <- unlist(lapply(source_products(source), function(product) {
+    names(utils::read.csv(raw_product_file(site_id, product), nrows = 1, check.names = FALSE))
+  }))
+  nee <- intersect(c("NEE_VUT_REF", "NEE_CUT_REF"), header)
+  if (!length(nee)) stop(site_id, ": none of its products has NEE_VUT_REF or NEE_CUT_REF")
+  nee[1]
+}
+with_nee <- function(x, skip = character()) {
+  fluxnet <- which(x$source != "AmeriFlux_BASE" & !x$site_ID %in% skip)
+  stopifnot(all(is.na(x$NEE[fluxnet]) | x$NEE[fluxnet] == ""))
+  x$NEE[fluxnet] <- mapply(fluxnet_nee, x$site_ID[fluxnet], x$source[fluxnet])
   x
 }
 
@@ -108,9 +127,9 @@ new <- new[keep, ]
 if (length(not_downloaded)) message(length(not_downloaded), " added sites not downloaded yet (unchecked): ",
                                     paste(not_downloaded, collapse = " "))
 
-site_info_new <- rbind(manuscript_columns(latest), new)
+site_info_new <- with_nee(rbind(manuscript_columns(latest), new), skip = not_downloaded)
 utils::write.csv(site_info_new, file.path("data", "site_info_new.csv"), row.names = FALSE)
-utils::write.csv(manuscript_columns(published), file.path("data", "site_info_original.csv"), row.names = FALSE)
+utils::write.csv(with_nee(manuscript_columns(published)), file.path("data", "site_info_original.csv"), row.names = FALSE)
 utils::write.csv(excluded, file.path("data", "site_info_excluded.csv"), row.names = FALSE)
 utils::write.csv(overrides, file.path("data", "site_info_overrides.csv"), row.names = FALSE)
 message(nrow(site_info_new), " sites (", nrow(new), " added, ", sum(new$season_wrap), " of them wrapped); ",

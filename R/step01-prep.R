@@ -177,6 +177,25 @@ estimate_ts_site <- function(site, base_dir = path_original("SiteData")) {
   data
 }
 
+#' The NEE columns the site table names, checked against the record
+#'
+#' Stops, naming the site, where the site table's NEE is empty, or one of its columns (the terms
+#' of an AmeriFlux expression such as "FC + SC") is absent from the record or all missing.
+#'
+#' @param site The site's row of the site table.
+#' @param a The site's record, with -9999 already NA.
+#' @return The column names.
+#' @noRd
+check_nee_columns <- function(site, a) {
+  if (is.na(site$NEE) || trimws(site$NEE) == "") stop(site$site_ID, ": the site table names no NEE column", call. = FALSE)
+  columns <- trimws(unlist(strsplit(site$NEE, "\\+")))
+  absent <- setdiff(columns, names(a))
+  if (length(absent)) stop(site$site_ID, ": the record has no ", paste(absent, collapse = ", "), " (site table NEE: ", site$NEE, ")", call. = FALSE)
+  empty <- columns[vapply(columns, function(v) all(is.na(a[[v]])), logical(1))]
+  if (length(empty)) stop(site$site_ID, ": ", paste(empty, collapse = ", "), " is all missing (site table NEE: ", site$NEE, ")", call. = FALSE)
+  columns
+}
+
 #' Stop where no growing year passes the gap screen
 #'
 #' Step 01 without a growing year has nothing to fit (e.g. FI-Var, whose growing season lies in
@@ -225,11 +244,13 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   filled <- attr(a, "filled")
   # -9999 means missing information.
   a[a==-9999] <- NA
-  # products with only the constant-u* (CUT) NEE (e.g. TERN's ONEFlux runs):
-  # NEE and daytime GPP from that
-  nee_cut <- !"NEE_VUT_REF" %in% names(a)
+  # the NEE the site table names (scripts/derive-site-info-new.R): NEE_VUT_REF,
+  # or NEE_CUT_REF in products with only the constant-u* NEE (e.g. TERN's
+  # ONEFlux runs), whose QC and daytime GPP then come from CUT too
+  nee <- check_nee_columns(site, a)
+  stopifnot(nee %in% c("NEE_VUT_REF", "NEE_CUT_REF"))
+  nee_cut <- nee == "NEE_CUT_REF"
   if (nee_cut) {
-    if (!"NEE_CUT_REF" %in% names(a)) stop(name_site, ": the record has neither NEE_VUT_REF nor NEE_CUT_REF", call. = FALSE)
     a$NEE_VUT_REF <- a$NEE_CUT_REF
     a$NEE_VUT_REF_QC <- a$NEE_CUT_REF_QC
     a$GPP_DT_VUT_REF <- a$GPP_DT_CUT_REF
@@ -511,7 +532,7 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
     a$USTAR_A_1_1[is.na(a$USTAR_A_1_1)] <- a$USTAR_2_1_1[is.na(a$USTAR_A_1_1)]
   }
 
-  NEEvars <- trimws(unlist(strsplit(site$NEE, "\\+")))
+  NEEvars <- check_nee_columns(site, a)
   for (iNEEvar in 1:length(NEEvars)) {
     if (iNEEvar == 1) {
       ac$NEE <- a[, NEEvars[iNEEvar]]
