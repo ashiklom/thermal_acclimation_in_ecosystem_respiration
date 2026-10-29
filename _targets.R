@@ -96,8 +96,10 @@ inputs <- list(
   tar_target(gsoc_file, path_original("GSOCmap1.5.0.tif"), format = "file"),
   tar_target(modis_files, path_original(c("towers-MOD13A2-061-results.csv", "towers-MOD15A2H-061-results.csv",
                                           "towers-MYD17A2HGF-061-results.csv")), format = "file"),
-  # the added sites' MODIS (scripts/download-modis-ornl.py; none: no files)
-  tar_target(modis_added_files, sort(list.files(path_raw("modis"), "^towers-new-.*\\.csv$", full.names = TRUE)), format = "file"),
+  # the added sites' MODIS (scripts/download-modis-ornl.py; none: no files),
+  # listed on every run so that files downloaded later are picked up
+  tar_target(modis_added_files, sort(list.files(path_raw("modis"), "^towers-new-.*\\.csv$", full.names = TRUE)), format = "file",
+             cue = tar_cue(mode = "always")),
   tar_target(worldclim, download_worldclim()),
   tar_target(worldclim_files, unlist(worldclim), format = "file"),
   tar_target(published_tas_files, file.path("data", c("outcome_temp.csv", "outcome_temp_water_gpp.csv")), format = "file"),
