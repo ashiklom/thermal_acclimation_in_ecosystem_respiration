@@ -105,9 +105,11 @@ async function drawAdded(b, trs, pct) {
   const fut = All.future || [];
   const groups = { "manuscript's sites": fut.filter((r) => !isNew(r.site_ID)), "all sites": fut, "added sites": fut.filter((r) => isNew(r.site_ID)) };
   const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+  // (sites with a step-04 result: the scenario fails at some sites)
+  const n = (rows) => increase(rows, "NEE_night_mod_fa").filter((v) => v !== null && Number.isFinite(v)).length;
   document.getElementById("addedstats").innerHTML = Object.entries(groups).map(([k, rows]) =>
     stat(`${pct(mean(increase(rows, "NEE_night_mod_f")))} / ${pct(mean(increase(rows, "NEE_night_mod_fa")))}`,
-      `${k} (${rows.length}): mean future increase without / with total TAS`)).join("") +
+      `${k} (${n(rows)} with a scenario): mean future increase without / with total TAS`)).join("") +
     stat(`${pct(mean(increase(Orig.future || [], "NEE_night_mod_fa")))}`, "with total TAS, the manuscript's-sites run");
   const vi = (T) => (T.varimp || []).filter((r) => r.TRS_type === trs);
   const vars = [...new Set([...vi(Orig), ...vi(All)].map((r) => r.var))];
