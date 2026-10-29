@@ -32,9 +32,14 @@
 # year, as at AU-Tum and ZA-Kru), tstart_floor 0; the rows already there are
 # left as they are. --all derives the four columns above for every site of the
 # table instead (the manuscript's sites: --site-info=data/site_info.csv).
+# --settings=FILE writes to FILE (created with no rows where absent) instead:
+# the added sites without soil temperature (ts_sensor "") have their own,
+# data/site_settings_ta_only.csv (see scripts/derive-site-info-new.R).
 #
 # Usage (from the repository root):
-#   Rscript scripts/derive-ts-sensor-settings.R [--site-info=FILE] [--all]
+#   Rscript scripts/derive-ts-sensor-settings.R [--site-info=FILE] [--settings=FILE] [--all]
+#   Rscript scripts/derive-ts-sensor-settings.R --site-info=data/site_info_ta_only.csv \
+#     --settings=data/site_settings_ta_only.csv
 
 source(file.path("R", "paths.R"))
 source(file.path("R", "read-raw.R"))
@@ -42,7 +47,12 @@ source(file.path("R", "read-raw.R"))
 args <- commandArgs(trailingOnly = TRUE)
 hit <- grep("^--site-info=", args, value = TRUE)
 site_info <- utils::read.csv(if (length(hit)) sub("^--site-info=", "", hit) else file.path("data", "site_info_new.csv"))
+hit <- grep("^--settings=", args, value = TRUE)
+settings_path <- if (length(hit)) sub("^--settings=", "", hit) else file.path("data", "site_settings.csv")
 settings <- utils::read.csv(file.path("data", "site_settings.csv"))
+if (settings_path != file.path("data", "site_settings.csv")) {
+  settings <- if (file.exists(settings_path)) utils::read.csv(settings_path) else settings[0, ]
+}
 all_sites <- "--all" %in% args
 derive_sites <- if (all_sites) site_info$site_ID else setdiff(site_info$site_ID, settings$site_ID)
 
@@ -75,6 +85,8 @@ derived <- do.call(rbind, lapply(derive_sites, function(s) {
     if (startsWith(ts_sensor, "TA")) ts_sensor <- ""
   } else {
     ts_sensor <- if (s %in% c("CZ-Stn", "DE-Hte")) "TS_F_MDS_2" else "TS_F_MDS_1"
+    # (the added sites without soil temperature: derive-site-info-new.R)
+    if (!ts_sensor %in% cols && site_info$source[site_info$site_ID == s] == "SHUTTLE") ts_sensor <- ""
   }
   stopifnot(ts_sensor == "" || ts_sensor %in% cols)
   ts_sensor_truth <- ts_sensor
@@ -110,7 +122,7 @@ if (all_sites) {
   settings <- rbind(settings, merge(added, derived, by = "site_ID", sort = FALSE)[, names(settings)])
   message(length(derive_sites), " sites added: ", paste(derive_sites, collapse = ", "))
 }
-utils::write.csv(settings, file.path("data", "site_settings.csv"), row.names = FALSE)
+utils::write.csv(settings, settings_path, row.names = FALSE)
 message("sites without a soil-temperature sensor: ", paste(settings$site_ID[settings$ts_sensor == ""], collapse = ", "))
 message("sites without its real readings: ", paste(settings$site_ID[settings$ts_sensor_truth == ""], collapse = ", "))
 message("sites without net radiation: ", paste(settings$site_ID[settings$netrad == ""], collapse = ", "))

@@ -8,6 +8,13 @@
 #                                FLUXNET_Shuttle) with source "SHUTTLE"
 #   data/site_info_original.csv  (TAR_PROJECT=original) the manuscript's sites
 #                                and input data, data/site_info.csv
+#   data/site_info_ta_only.csv   (default project) the added sites whose
+#                                products have no soil temperature at all: run
+#                                with the air-temperature columns only
+#                                (R/ta-columns.R). A table of their own, so
+#                                that adding them leaves the site table every
+#                                existing fit depends on unchanged (merged into
+#                                site_info_new.csv with the deferred refit)
 #
 # Both gain
 #   - season_wrap: TRUE where the growing season spans New Year, so that
@@ -25,7 +32,7 @@
 # data/site_info_excluded.csv: one already in the table (CA-KLP), one the
 # shuttle catalogue does not have, and, once downloaded
 # (scripts/download-flux-update.R), one whose product lacks a column step 01
-# needs. Where an added site declares SWC_use = YES but its product has no
+# needs other than soil temperature. Where an added site declares SWC_use = YES but its product has no
 # soil water, SWC_use becomes NO (the ERA5 soil water), recorded in
 # data/site_info_overrides.csv.
 #
@@ -100,9 +107,10 @@ overrides <- data.frame(site_ID = character(), field = character(), declared = c
                         reason = character())
 manifest_path <- path_raw("flux", "download_manifest.csv")
 manifest <- if (file.exists(manifest_path)) utils::read.csv(manifest_path) else data.frame(site_ID = character(), product = character(), file = character())
-required <- c("TIMESTAMP_START", "TA_F_MDS", "TS_F_MDS_1", "TS_F_MDS_1_QC", "NIGHT", "SW_IN_F_MDS")
+required <- c("TIMESTAMP_START", "TA_F_MDS", "TA_F_MDS_QC", "NIGHT", "SW_IN_F_MDS")
 not_downloaded <- character()
 keep <- rep(TRUE, nrow(new))
+ta_only <- rep(FALSE, nrow(new))
 for (i in seq_len(nrow(new))) {
   s <- new$site_ID[i]
   if (!s %in% manifest$site_ID[manifest$product == "SHUTTLE" & !is.na(manifest$file)]) {
@@ -118,19 +126,23 @@ for (i in seq_len(nrow(new))) {
     keep[i] <- FALSE
     next
   }
+  ta_only[i] <- !all(c("TS_F_MDS_1", "TS_F_MDS_1_QC") %in% h)
   if (new$SWC_use[i] == "YES" && !"SWC_F_MDS_1" %in% h) {
     overrides[nrow(overrides) + 1, ] <- list(s, "SWC_use", "YES", "NO", "shuttle product has no SWC_F_MDS_1: ERA5 soil water")
     new$SWC_use[i] <- "NO"
   }
 }
-new <- new[keep, ]
+new_ta_only <- new[keep & ta_only, ]
+new <- new[keep & !ta_only, ]
 if (length(not_downloaded)) message(length(not_downloaded), " added sites not downloaded yet (unchecked): ",
                                     paste(not_downloaded, collapse = " "))
 
 site_info_new <- with_nee(rbind(manuscript_columns(latest), new), skip = not_downloaded)
 utils::write.csv(site_info_new, file.path("data", "site_info_new.csv"), row.names = FALSE)
 utils::write.csv(with_nee(manuscript_columns(published)), file.path("data", "site_info_original.csv"), row.names = FALSE)
+utils::write.csv(with_nee(new_ta_only), file.path("data", "site_info_ta_only.csv"), row.names = FALSE)
 utils::write.csv(excluded, file.path("data", "site_info_excluded.csv"), row.names = FALSE)
 utils::write.csv(overrides, file.path("data", "site_info_overrides.csv"), row.names = FALSE)
 message(nrow(site_info_new), " sites (", nrow(new), " added, ", sum(new$season_wrap), " of them wrapped); ",
+        nrow(new_ta_only), " added without soil temperature (", paste(new_ta_only$site_ID, collapse = " "), "); ",
         nrow(excluded), " excluded; ", nrow(overrides), " overrides")

@@ -18,10 +18,12 @@ to AppEEARS's description strings (MOD15A2H, MYD17A2HGF: bit 0; MOD13: bits
 
 Each site's download is cached (<out-dir>/cache/<product>/<site>.csv), so a
 rerun fetches only the sites not yet cached; the output files are rebuilt from
-the cache for every site of the table that the published extractions lack.
+the cache for every site of the tables that the published extractions lack
+(by default data/site_info_new.csv and, where it exists,
+data/site_info_ta_only.csv: the added sites without soil temperature).
 
 Usage (from the repository root; needs internet):
-  python scripts/download-modis-ornl.py [--site-info data/site_info_new.csv]
+  python scripts/download-modis-ornl.py [--site-info TABLE [TABLE ...]]
       [--sites A,B] [--out-dir data-raw/modis] [--workers 4]
   python scripts/download-modis-ornl.py --check US-Kon,DE-Hai,...
       fetch these published sites too and compare with the AppEEARS files
@@ -188,7 +190,8 @@ def check(tables, out_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--site-info", default="data/site_info_new.csv")
+    ap.add_argument("--site-info", nargs="+",
+                    default=[p for p in ["data/site_info_new.csv", "data/site_info_ta_only.csv"] if pathlib.Path(p).exists()])
     ap.add_argument("--sites")
     ap.add_argument("--out-dir", default="data-raw/modis")
     ap.add_argument("--workers", type=int, default=4)
@@ -196,7 +199,9 @@ def main():
     a = ap.parse_args()
     out_dir = pathlib.Path(a.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    info = pd.read_csv(a.site_info, encoding="utf-8-sig")[["site_ID", "LAT", "LONG", "IGBP"]]
+    info = pd.concat([pd.read_csv(p, encoding="utf-8-sig")[["site_ID", "LAT", "LONG", "IGBP"]] for p in a.site_info],
+                     ignore_index=True)
+    assert not info.site_ID.duplicated().any()
 
     if a.check:
         published = pd.read_csv(ORIGINAL / "site_info.csv", encoding="utf-8-sig")[["site_ID", "LAT", "LONG", "IGBP"]]
