@@ -233,8 +233,11 @@ check_good_years <- function(out, name_site) {
 #'   <the record and settings that do not depend on soil temperature, from which
 #'   ts_column_tables() makes the other four, as it does here from the site's soil
 #'   temperature>, ts_ok = <where that soil temperature is usable: quality flag 0-2>).
+#'   Without soil temperature, only ts_base and ts_params.
+#' @param soil_temperature FALSE at a site without soil temperature (data/site_info_ta_only.csv:
+#'   the air-temperature columns only, R/ta-columns.R).
 #' @noRd
-prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("SiteData")) {
+prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("SiteData"), soil_temperature = TRUE) {
   data_source <- site$source
   name_site <- site$site_ID
 
@@ -385,6 +388,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   )
   if (!is.null(filled) && nrow(filled)) ts_params$filled <- filled
   if (nee_cut) ts_params$nee_column <- "NEE_CUT_REF"
+  if (!soil_temperature) return(list(ts_base = ts_base, ts_params = ts_params))
   if (!"TS_F_MDS_1" %in% names(a)) stop(name_site, ": the record has no soil temperature (TS_F_MDS_1)", call. = FALSE)
   ts_ok <- a$TS_F_MDS_1_QC %in% c(0, 1, 2)
   out <- ts_column_tables(ts_base, ts_params, a$TS_F_MDS_1, ts_ok)
