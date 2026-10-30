@@ -22,7 +22,6 @@ Reads (paths relative to the repository root):
                                        the soil-temperature columns of a run and their quality
   results/<id>/ta_{columns_summary,outcome_*}.csv  (optional) the air-temperature columns of a
                                        run (R/ta-columns.R) and their TAS
-  data/site_info_ta_only.csv           (optional) the added sites without soil temperature
 
 Writes analysis-website/data/:
   sites.json                 one record per site
@@ -123,11 +122,8 @@ def mean_annual_temperature(site_id):
 
 def build_sites():
     info = pd.read_csv(ROOT / "data" / "site_info_new.csv", encoding="utf-8-sig")
-    info["ta_only"] = False
-    # the added sites without soil temperature: air-temperature columns only (R/ta-columns.R)
-    ta_only = ROOT / "data" / "site_info_ta_only.csv"
-    if ta_only.exists():
-        info = pd.concat([info, pd.read_csv(ta_only, encoding="utf-8-sig").assign(ta_only=True)], ignore_index=True)
+    # the sites without soil temperature: air-temperature columns only (R/ta-columns.R)
+    info["ta_only"] = ~info["soil_temperature"]
     info["added"] = info["added"].fillna("")
     keep = ["site_ID", "LAT", "LONG", "ELEV", "IGBP", "Climate_class", "MAP", "source",
             "estimate_Ts", "SWC_use", "added", "ta_only"]
@@ -139,10 +135,9 @@ def build_sites():
                               for s in sites["site_ID"]]
     excluded = ROOT / "data" / "site_info_excluded.csv"
     write_json(records(pd.read_csv(excluded)) if excluded.exists() else [], OUT / "sites_excluded.json")
-    settings = [pd.read_csv(ROOT / "data" / f) for f in ("site_settings.csv", "site_settings_ta_only.csv")
-                if (ROOT / "data" / f).exists()]
-    if settings:
-        sites = sites.merge(pd.concat(settings, ignore_index=True), on="site_ID", how="left")
+    settings_path = ROOT / "data" / "site_settings.csv"
+    if settings_path.exists():
+        sites = sites.merge(pd.read_csv(settings_path), on="site_ID", how="left")
     sites["MAT"] = [mean_annual_temperature(s) for s in sites["site_ID"]]
     write_json(records(sites), OUT / "sites.json")
     return sites

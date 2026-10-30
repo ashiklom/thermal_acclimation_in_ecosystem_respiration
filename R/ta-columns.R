@@ -3,7 +3,8 @@
 # The fit matrix (R/ts-fits.R) runs both TAS models with a "temperature"
 # column in the soil-temperature role. These columns put air temperature in
 # that role, for every site, including the added sites without soil
-# temperature (data/site_info_ta_only.csv), which have only these:
+# temperature (the site table's `soil_temperature` FALSE), which have only
+# these:
 #
 #   TA_measured  air temperature as measured, not gap-filled: FLUXNET-format
 #                sites' TA_F_MDS where TA_F_MDS_QC is 0; AmeriFlux BASE sites'
@@ -34,25 +35,6 @@
 #'
 #' @noRd
 TA_COLUMNS <- c("TA_measured", "TA_mem3d", "TA_mem7d", "TA_mem30d")
-
-#' Read the table of the sites without soil temperature
-#'
-#' read_site_info(), with each column of the type the site table has (a column that is empty
-#' throughout reads as logical; an empty text is "", as in the site table).
-#'
-#' @param path data/site_info_ta_only.csv.
-#' @param site_info The site table (the pipeline's site_info).
-#' @return The table.
-#' @noRd
-read_site_info_ta_only <- function(path, site_info) {
-  x <- read_site_info(path)
-  if (!identical(names(x), names(site_info))) stop(path, ": not the site table's columns", call. = FALSE)
-  for (col in names(x)) {
-    x[[col]] <- match.fun(paste0("as.", class(site_info[[col]])[1]))(x[[col]])
-    if (is.character(x[[col]])) x[[col]][is.na(x[[col]])] <- ""
-  }
-  x
-}
 
 #' Quality flags of a site's air temperature
 #'

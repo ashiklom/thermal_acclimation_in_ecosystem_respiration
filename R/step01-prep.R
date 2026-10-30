@@ -234,8 +234,8 @@ check_good_years <- function(out, name_site) {
 #'   ts_column_tables() makes the other four, as it does here from the site's soil
 #'   temperature>, ts_ok = <where that soil temperature is usable: quality flag 0-2>).
 #'   Without soil temperature, only ts_base and ts_params.
-#' @param soil_temperature FALSE at a site without soil temperature (data/site_info_ta_only.csv:
-#'   the air-temperature columns only, R/ta-columns.R).
+#' @param soil_temperature FALSE at a site without soil temperature (the site table's
+#'   `soil_temperature`: the air-temperature columns only, R/ta-columns.R).
 #' @noRd
 prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("SiteData"), soil_temperature = TRUE) {
   data_source <- site$source

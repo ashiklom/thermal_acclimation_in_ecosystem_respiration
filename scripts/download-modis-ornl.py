@@ -19,8 +19,7 @@ to AppEEARS's description strings (MOD15A2H, MYD17A2HGF: bit 0; MOD13: bits
 Each site's download is cached (<out-dir>/cache/<product>/<site>.csv), so a
 rerun fetches only the sites not yet cached; the output files are rebuilt from
 the cache for every site of the tables that the published extractions lack
-(by default data/site_info_new.csv and, where it exists,
-data/site_info_ta_only.csv: the added sites without soil temperature).
+(by default data/site_info_new.csv).
 
 Usage (from the repository root; needs internet):
   python scripts/download-modis-ornl.py [--site-info TABLE [TABLE ...]]
@@ -190,8 +189,7 @@ def check(tables, out_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--site-info", nargs="+",
-                    default=[p for p in ["data/site_info_new.csv", "data/site_info_ta_only.csv"] if pathlib.Path(p).exists()])
+    ap.add_argument("--site-info", nargs="+", default=["data/site_info_new.csv"])
     ap.add_argument("--sites")
     ap.add_argument("--out-dir", default="data-raw/modis")
     ap.add_argument("--workers", type=int, default=4)

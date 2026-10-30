@@ -5,22 +5,19 @@
 #                                has them, then the sites added from the
 #                                FLUXNET shuttle (../original-data/
 #                                site_info_shuttle10262026.csv, source
-#                                FLUXNET_Shuttle) with source "SHUTTLE"
+#                                FLUXNET_Shuttle) with source "SHUTTLE", those
+#                                whose products have no soil temperature last
 #   data/site_info_original.csv  (TAR_PROJECT=original) the manuscript's sites
 #                                and input data, data/site_info.csv
-#   data/site_info_ta_only.csv   (default project) the added sites whose
-#                                products have no soil temperature at all: run
-#                                with the air-temperature columns only
-#                                (R/ta-columns.R). A table of their own, so
-#                                that adding them leaves the site table every
-#                                existing fit depends on unchanged (merged into
-#                                site_info_new.csv with the deferred refit)
 #
 # Both gain
 #   - season_wrap: TRUE where the growing season spans New Year, so that
 #     step 01 counts the days from 1 July (the manuscript's AU-Tum and ZA-Kru;
 #     added sites south of 10 S); FALSE elsewhere
 #   - added: the date a site was added ("" for the manuscript's sites)
+#   - soil_temperature: FALSE where the site's products have no soil
+#     temperature at all (added sites without TS_F_MDS_1): such a site is run
+#     with the air-temperature columns only (R/ta-columns.R)
 # and every FLUXNET-format site (not AmeriFlux BASE) gets its NEE column, which
 # step 01 reads (prep_site_euroflux()): NEE_VUT_REF where one of its products has
 # it (read_fluxnet_record() combines their columns), else NEE_CUT_REF (e.g.
@@ -58,6 +55,7 @@ wrapped <- c("AU-Tum", "ZA-Kru")
 manuscript_columns <- function(x) {
   x$season_wrap <- x$site_ID %in% wrapped
   x$added <- ""
+  x$soil_temperature <- TRUE
   x
 }
 
@@ -110,7 +108,7 @@ manifest <- if (file.exists(manifest_path)) utils::read.csv(manifest_path) else 
 required <- c("TIMESTAMP_START", "TA_F_MDS", "TA_F_MDS_QC", "NIGHT", "SW_IN_F_MDS")
 not_downloaded <- character()
 keep <- rep(TRUE, nrow(new))
-ta_only <- rep(FALSE, nrow(new))
+new$soil_temperature <- TRUE
 for (i in seq_len(nrow(new))) {
   s <- new$site_ID[i]
   if (!s %in% manifest$site_ID[manifest$product == "SHUTTLE" & !is.na(manifest$file)]) {
@@ -126,23 +124,24 @@ for (i in seq_len(nrow(new))) {
     keep[i] <- FALSE
     next
   }
-  ta_only[i] <- !all(c("TS_F_MDS_1", "TS_F_MDS_1_QC") %in% h)
+  new$soil_temperature[i] <- all(c("TS_F_MDS_1", "TS_F_MDS_1_QC") %in% h)
   if (new$SWC_use[i] == "YES" && !"SWC_F_MDS_1" %in% h) {
     overrides[nrow(overrides) + 1, ] <- list(s, "SWC_use", "YES", "NO", "shuttle product has no SWC_F_MDS_1: ERA5 soil water")
     new$SWC_use[i] <- "NO"
   }
 }
-new_ta_only <- new[keep & ta_only, ]
-new <- new[keep & !ta_only, ]
+# (those without soil temperature last, the order they were added in)
+new <- new[keep, ]
+new <- new[order(!new$soil_temperature), ]
 if (length(not_downloaded)) message(length(not_downloaded), " added sites not downloaded yet (unchecked): ",
                                     paste(not_downloaded, collapse = " "))
 
 site_info_new <- with_nee(rbind(manuscript_columns(latest), new), skip = not_downloaded)
 utils::write.csv(site_info_new, file.path("data", "site_info_new.csv"), row.names = FALSE)
 utils::write.csv(with_nee(manuscript_columns(published)), file.path("data", "site_info_original.csv"), row.names = FALSE)
-utils::write.csv(with_nee(new_ta_only), file.path("data", "site_info_ta_only.csv"), row.names = FALSE)
 utils::write.csv(excluded, file.path("data", "site_info_excluded.csv"), row.names = FALSE)
 utils::write.csv(overrides, file.path("data", "site_info_overrides.csv"), row.names = FALSE)
 message(nrow(site_info_new), " sites (", nrow(new), " added, ", sum(new$season_wrap), " of them wrapped); ",
-        nrow(new_ta_only), " added without soil temperature (", paste(new_ta_only$site_ID, collapse = " "), "); ",
+        sum(!new$soil_temperature), " added without soil temperature (",
+        paste(new$site_ID[!new$soil_temperature], collapse = " "), "); ",
         nrow(excluded), " excluded; ", nrow(overrides), " overrides")

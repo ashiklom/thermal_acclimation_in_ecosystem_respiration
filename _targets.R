@@ -5,11 +5,10 @@
 # Environment variables:
 #   THERMAL_SITE_INFO  the site table to run on (scripts/derive-site-info-new.R):
 #                    data/site_info_new.csv (default) or, with
-#                    TAR_PROJECT=original, data/site_info_original.csv
-#   THERMAL_SITE_INFO_TA_ONLY  the sites without soil temperature, run with the
-#                    air-temperature columns only (R/ta-columns.R):
-#                    data/site_info_ta_only.csv (default project), none
-#                    ("") with TAR_PROJECT=original
+#                    TAR_PROJECT=original, data/site_info_original.csv; its
+#                    sites without soil temperature (`soil_temperature`
+#                    FALSE) are run with the air-temperature columns only
+#                    (R/ta-columns.R)
 #   TAS_SITES        "all" (default), "original" (the manuscript's sites: an
 #                    empty `added`), "dev" (DEV_SITES in R/step02-tas.R), or
 #                    a comma-separated list of site IDs
@@ -63,25 +62,15 @@ pipeline_sites <- switch(selected,
   dev = intersect(DEV_SITES, all_sites),
   strsplit(selected, ",")[[1]]
 )
-site_values <- data.frame(
-  site_id = all_sites[all_sites %in% pipeline_sites],
-  name = gsub("-", "_", all_sites[all_sites %in% pipeline_sites])
-)
-# the sites without soil temperature: the air-temperature columns only, with
-# a site table (and settings) of their own, so that adding them leaves the
-# tables every existing fit depends on unchanged (merged with the deferred
-# refit)
-ta_only_path <- Sys.getenv("THERMAL_SITE_INFO_TA_ONLY",
-                           if (data_version == "update") file.path("data", "site_info_ta_only.csv") else "")
-ta_only_sites <- if (nzchar(ta_only_path)) read_site_info(ta_only_path)$site_ID else character()
-stopifnot(all(pipeline_sites %in% c(all_sites, ta_only_sites)))
-ta_only_sites <- switch(selected,
-  all = ta_only_sites,
-  original = character(),
-  dev = intersect(DEV_SITES, ta_only_sites),
-  intersect(ta_only_sites, pipeline_sites)
-)
-ta_only_values <- data.frame(site_id = ta_only_sites, name = gsub("-", "_", ta_only_sites))
+stopifnot(all(pipeline_sites %in% all_sites))
+# the sites with soil temperature, and those without (the air-temperature
+# columns only), in the site table's order
+site_map_values <- function(soil_temperature) {
+  ids <- all_sites[all_sites %in% pipeline_sites & all_site_info$soil_temperature == soil_temperature]
+  data.frame(site_id = ids, name = gsub("-", "_", ids))
+}
+site_values <- site_map_values(TRUE)
+ta_only_values <- site_map_values(FALSE)
 
 inputs <- list(
   tar_target(site_info_file, site_info_path, format = "file"),
@@ -121,7 +110,9 @@ inputs <- list(
   tar_target(worldclim, download_worldclim()),
   tar_target(worldclim_files, unlist(worldclim), format = "file"),
   tar_target(published_tas_files, file.path("data", c("outcome_temp.csv", "outcome_temp_water_gpp.csv")), format = "file"),
+  # the selected sites with soil temperature, and all selected sites
   tar_target(pipeline_site_info, site_info[site_info$site_ID %in% site_values$site_id, ]),
+  tar_target(ta_site_info, site_info[site_info$site_ID %in% c(site_values$site_id, ta_only_values$site_id), ]),
   # the air-temperature columns (R/ta-columns.R)
   tar_target(ta_methods, TA_COLUMNS),
   tar_target(scenario_model, {
@@ -308,16 +299,12 @@ per_site <- tar_map(
 ta_only <- if (nrow(ta_only_values)) tar_map(
   values = ta_only_values,
   names = "name",
-  tar_target(site, site_rows(site_info_ta_only, site_id)),
+  site_row_targets,
   tar_target(raw_files, site_raw_files(site, site_data_dir(site, data_version)), format = "file"),
   tar_target(step01, {
     raw_files
-    if (site$source == "AmeriFlux_BASE") stop(site_id, ": AmeriFlux BASE sites without soil temperature are not supported", call. = FALSE)
-    prep_site_euroflux(site, base_dir = site_data_dir(site, data_version), soil_temperature = FALSE)
+    prepare_site(site, NULL, NULL, site_data_dir(site, data_version))
   }),
-  tar_target(settings, site_rows(site_settings_ta_only, site_id)),
-  tar_target(tmin, site_rows(tmin_month_ta_only, site_id)),
-  tar_target(era5, site_rows(era5_swc, site_id, by = "name")),
   ta_site_targets
 ) else list()
 
@@ -414,25 +401,10 @@ by_fit_set <- tar_map(
   tar_target(step0304_files, write_step0304_outputs(fit_set, drivers, driver_results, future, tmin_month), format = "file")
 )
 
-# The air-temperature columns: their site tables, TAS estimates, climate
-# statistics and scenarios, and steps 03-04 for each column (over the sites
-# with soil temperature and those without)
+# The air-temperature columns: their TAS estimates, climate statistics and
+# scenarios, and steps 03-04 for each column (over the sites with soil
+# temperature and those without)
 ta_combined <- list(
-  if (nzchar(ta_only_path)) list(
-    tar_target(site_info_ta_only_file, ta_only_path, format = "file"),
-    tar_target(site_info_ta_only, read_site_info_ta_only(site_info_ta_only_file, site_info)),
-    tar_target(site_settings_ta_only_file, file.path("data", "site_settings_ta_only.csv"), format = "file"),
-    tar_target(site_settings_ta_only, read_site_settings(site_settings_ta_only_file)),
-    tar_target(tmin_month_ta_only, future_tmin_change(site_info_ta_only, worldclim$baseline, worldclim$future))
-  ) else list(
-    tar_target(site_info_ta_only, site_info[0, ]),
-    tar_target(tmin_month_ta_only, tmin_month[0, ])
-  ),
-  tar_target(ta_site_info, dplyr::bind_rows(pipeline_site_info, site_info_ta_only[site_info_ta_only$site_ID %in% ta_only_values$site_id, ])),
-  # (over all sites: the regression on the observed soil carbon as it will be
-  # once the tables are merged)
-  tar_target(ta_soil, soil_carbon(dplyr::bind_rows(site_info, site_info_ta_only), bif_file, gsoc_file)),
-  tar_target(ta_tmin_month, dplyr::bind_rows(tmin_month, tmin_month_ta_only)),
   tar_combine(ta_fit_sets_total, per_site[["ta_tas_total"]], ta_only[["ta_tas_total"]], command = combine_ts_fits(list(!!!.x), ta_methods)),
   tar_combine(ta_fit_sets_direct, per_site[["ta_tas_direct"]], ta_only[["ta_tas_direct"]], command = combine_ts_fits(list(!!!.x), ta_methods)),
   tar_combine(ta_climate_all, per_site[["ta_climate_stats"]], ta_only[["ta_climate_stats"]], command = combine_ts_rows(list(!!!.x), ta_methods)),
@@ -448,14 +420,14 @@ ta_combined <- list(
     utils::write.csv(ta_summary_all, paths[5], row.names = FALSE)
     paths
   }, format = "file"),
-  tar_target(ta_drivers, driver_data(ta_site_info, ta_climate_all[[ta_methods]], spectral, ta_soil,
+  tar_target(ta_drivers, driver_data(ta_site_info, ta_climate_all[[ta_methods]], spectral, soil,
                                      ta_fit_sets_total[[ta_methods]]$outcome, ta_fit_sets_direct[[ta_methods]]$outcome),
              pattern = map(ta_methods), iteration = "list"),
   tar_target(ta_driver_results, driver_analysis(driver_sites(ta_drivers)),
              pattern = map(ta_drivers), iteration = "list"),
-  tar_target(ta_future, scenario_data(ta_drivers, ta_tmin_month, ta_scenario_all[[ta_methods]]),
+  tar_target(ta_future, scenario_data(ta_drivers, tmin_month, ta_scenario_all[[ta_methods]]),
              pattern = map(ta_drivers, ta_methods), iteration = "list"),
-  tar_target(ta_step0304_files, write_step0304_outputs(ta_methods, ta_drivers, ta_driver_results, ta_future, ta_tmin_month,
+  tar_target(ta_step0304_files, write_step0304_outputs(ta_methods, ta_drivers, ta_driver_results, ta_future, tmin_month,
                                                        dir = path_proc("step03-04-ta", ta_methods)),
              pattern = map(ta_methods, ta_drivers, ta_driver_results, ta_future), format = "file")
 )

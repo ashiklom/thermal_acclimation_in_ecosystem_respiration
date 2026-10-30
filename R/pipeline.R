@@ -4,20 +4,22 @@
 #'
 #' The site table (THERMAL_SITE_INFO; scripts/derive-site-info-new.R writes them): one row per
 #' site, with every column step 01 reads, `season_wrap` (TRUE/FALSE: whether the growing season
-#' spans New Year) and `added` (the date a site was added; empty for the manuscript's sites).
-#' Stops if a site lacks either or a site is listed twice.
+#' spans New Year), `soil_temperature` (TRUE/FALSE: FALSE at a site run with the
+#' air-temperature columns only, R/ta-columns.R) and `added` (the date a site was added; empty
+#' for the manuscript's sites). Stops if a site lacks any of them or a site is listed twice.
 #'
 #' @param path Path of the site table.
 #' @return The table, as utils::read.csv() reads it.
 #' @noRd
 read_site_info <- function(path) {
   site_info <- utils::read.csv(path)
-  for (col in c("season_wrap", "added")) {
+  for (col in c("season_wrap", "soil_temperature", "added")) {
     if (!col %in% names(site_info)) stop(path, ": no column `", col, "` (scripts/derive-site-info-new.R)", call. = FALSE)
   }
-  bad <- site_info$site_ID[!is.logical(site_info$season_wrap) | is.na(site_info$season_wrap)]
-  if (!is.logical(site_info$season_wrap)) bad <- site_info$site_ID
-  if (length(bad)) stop(path, ": season_wrap must be TRUE or FALSE; not at ", paste(bad, collapse = ", "), call. = FALSE)
+  for (col in c("season_wrap", "soil_temperature")) {
+    bad <- if (is.logical(site_info[[col]])) site_info$site_ID[is.na(site_info[[col]])] else site_info$site_ID
+    if (length(bad)) stop(path, ": ", col, " must be TRUE or FALSE; not at ", paste(bad, collapse = ", "), call. = FALSE)
+  }
   dup <- unique(site_info$site_ID[duplicated(site_info$site_ID)])
   if (length(dup)) stop(path, ": sites listed twice: ", paste(dup, collapse = ", "), call. = FALSE)
   site_info$added[is.na(site_info$added)] <- ""
@@ -76,9 +78,11 @@ site_data_dir <- function(site, data_version = "published") {
 #' Step-01 preparation of one site
 #'
 #' Step-01 preparation of one site from its raw data, dispatching on the data product:
-#' prep_site_ameriflux() for AmeriFlux BASE sites, prep_site_euroflux() for the others.
+#' prep_site_ameriflux() for AmeriFlux BASE sites, prep_site_euroflux() for the others; at a site
+#' without soil temperature (`soil_temperature` FALSE; FLUXNET-format only) the record and its
+#' settings only (ts_base, ts_params), for the air-temperature columns.
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (site_rows()).
 #' @param ts_rf The site's 01_01 soil-temperature table, or NULL where it is not estimated.
 #' @param coordinates The AmeriFlux sites' coordinates (data/ameriflux_coordinates.csv); used
 #'   only at AmeriFlux BASE sites.
@@ -87,7 +91,10 @@ site_data_dir <- function(site, data_version = "published") {
 #'   ts_ok (see R/step01-prep.R).
 #' @noRd
 prepare_site <- function(site, ts_rf, coordinates, base_dir = path_original("SiteData")) {
-  if (site$source == "AmeriFlux_BASE") {
+  if (!site$soil_temperature) {
+    if (site$source == "AmeriFlux_BASE") stop(site$site_ID, ": AmeriFlux BASE sites without soil temperature are not supported", call. = FALSE)
+    prep_site_euroflux(site, base_dir = base_dir, soil_temperature = FALSE)
+  } else if (site$source == "AmeriFlux_BASE") {
     prep_site_ameriflux(site, ts_rf = ts_rf, coordinates = coordinates, base_dir = base_dir)
   } else {
     prep_site_euroflux(site, ts_rf = ts_rf, base_dir = base_dir)
