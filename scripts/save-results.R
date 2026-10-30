@@ -8,7 +8,8 @@
 # features (tas_inputs_summary.csv, growing_season_feature.csv), the
 # soil-temperature column summary, quality, ranking and selection
 # (ts_*.csv) and every column's TAS (ts_outcome_*.csv, ts_siteyear_*.csv),
-# the air-temperature columns' summary and TAS (ta_*.csv), and its step 03-04
+# the air-temperature columns' summary and TAS (ta_*.csv), the daily temperature
+# series (temperature_daily.parquet, scripts/export-temperature-daily.R), and its step 03-04
 # tables (step03-04/<fit set>/, step03-04-ts/<column>/, step03-04-ta/<column>/).
 #
 # Usage (from the repository root):
@@ -67,7 +68,7 @@ for (f in c("tas_inputs_summary.csv", "growing_season_feature.csv", "ts_columns_
             "ts_siteyear_total.csv", "ts_siteyear_direct.csv", "ts_screen.csv", "ts_screen_yearly.csv",
             "ts_screen_windows.csv", "ts_screen_diurnal.csv", "ts_screen_validation.csv", "source_fills.csv",
             "era5_extension_offsets.csv", "ta_columns_summary.csv", "ta_outcome_total.csv", "ta_outcome_direct.csv",
-            "ta_siteyear_total.csv", "ta_siteyear_direct.csv")) {
+            "ta_siteyear_total.csv", "ta_siteyear_direct.csv", "temperature_daily.parquet")) {
   if (file.exists(file.path(from, f))) file.copy(file.path(from, f), file.path(out, f), overwrite = TRUE)
 }
 for (d in c("step03-04", "step03-04-ts", "step03-04-ta")) {
