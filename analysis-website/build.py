@@ -53,6 +53,9 @@ Writes analysis-website/data/:
   au_tum_sources.json        AU-Tum's candidate flux records compared (a copy)
   au_tum_options.json        AU-Tum's TAS inputs summary, outcome and site-year tables per
                              candidate source, by option
+  main.json, site/<site>.json, site-temperature/<site>.json   the main pages' data, from
+                             one run (MAIN_RUN; build_main()), and sites.json's site names,
+                             links and predictors
   code.json                  the source of every top-level R definition in R/*.R, by name:
                              {file, line, code}, for the documentation pages' code snippets
                              (built from the code alone, never from results)
@@ -70,6 +73,7 @@ Run with `pixi run website-build`.
 
 import json
 import math
+import os
 import pathlib
 import re
 import shutil
@@ -391,6 +395,146 @@ def build_au_tum():
     return options
 
 
+# The run the main pages show (the archive pages keep their run selectors).
+MAIN_RUN = os.environ.get("WEBSITE_MAIN_RUN", "v2-s22-air-temperature")
+TA_COLUMNS = ["TA_measured", "TA_mem3d", "TA_mem7d", "TA_mem30d"]
+# The site characteristics and driver-analysis predictors the main pages plot TAS against.
+PREDICTORS = ["MATA", "SSTA", "IATA", "DRTA", "warm_rate", "EVI", "NDVI", "LAI", "GPP", "SOC",
+              "NEE", "NEE_day", "NEE_night"]
+SITEYEAR_FIELDS = ["column", "growing_year", "window", "nobsv", "alpha", "beta", "C0", "Hs", "k2",
+                   "TS", "ERref", "lnRatio"]
+
+
+def rounded(df, digits=5):
+    """Floats to `digits` significant digits (smaller JSON)."""
+    out = df.copy()
+    for c in out.columns:
+        if pd.api.types.is_float_dtype(out[c]):
+            out[c] = [float(f"{v:.{digits}g}") if pd.notna(v) else v for v in out[c]]
+    return out
+
+
+def site_links(site_ID, source, catalog):
+    """The site's pages at the networks its data come from, and the FLUXNET shuttle product's
+    DOI where the data come from the shuttle."""
+    parts = source.split("+") if isinstance(source, str) else []
+    row = catalog.get(site_ID)
+    links = []
+
+    def add(label, url):
+        if url not in [l["url"] for l in links]:
+            links.append({"label": label, "url": url})
+    if "AmeriFlux_BASE" in parts or (row is not None and row["data_hub"] == "AmeriFlux" and "SHUTTLE" in parts):
+        add("AmeriFlux", f"https://ameriflux.lbl.gov/sites/siteinfo/{site_ID}")
+    if any(p.startswith("FLUXNET20") or p.startswith("FLUXNET2025_") for p in parts):
+        add("FLUXNET", f"https://fluxnet.org/sites/siteinfo/{site_ID}")
+    if any("ICOS" in p for p in parts) or (row is not None and "SHUTTLE" in parts and row["product_source_network"] == "ICOS"):
+        add("ICOS", f"https://meta.icos-cp.eu/resources/stations/ES_{site_ID}")
+    if row is not None and "SHUTTLE" in parts and isinstance(row["product_id"], str):
+        pid = row["product_id"]
+        url = pid if pid.startswith("http") else (f"https://doi.org/{pid}" if pid.startswith("10.")
+                                                  else f"https://hdl.handle.net/11676/{pid}")
+        add(f"FLUXNET data product ({row['data_hub']})", url)
+    return links
+
+
+SOURCE_LABELS = {"AmeriFlux_BASE": "AmeriFlux BASE", "SHUTTLE": "FLUXNET shuttle", "FLUXNET2015": "FLUXNET2015",
+                 "FLUXNET2020": "FLUXNET2020", "FLUXNET2025": "FLUXNET2025", "ICOS2025": "ICOS 2025",
+                 "FLUXNET2025_ICOS2025": "FLUXNET2025 + ICOS 2025"}
+
+
+def network(source, row):
+    """A data-source category for colouring sites: the product the record mostly comes from."""
+    parts = source.split("+")
+    if parts[0] == "SHUTTLE":
+        return f"FLUXNET shuttle ({row['data_hub']})" if row is not None else "FLUXNET shuttle"
+    return SOURCE_LABELS.get(parts[0], parts[0]).split(" + ")[0]
+
+
+def build_main():
+    """The main pages' data, all from MAIN_RUN:
+      main.json                 the run, and every site's TAS under every temperature column
+      sites.json                (rewritten) site names, links, data-source category, the
+                                driver-analysis predictors, MAT filled from them
+      site/<site>.json          the site's window-year fits under every column:
+                                {model: {column: {field: [values]}}}
+      site-temperature/<site>.json  daily and nighttime means of every temperature column (0.1 °C)
+                                (results/<run>/temperature_daily.parquet)"""
+    d = ROOT / "results" / MAIN_RUN
+    manifest = json.loads((d / "manifest.json").read_text())
+
+    def read(name):
+        return pd.read_csv(d / name) if (d / name).exists() else None
+    summary = pd.concat([read("ts_columns_summary.csv"), read("ta_columns_summary.csv")])
+    summary = summary[summary["site_ID"].notna()][["site_ID", "column", "n_night", "n_years", "coverage"]]
+    ts_columns = read("ts_methods_selected.csv")["column"].tolist()
+    tas = {}
+    for model in ("total", "direct"):
+        o = pd.concat([read(f"ts_outcome_{model}.csv"), read(f"ta_outcome_{model}.csv")])
+        o = o.merge(summary, on=["site_ID", "column"], how="left")
+        tas[model] = records(rounded(o[["site_ID", "column", "TAS", "TAS_se", "TASp", "nwindow", "n_years",
+                                        "n_night", "control_year", "R2"]]))
+    write_json({"run": MAIN_RUN, "label": manifest.get("label"), "created": manifest.get("created"),
+                "git_sha": manifest.get("git_sha"), "columns": ts_columns + TA_COLUMNS, "tas": tas},
+               OUT / "main.json")
+
+    # sites: names, links, data-source category, predictors
+    sites = json.loads((OUT / "sites.json").read_text())
+    catalogs = sorted((ROOT / "data-raw" / "flux-catalog").glob("fluxnet_shuttle_snapshot_*.csv"))
+    catalog = {}
+    if catalogs:
+        c = pd.read_csv(catalogs[-1])
+        catalog = {r["site_id"]: r for r in c.to_dict(orient="records")}
+    predictors = []
+    for p in [d / "step03-04" / "v2"] + sorted((d / "step03-04-ts").glob("*")) + sorted((d / "step03-04-ta").glob("*")):
+        if (p / "acclimation_data.csv").exists():
+            predictors.append(pd.read_csv(p / "acclimation_data.csv")[["site_ID"] + PREDICTORS].set_index("site_ID"))
+    pred = predictors[0]
+    for p in predictors[1:]:
+        pred = pred.combine_first(p)
+    for s in sites:
+        row = catalog.get(s["site_ID"])
+        s["site_name"] = row["site_name"] if row is not None else None
+        s["links"] = site_links(s["site_ID"], s["source"], catalog)
+        s["citation"] = row["product_citation"] if row is not None and "SHUTTLE" in s["source"] else None
+        s["network"] = network(s["source"], row)
+        s["source_label"] = " + ".join(SOURCE_LABELS.get(p, p) for p in s["source"].split("+"))
+        if s["site_ID"] in pred.index:
+            for k, v in pred.loc[s["site_ID"]].items():
+                s[k] = None if pd.isna(v) else float(v)
+        if s.get("MAT") is None and s.get("MATA") is not None:
+            s["MAT"] = s["MATA"]
+    write_json(sites, OUT / "sites.json")
+
+    # per-site window-year fits
+    shutil.rmtree(OUT / "site", ignore_errors=True)
+    siteyear = {m: pd.concat([read(f"ts_siteyear_{m}.csv"), read(f"ta_siteyear_{m}.csv")]) for m in ("total", "direct")}
+    groups = {m: dict(tuple(rounded(t).groupby("site_ID"))) for m, t in siteyear.items()}
+    def columnar(df):
+        return {c: [r[c] for r in records(df[[c]])] for c in SITEYEAR_FIELDS[1:]
+                if df[c].notna().any()}
+    for site in sorted(set(groups["total"]) | set(groups["direct"])):
+        write_json({m: {col: columnar(h) for col, h in g[site].groupby("column", sort=False)}
+                    for m, g in groups.items() if site in g}, OUT / "site" / f"{site}.json")
+
+    # per-site temperature series
+    shutil.rmtree(OUT / "site-temperature", ignore_errors=True)
+    path = d / "temperature_daily.parquet"
+    if not path.exists():
+        print(f"{path} missing: no temperature series")
+        return
+    temp = pd.read_parquet(path)
+    columns = [c for c in temp.columns if c.startswith(("TS_", "TA_"))]
+    for site, g in temp.groupby("site_ID"):
+        dates = sorted(g["date"].astype(str).unique())
+        out = {"date": dates}
+        for period, h in g.groupby("period"):
+            h = h.assign(date=h["date"].astype(str)).set_index("date").reindex(dates)
+            out[period] = {c: [None if pd.isna(v) else round(float(v), 1) for v in h[c]]
+                           for c in columns if h[c].notna().any()}
+        write_json(out, OUT / "site-temperature" / f"{site}.json")
+
+
 DEFINITION = re.compile(r"^([A-Za-z.][A-Za-z0-9._]*) <- ")
 CONTINUES = re.compile(r"(\|>|%[^%]*%|<-|[-+*/^&|=,~(\[{])\s*$")
 CLOSERS = {")": "(", "]": "[", "}": "{"}
@@ -486,6 +630,7 @@ def main():
     build_update(sets)
     build_flux_products()
     build_au_tum()
+    build_main()
     code = build_code()
     copy_plotly()
     print(f"{len(sites)} sites, {len(sets)} result sets, {len(stages)} method stages, "
