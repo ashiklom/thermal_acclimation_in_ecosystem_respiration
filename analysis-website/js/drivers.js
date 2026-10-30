@@ -38,9 +38,11 @@ async function draw() {
   ].join("");
 
   const vi = (T.varimp || []).filter((r) => r.TRS_type === trs).sort((a, b) => b.varImp - a.varImp);
-  Plotly.react("varimp", [{ type: "bar", x: vi.map((r) => varLabel(r.var)), y: vi.map((r) => r.varImp), marker: { color: "#0969da" } }],
+  // horizontal bars, most important on top, so the predictor names have room
+  Plotly.react("varimp", [{ type: "bar", orientation: "h", y: vi.map((r) => varLabel(r.var)), x: vi.map((r) => r.varImp),
+    marker: { color: "#0969da" }, hovertemplate: "%{y}: %{x:.1f}<extra></extra>" }],
     baseLayout({ title: { text: `Variable importance, ${RESPONSES[trs]}`, font: { size: 13 } },
-      yaxis: { title: "% increase in MSE when permuted" }, xaxis: { tickangle: -20 } }), PLOT_CONFIG);
+      xaxis: { title: "% increase in MSE when permuted" }, yaxis: { autorange: "reversed", automargin: true } }), PLOT_CONFIG);
 
   const lim = Math.max(...fut.flatMap((r) => [Math.abs(r.without), Math.abs(r.with ?? 0)])) * 1.1 || 0.1;
   const tas = fut.map((r) => r.TAS_tot);
