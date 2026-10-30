@@ -51,6 +51,10 @@ export const NEW_MARK = "*";
 export const SITES = new Map((await loadJSON("data/sites.json").catch(() => [])).map((s) => [s.site_ID, s]));
 export const isNew = (id) => Boolean(SITES.get(id)?.added);
 export const ADDED_DATES = [...new Set([...SITES.values()].map((s) => s.added).filter(Boolean))].sort();
+// Added sites without soil temperature, fitted only with the air-temperature
+// columns (R/ta-columns.R): TA_ONLY_MARK after NEW_MARK.
+export const TA_ONLY_MARK = "†";
+export const isTaOnly = (id) => Boolean(SITES.get(id)?.ta_only);
 
 export function includeNew() {
   const v = new URLSearchParams(window.location.search).get("new");
@@ -64,10 +68,12 @@ export function filterSites(rows, key = "site_ID") {
 }
 
 export const siteSymbol = (id, base = "circle") => (isNew(id) ? NEW_SYMBOL : base);
-export const siteLabel = (id) => (isNew(id) ? `${id}${NEW_MARK}` : id);
-const newTitle = (id) => `added ${SITES.get(id)?.added} (FLUXNET shuttle)`;
+const marks = (id) => (isNew(id) ? NEW_MARK : "") + (isTaOnly(id) ? TA_ONLY_MARK : "");
+export const siteLabel = (id) => `${id}${marks(id)}`;
+const newTitle = (id) => `added ${SITES.get(id)?.added} (FLUXNET shuttle)` +
+  (isTaOnly(id) ? "; no soil temperature: air-temperature columns only" : "");
 export const siteHTML = (id, href = `site.html?site=${id}`) =>
-  `<a href="${href}">${id}</a>${isNew(id) ? `<sup class="newsite" title="${newTitle(id)}">${NEW_MARK}</sup>` : ""}`;
+  `<a href="${href}">${id}</a>${isNew(id) ? `<sup class="newsite" title="${newTitle(id)}">${marks(id)}</sup>` : ""}`;
 // Tabulator formatter for a site-ID column.
 export const siteCell = (cell) => siteHTML(cell.getValue());
 
@@ -75,6 +81,7 @@ export function header(active) {
   const links = PAGES.map(([href, label]) =>
     `<a href="${href}"${href === active ? ' class="active"' : ""}>${label}</a>`).join("");
   const nNew = [...SITES.values()].filter((s) => s.added).length;
+  const nTaOnly = [...SITES.values()].filter((s) => s.ta_only).length;
   const toggle = nNew ? `<label class="newtoggle" title="Sites added ${ADDED_DATES.join(", ")} from the FLUXNET shuttle: ` +
     `triangles in figures, ${NEW_MARK} in tables; excluded, they are left out of every figure, table and statistic, ` +
     `and steps 03-04 show the run over the manuscript's sites"><input type="checkbox" id="include-new"${includeNew() ? " checked" : ""}> ` +
@@ -89,7 +96,9 @@ export function header(active) {
   if (nNew) {
     const note = `<p class="small footnote"><sup class="newsite">${NEW_MARK}</sup> / ▲ site added ${ADDED_DATES.join(", ")} ` +
       `from the FLUXNET shuttle (${nNew} sites; not in the manuscript); ` +
-      `${includeNew() ? "included" : "excluded"} here (toggle at the top).</p>`;
+      `${includeNew() ? "included" : "excluded"} here (toggle at the top).` +
+      (nTaOnly ? ` <sup class="newsite">${NEW_MARK}${TA_ONLY_MARK}</sup> added site without soil temperature ` +
+        `(${nTaOnly} sites), fitted only with the air-temperature columns.` : "") + `</p>`;
     // (module scripts run once the page is parsed: <main> exists)
     document.querySelector("main")?.insertAdjacentHTML("beforeend", note);
   }

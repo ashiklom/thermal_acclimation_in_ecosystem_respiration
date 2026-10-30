@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>TAS by soil-temperature column · thermal acclimation refactor-v2</title>
+  <title>TAS by temperature column · thermal acclimation refactor-v2</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
   <script src="vendor/plotly.min.js"></script>
@@ -10,14 +10,33 @@
 </head>
 <body>
 <main>
-  <h1>TAS by soil-temperature column</h1>
+  <h1>TAS by temperature column</h1>
   <p class="lead">The TAS fits of every site, run with every selected soil-temperature column (each qualified as step
-    01 qualifies its own; see <a href="ts.html">Soil temperature</a>). The reference is <code>TS_manuscript</code>,
-    what the published fits used. Sites whose significance class changes with the column, above all where it flips
-    between significantly negative and significantly positive, are listed first.</p>
+    01 qualifies its own; see <a href="ts.html">Soil temperature</a>) and, from S22, with air temperature in the
+    soil-temperature role. The reference is <code>TS_manuscript</code>, what the published fits used. Sites whose
+    significance class changes with the column, above all where it flips between significantly negative and
+    significantly positive, are listed first.</p>
+  <details class="note"><summary>The air-temperature columns (S22)</summary>
+    <p>Air temperature takes the soil temperature's place in both TAS models, at every site, and is qualified as the
+      soil-temperature columns are (growing-season start, tStart/tEnd, gap screen, 2 °C floors, control year); NEE,
+      u* filtering and the season end are step 01's. They are not ranked against the soil sensor.</p>
+    <ul>
+      <li><code>TA_measured</code>: air temperature as measured, without gap filling: <code>TA_F_MDS</code> where
+        <code>TA_F_MDS_QC</code> is 0 at FLUXNET-format sites; at AmeriFlux BASE sites the air temperature step 01
+        reads, which has no gap-fill flag, so a PI gap-filled product (e.g. <code>TA_PI_F</code>) counts as measured.</li>
+      <li><code>TA_mem3d</code>, <code>TA_mem7d</code>, <code>TA_mem30d</code>: the mean of <code>TA_measured</code>'s
+        daily means over the last 3, 7 and 30 days, the memory scales of the soil-temperature memory estimators. There a
+        forest weights them against the sensor; here, with no sensor to weight against, each is a column of its own. As
+        there, a window includes the whole current day, its later hours too.</li>
+    </ul>
+    <p>The 13 added sites without soil temperature (<sup class="newsite">*†</sup>) have only these four columns: with
+      the soil-temperature reference they have no comparison; choose an air-temperature reference.</p>
+  </details>
   <div class="controls">
     <label>Run <select id="run"></select></label>
     <label>Model <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+    <label>Columns <select id="group"><option value="all">soil + air temperature</option>
+      <option value="ts">soil temperature</option><option value="ta">air temperature</option></select></label>
     <label>Reference column <select id="ref"></select></label>
     <label>Sites <select id="sensor"><option value="all">all</option><option value="GOOD">sensor GOOD</option>
       <option value="notBAD">sensor not BAD</option><option value="BAD">sensor BAD</option></select></label>
@@ -29,6 +48,8 @@
     a significant sign flip against the reference column. Click a cell to open the site.</p>
   <div id="heat" class="plot" style="min-height:900px"></div>
   <h2>Each column against the reference</h2>
+  <p class="small">Sites with both fits. ΔTAS = column − reference; class changes and sign flips as above.</p>
+  <div id="columns"></div>
   <div id="pairs"></div>
   <h2>Sites</h2>
   <div id="table"></div>

@@ -20,6 +20,9 @@ Reads (paths relative to the repository root):
                                        (scripts/au-tum-source-options.R)
   results/<id>/ts_{columns_summary,quality,ranking,methods_selected}.csv  (optional)
                                        the soil-temperature columns of a run and their quality
+  results/<id>/ta_{columns_summary,outcome_*}.csv  (optional) the air-temperature columns of a
+                                       run (R/ta-columns.R) and their TAS
+  data/site_info_ta_only.csv           (optional) the added sites without soil temperature
 
 Writes analysis-website/data/:
   sites.json                 one record per site
@@ -80,7 +83,7 @@ ROOT = SITE.parent
 OUT = SITE / "data"
 
 STAGE_ORDER = ["published", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13",
-               "S14", "S15", "S16", "S17", "S18", "S19", "S20"]
+               "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S22"]
 
 
 def records(df):
@@ -120,9 +123,14 @@ def mean_annual_temperature(site_id):
 
 def build_sites():
     info = pd.read_csv(ROOT / "data" / "site_info_new.csv", encoding="utf-8-sig")
+    info["ta_only"] = False
+    # the added sites without soil temperature: air-temperature columns only (R/ta-columns.R)
+    ta_only = ROOT / "data" / "site_info_ta_only.csv"
+    if ta_only.exists():
+        info = pd.concat([info, pd.read_csv(ta_only, encoding="utf-8-sig").assign(ta_only=True)], ignore_index=True)
     info["added"] = info["added"].fillna("")
     keep = ["site_ID", "LAT", "LONG", "ELEV", "IGBP", "Climate_class", "MAP", "source",
-            "estimate_Ts", "SWC_use", "added"]
+            "estimate_Ts", "SWC_use", "added", "ta_only"]
     sites = info[keep].copy()
     overrides = ROOT / "data" / "site_info_overrides.csv"
     if overrides.exists():
@@ -131,9 +139,10 @@ def build_sites():
                               for s in sites["site_ID"]]
     excluded = ROOT / "data" / "site_info_excluded.csv"
     write_json(records(pd.read_csv(excluded)) if excluded.exists() else [], OUT / "sites_excluded.json")
-    settings_path = ROOT / "data" / "site_settings.csv"
-    if settings_path.exists():
-        sites = sites.merge(pd.read_csv(settings_path), on="site_ID", how="left")
+    settings = [pd.read_csv(ROOT / "data" / f) for f in ("site_settings.csv", "site_settings_ta_only.csv")
+                if (ROOT / "data" / f).exists()]
+    if settings:
+        sites = sites.merge(pd.concat(settings, ignore_index=True), on="site_ID", how="left")
     sites["MAT"] = [mean_annual_temperature(s) for s in sites["site_ID"]]
     write_json(records(sites), OUT / "sites.json")
     return sites
@@ -249,12 +258,14 @@ def build_stages(sets):
 
 
 def build_ts(sets):
-    """Soil-temperature column tables of the runs that have them."""
+    """Soil-temperature column tables of the runs that have them, and the air-temperature
+    columns' (ta_*: their summary and TAS) where the run has those."""
     out = []
     for s in sets:
         d = ROOT / "results" / s["id"]
         paths = {k: d / f"ts_{k}.csv" for k in ("columns_summary", "quality", "ranking", "methods_selected",
                                                  "outcome_total", "outcome_direct")}
+        paths.update({f"ta_{k}": d / f"ta_{k}.csv" for k in ("columns_summary", "outcome_total", "outcome_direct")})
         if not paths["columns_summary"].exists():
             continue
         data = {k: records(pd.read_csv(p)) for k, p in paths.items() if p.exists()}
@@ -273,7 +284,7 @@ def build_drivers(sets):
     them (results/<id>/step03-04/<fit set>/)."""
     entries = [{"id": "published", "label": "Published (original/data)", "dir": ROOT / "data"}]
     for s in sets:
-        for sub, what in (("step03-04", "TAS"), ("step03-04-ts", "soil temperature")):
+        for sub, what in (("step03-04", "TAS"), ("step03-04-ts", "soil temperature"), ("step03-04-ta", "air temperature")):
             d = ROOT / "results" / s["id"] / sub
             if d.exists():
                 for fs in sorted(p.name for p in d.iterdir() if p.is_dir()):
