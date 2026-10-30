@@ -136,9 +136,17 @@ inputs <- list(
   }, deployment = "main", format = "file")
 )
 
+# A site's rows of the tables of all sites (site_rows()): its targets read
+# these, so that other sites' rows rerun nothing of it
+site_row_targets <- list(
+  tar_target(site, site_rows(site_info, site_id)),
+  tar_target(settings, site_rows(site_settings, site_id)),
+  tar_target(tmin, site_rows(tmin_month, site_id)),
+  tar_target(era5, site_rows(era5_swc, site_id, by = "name"))
+)
+
 # Every site's air-temperature columns (R/ta-columns.R), in the layout of the
-# soil-temperature columns' fit matrix; per site, `ta_settings` and `ta_tmin`
-# are its rows of the settings and of the future minimum temperatures
+# soil-temperature columns' fit matrix
 ta_site_targets <- list(
   tar_target(ta_qc, {
     raw_files
@@ -146,21 +154,21 @@ ta_site_targets <- list(
   }),
   tar_target(ta_candidate_values, ta_candidates(step01, ta_qc)),
   tar_target(ta_summary, ta_columns_summary(site_id, ta_candidate_values, stats::setNames(
-    lapply(TA_COLUMNS, ts_column_inputs, site = site, settings = ta_settings, step01 = step01, candidates = ta_candidate_values,
-           swc_ERA5 = era5_swc, manuscript_inputs = NULL), TA_COLUMNS))),
+    lapply(TA_COLUMNS, ts_column_inputs, site = site, settings = settings, step01 = step01, candidates = ta_candidate_values,
+           swc_ERA5 = era5, manuscript_inputs = NULL), TA_COLUMNS))),
   tar_target(ta_fit_key, data.frame(column = ta_methods,
-                                    key = ts_inputs_key(ts_column_inputs(ta_methods, site, ta_settings, step01, ta_candidate_values, era5_swc, NULL))),
+                                    key = ts_inputs_key(ts_column_inputs(ta_methods, site, settings, step01, ta_candidate_values, era5, NULL))),
              pattern = map(ta_methods)),
   tar_target(ta_tas_total, {
     stan_models
     ts_fit_column(ta_methods, "total", ta_fit_key, NULL, function() {
-      ts_column_inputs(ta_methods, site, ta_settings, step01, ta_candidate_values, era5_swc, NULL)
+      ts_column_inputs(ta_methods, site, settings, step01, ta_candidate_values, era5, NULL)
     }, sampler)
   }, pattern = map(ta_methods), iteration = "list"),
   tar_target(ta_tas_direct, {
     stan_models
     ts_fit_column(ta_methods, "direct", ta_fit_key, NULL, function() {
-      ts_column_inputs(ta_methods, site, ta_settings, step01, ta_candidate_values, era5_swc, NULL)
+      ts_column_inputs(ta_methods, site, settings, step01, ta_candidate_values, era5, NULL)
     }, sampler)
   }, pattern = map(ta_methods), iteration = "list"),
   tar_target(ta_table_key, data.frame(column = ta_methods,
@@ -176,7 +184,7 @@ ta_site_targets <- list(
     ts_tables_column(ta_methods, ta_table_key, NULL,
                      function() ts_step01_tables(ta_methods, step01, ta_candidate_values),
                      function(t) tryCatch(scenario_site(site_id, t$ac, t$night, t$feature[["gStart"]], t$feature[["gEnd"]],
-                                                        ta_tmin, sampler),
+                                                        tmin, sampler),
                                           error = function(e) {
                                             warning(site_id, ", ", ta_methods, ": no scenario: ", conditionMessage(e), call. = FALSE)
                                             NULL
@@ -187,7 +195,8 @@ ta_site_targets <- list(
 per_site <- tar_map(
   values = site_values,
   names = "name",
-  tar_target(site, site_info[site_info$site_ID == site_id, ]),
+  site_row_targets,
+  tar_target(coords, site_rows(coordinates, site_id)),
   if (data_version == "update") list(
     # the latest releases: AmeriFlux records from data-raw/flux, and the
     # 01_01 soil temperatures estimated anew on them
@@ -198,14 +207,14 @@ per_site <- tar_map(
     }),
     tar_target(step01, {
       raw_files
-      prepare_site(site, ts_rf, coordinates, site_data_dir(site, data_version))
+      prepare_site(site, ts_rf, coords, site_data_dir(site, data_version))
     })
   ) else list(
     tar_target(raw_files, site_raw_files(site), format = "file"),
     tar_target(ts_rf, read_published_ts_rf(site, ts_rf_files)),
     tar_target(step01, {
       raw_files
-      prepare_site(site, ts_rf, coordinates)
+      prepare_site(site, ts_rf, coords)
     })
   ),
   tar_target(step01_files, write_step01_outputs(step01, site_id), format = "file"),
@@ -216,8 +225,7 @@ per_site <- tar_map(
   tar_target(step01_ac, step01[["ac"]]),
   tar_target(step01_night, step01[["night"]]),
   tar_target(step01_climatology, step01[["climatology"]]),
-  tar_target(tas_inputs, prepare_tas_inputs(site, site_settings[site_settings$site_ID == site_id, ], gs_feature,
-                                            step01_night, step01_ac, era5_swc, step01_climatology)),
+  tar_target(tas_inputs, prepare_tas_inputs(site, settings, gs_feature, step01_night, step01_ac, era5, step01_climatology)),
   tar_target(tas_total, {
     stan_models
     fit_tas_target(tas_inputs, "total", sampler)
@@ -230,42 +238,37 @@ per_site <- tar_map(
   # candidate soil-temperature columns (R/ts-columns.R)
   tar_target(ts_sensor, {
     raw_files
-    read_ts_sensor(site, site_settings[site_settings$site_ID == site_id, ], site_data_dir(site, data_version))
+    read_ts_sensor(site, settings, site_data_dir(site, data_version))
   }),
   # soil-temperature sensor screen (R/ts-screen.R): input data only, no fits
-  tar_target(ts_screen, ts_screen_site(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ], tas_inputs)),
-  tar_target(ts_candidate_values, ts_candidates(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ], tas_inputs)),
+  tar_target(ts_screen, ts_screen_site(step01, ts_sensor, settings, tas_inputs)),
+  tar_target(ts_candidate_values, ts_candidates(step01, ts_sensor, settings, tas_inputs)),
   tar_target(ts_columns, {
-    settings <- site_settings[site_settings$site_ID == site_id, ]
     columns <- names(ts_candidate_values$values)
     inputs <- stats::setNames(lapply(columns, ts_column_inputs, site = site, settings = settings, step01 = step01,
-                                     candidates = ts_candidate_values, swc_ERA5 = era5_swc, manuscript_inputs = tas_inputs), columns)
+                                     candidates = ts_candidate_values, swc_ERA5 = era5, manuscript_inputs = tas_inputs), columns)
     list(table = ts_columns_table(step01, ts_candidate_values, inputs), summary = ts_columns_summary(ts_candidate_values, inputs))
   }),
   tar_target(ts_columns_file, write_table(ts_columns[["table"]], path_proc("ts-columns", paste0(site_id, ".parquet"))), format = "file"),
   tar_target(ts_summary, ts_columns[["summary"]]),
   # their quality (R/ts-ranking.R): estimators scored out of fold
-  tar_target(ts_cv, ts_cv_metrics(step01, ts_sensor, site_settings[site_settings$site_ID == site_id, ])),
+  tar_target(ts_cv, ts_cv_metrics(step01, ts_sensor, settings)),
   tar_target(ts_site_quality, ts_quality(site_id, ts_columns[["table"]], ts_columns[["summary"]], ts_cv, gs_feature)),
   # the fit matrix over the selected columns (R/ts-fits.R): one branch per
   # column; columns with the manuscript's input reuse its results
-  tar_target(ts_fit_key, {
-    settings <- site_settings[site_settings$site_ID == site_id, ]
-    data.frame(column = ts_methods_selected,
-               key = ts_inputs_key(ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5_swc, tas_inputs)))
-  }, pattern = map(ts_methods_selected)),
+  tar_target(ts_fit_key, data.frame(column = ts_methods_selected,
+                                    key = ts_inputs_key(ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5, tas_inputs))),
+             pattern = map(ts_methods_selected)),
   tar_target(ts_tas_total, {
     stan_models
-    settings <- site_settings[site_settings$site_ID == site_id, ]
     ts_fit_column(ts_methods_selected, "total", ts_fit_key, tas_total, function() {
-      ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5_swc, tas_inputs)
+      ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5, tas_inputs)
     }, sampler)
   }, pattern = map(ts_methods_selected), iteration = "list"),
   tar_target(ts_tas_direct, {
     stan_models
-    settings <- site_settings[site_settings$site_ID == site_id, ]
     ts_fit_column(ts_methods_selected, "direct", ts_fit_key, tas_direct, function() {
-      ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5_swc, tas_inputs)
+      ts_column_inputs(ts_methods_selected, site, settings, step01, ts_candidate_values, era5, tas_inputs)
     }, sampler)
   }, pattern = map(ts_methods_selected), iteration = "list"),
   tar_target(ts_table_key, data.frame(column = ts_methods_selected,
@@ -283,7 +286,7 @@ per_site <- tar_map(
                      # a column whose control year has no records for a window drops the
                      # site from that column's scenario (with a warning), as failed TAS fits do
                      function(t) tryCatch(scenario_site(site_id, t$ac, t$night, t$feature[["gStart"]], t$feature[["gEnd"]],
-                                                        tmin_month[tmin_month$site_ID == site_id, ], sampler),
+                                                        tmin, sampler),
                                           error = function(e) {
                                             warning(site_id, ", ", ts_methods_selected, ": no scenario: ", conditionMessage(e), call. = FALSE)
                                             NULL
@@ -294,12 +297,9 @@ per_site <- tar_map(
   tar_target(scenario, {
     scenario_model
     use_stan_cache()
-    scenario_site(site_id, step01_ac, step01_night, gs_feature[["gStart"]], gs_feature[["gEnd"]],
-                  tmin_month[tmin_month$site_ID == site_id, ], sampler)
+    scenario_site(site_id, step01_ac, step01_night, gs_feature[["gStart"]], gs_feature[["gEnd"]], tmin, sampler)
   }),
   # the air-temperature columns
-  tar_target(ta_settings, site_settings[site_settings$site_ID == site_id, ]),
-  tar_target(ta_tmin, tmin_month[tmin_month$site_ID == site_id, ]),
   ta_site_targets
 )
 
@@ -308,15 +308,16 @@ per_site <- tar_map(
 ta_only <- if (nrow(ta_only_values)) tar_map(
   values = ta_only_values,
   names = "name",
-  tar_target(site, site_info_ta_only[site_info_ta_only$site_ID == site_id, ]),
+  tar_target(site, site_rows(site_info_ta_only, site_id)),
   tar_target(raw_files, site_raw_files(site, site_data_dir(site, data_version)), format = "file"),
   tar_target(step01, {
     raw_files
     if (site$source == "AmeriFlux_BASE") stop(site_id, ": AmeriFlux BASE sites without soil temperature are not supported", call. = FALSE)
     prep_site_euroflux(site, base_dir = site_data_dir(site, data_version), soil_temperature = FALSE)
   }),
-  tar_target(ta_settings, site_settings_ta_only[site_settings_ta_only$site_ID == site_id, ]),
-  tar_target(ta_tmin, tmin_month_ta_only[tmin_month_ta_only$site_ID == site_id, ]),
+  tar_target(settings, site_rows(site_settings_ta_only, site_id)),
+  tar_target(tmin, site_rows(tmin_month_ta_only, site_id)),
+  tar_target(era5, site_rows(era5_swc, site_id, by = "name")),
   ta_site_targets
 ) else list()
 

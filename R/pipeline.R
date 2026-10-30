@@ -24,6 +24,21 @@ read_site_info <- function(path) {
   site_info
 }
 
+#' A site's rows of the pipeline's tables
+#'
+#' The rows of one site, for its per-site targets: what a site's targets read from a table of
+#' all sites is its own rows, so that adding or editing other sites' rows reruns nothing of it.
+#' Of the site table, the fields step 01 and later read: not `added`, which is bookkeeping.
+#'
+#' @param x A table with a site column.
+#' @param site_id Site ID.
+#' @param by Name of the site column (`name` in the ERA5 table).
+#' @return The site's rows.
+#' @noRd
+site_rows <- function(x, site_id, by = "site_ID") {
+  x[x[[by]] == site_id, setdiff(names(x), "added"), drop = FALSE]
+}
+
 #' Raw files of a site's step-01 preparation
 #'
 #' The raw files a site's step-01 preparation reads, for file targets: its products' files, plus
