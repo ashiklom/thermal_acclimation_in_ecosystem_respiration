@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>How TAS is estimated · thermal acclimation of ecosystem respiration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main class="main docs">
+  <h1>How TAS is estimated</h1>
+  <p class="lead">From half-hourly nighttime CO₂ fluxes to one number per site: the thermal acclimation sensitivity,
+    total and direct.</p>
+
+  <h2>1. Nighttime respiration and its temperature response</h2>
+  <p>At night, photosynthesis stops and the net CO₂ flux a flux tower measures (net ecosystem exchange, NEE) is
+    ecosystem respiration. Only good nighttime records are used: enough turbulence for the eddy-covariance method to
+    hold (friction velocity above the site's threshold), and plausible values.</p>
+  <p>The growing season of every site and year is cut into consecutive <b>two-week windows</b> (from the season's
+    start to its end, defined from the seasonal course of NEE). A window is used where it has at least 100 nighttime
+    records over all years and its mean temperature is within the range the respiration model is reliable in. Within
+    a window and year, respiration is modelled as a function of temperature <i>T</i>:</p>
+  <div class="formula"><b>Total model</b>: &nbsp; <i>R</i> = <i>C</i><sub>0</sub> · exp(<i>α T</i> + <i>β T</i>²)</div>
+  <div class="formula"><b>Direct model</b>: &nbsp; <i>R</i> = (<i>C</i><sub>0</sub> + <i>k</i><sub>2</sub> · NEE<sub>day</sub>)
+    · SWC / (<i>H</i><sub>s</sub> + SWC) · exp(<i>α T</i> + <i>β T</i>²)</div>
+  <p>The direct model adds the two other main controls on respiration that change from year to year along with
+    temperature: the supply of recent photosynthate, indexed by the day's mean daytime net CO₂ uptake
+    (NEE<sub>day</sub>), and soil moisture (SWC, a saturating response; where a site has no usable soil-moisture record, the ERA5
+    reanalysis' soil water stands in). Both models are fitted in a Bayesian framework: first pooled over all years of a window (which
+    provides the priors), then for each year, widening the window a few days at a time where a year has too few
+    records.</p>
+
+  <h2>2. Reference respiration and its ratio across years</h2>
+  <p>Each window has <b>reference conditions</b>: its temperature, NEE<sub>day</sub> and soil moisture averaged over all
+    years. Evaluating each year's fitted model at the window's reference conditions gives that year's <b>reference
+    respiration</b>, <i>ER</i><sub>ref</sub>: how much the ecosystem would respire at the same, typical conditions.
+    Differences in <i>ER</i><sub>ref</sub> between years are therefore not the short-term temperature response — that is
+    what the curve describes — but a shift of the whole curve.</p>
+  <div class="formula">ln ratio<sub>window, year</sub> = ln( <i>ER</i><sub>ref, year</sub> / <i>ER</i><sub>ref, control
+    year</sub> )</div>
+  <p>The control year is one year of the site with good coverage; it only sets the zero of the ratio and does not
+    affect TAS. Extreme ratios (beyond three interquartile ranges and |ln ratio| &gt; 1.5) are discarded.</p>
+
+  <h2>3. TAS: how the curve shifts with warmer conditions</h2>
+  <p>A window is warmer in some years than in others. If respiration acclimates, the curve of a warmer year sits lower
+    (down-regulation); if it is enhanced, higher. TAS is the slope of the ln ratios on the window-year mean
+    temperatures <i>T</i><sub>window, year</sub>, with a separate intercept for each window (so that only the
+    differences between years within a window count, not the seasonal course) and errors correlated between
+    successive years (AR(1)), fitted by generalized least squares:</p>
+  <div class="formula">ln ratio<sub>w, y</sub> = <i>a</i><sub>w</sub> + TAS · <i>T</i><sub>w, y</sub> + ε<sub>w, y</sub>,
+    &nbsp; corr(ε<sub>w, y</sub>, ε<sub>w, y+1</sub>) = ρ</div>
+  <p>TAS is in units of ln(respiration) per °C: TAS = −0.03 means about 3 % less respiration at the same conditions
+    for each 1 °C a window was warmer. Fitted with the total model it is the <b>total TAS</b>; with the direct model,
+    the <b>direct TAS</b>.</p>
+
+  <h2>4. Total versus direct TAS, simulated</h2>
+  <p>Warmer periods also change respiration indirectly: for example, a warm spell may come with more photosynthesis
+    and so more fresh substrate for roots and microbes. The total model, with temperature only, takes up these indirect
+    effects into the shift of the curve; the direct model holds substrate supply at its reference value and so
+    removes them. The simulation below generates nighttime records for a site with a known direct effect and a known
+    indirect (substrate) effect, fits each window-year by least squares on ln respiration (a simplification of the real
+    fits), and estimates both TAS values.</p>
+  <div class="controls">
+    <label>Direct acclimation (per °C) <input type="range" id="s-direct" min="-0.08" max="0.08" step="0.005" value="-0.03"><output id="o-direct"></output></label>
+    <label>Indirect effect via substrate (per °C) <input type="range" id="s-indirect" min="-0.08" max="0.08" step="0.005" value="0.03"><output id="o-indirect"></output></label>
+    <label>Years <input type="range" id="s-years" min="4" max="20" step="1" value="10"><output id="o-years"></output></label>
+    <label>Year-to-year temperature variation (°C) <input type="range" id="s-tsd" min="0.3" max="3" step="0.1" value="1.5"><output id="o-tsd"></output></label>
+    <label>Noise (sd of ln respiration) <input type="range" id="s-noise" min="0.05" max="0.6" step="0.05" value="0.25"><output id="o-noise"></output></label>
+    <button id="s-redraw">new random data</button>
+  </div>
+  <div class="readout" id="s-readout"></div>
+  <div class="grid2">
+    <div id="s-records" class="plot"></div>
+    <div id="s-slopes" class="plot"></div>
+  </div>
+  <p class="small">Left: the nighttime records of one window, coloured from the coolest (blue) to the warmest (red)
+    year, with each year's fitted curve; the dotted line is the reference temperature. Right: every window-year's ln
+    ratio relative to its window's mean, against its temperature relative to the window's mean, with the fitted total
+    (orange) and direct (green) TAS.</p>
+
+  <h2>5. Real examples</h2>
+  <div class="controls" id="controls">
+    <label>TAS <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+  </div>
+  <p>Three sites, picked automatically for the selected temperature source among sites with at least six years:
+    the strongest significantly negative TAS (largest |TAS| / standard error), the TAS closest to zero, and the
+    strongest significantly positive TAS. Each shows one window's yearly curves and the slope over all windows; open
+    the site for the full picture.</p>
+  <div id="examples"></div>
+</main>
+<script type="module" src="js/method.js"></script>
+</body>
+</html>

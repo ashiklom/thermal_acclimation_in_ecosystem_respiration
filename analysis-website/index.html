@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Thermal acclimation of ecosystem respiration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main class="main">
+  <h1>Thermal acclimation of ecosystem respiration</h1>
+  <p class="lead">How strongly does ecosystem respiration adjust to warmer-than-usual temperatures? Estimates for
+    <span id="nsites"></span> eddy-covariance flux tower sites across the world's biomes.</p>
+
+  <p>Plants, microbes and soil animals release CO₂ when they respire, and in the short term this <em>ecosystem
+    respiration</em> rises with temperature. Over weeks to seasons, though, organisms can <em>acclimate</em>: after a
+    warm spell their respiration may be lower than the same temperature would have produced in a cooler year
+    (down-regulation), or higher (enhancement). Which of the two prevails, and by how much, decides whether warming
+    speeds up the loss of ecosystem carbon to the atmosphere more or less than short-term temperature responses
+    suggest.</p>
+  <p>Flux towers measure the CO₂ exchange between an ecosystem and the atmosphere every half hour, for many years,
+    together with air and soil temperature, soil moisture and sunlight. At night there is no photosynthesis, so the
+    measured CO₂ flux is ecosystem respiration. For each site, each two-week window of the growing season and each
+    year, a respiration–temperature curve is fitted to the high-quality nighttime records; from it comes the
+    respiration expected at that window's typical (reference) conditions. Comparing this reference respiration across
+    years — warmer years against cooler years — measures acclimation:</p>
+  <ul>
+    <li><b>Thermal acclimation sensitivity (TAS)</b> is the change in the logarithm of reference respiration per °C
+      by which a window was warmer than in other years. TAS = −0.02 means that respiration at the same reference
+      temperature is about 2 % lower for every 1 °C of warmer conditions (acclimation that dampens the warming
+      response); a positive TAS means it is higher (an amplifying feedback).</li>
+    <li><b>Total TAS</b> uses a respiration model with temperature only, so it includes every way a warmer period
+      changes respiration: the physiological adjustment itself, and indirect effects through the soil moisture and
+      the supply of fresh photosynthate (substrate) that change along with temperature.</li>
+    <li><b>Direct TAS</b> uses a model that also accounts for soil moisture and for the day's photosynthetic uptake
+      (daytime net CO₂ exchange). What remains is the direct effect of temperature history on respiration.</li>
+  </ul>
+  <p>Respiration responds to the temperature where it happens, mostly in the soil, so the estimates use soil
+    temperature by default; where a site's soil-temperature sensor is missing or unreliable, it is reconstructed or
+    predicted from air temperature (see <a href="soil-temperature.html">Soil temperature in detail</a>). Every
+    estimate is also available with air temperature instead. <a href="method.html">How TAS is estimated</a> walks
+    through the method; the <a href="site.html">site explorer</a> shows each site's data and fits.</p>
+
+  <div class="controls" id="controls"></div>
+
+  <h2>Sites</h2>
+  <div class="controls">
+    <label>Colour by <select id="colour">
+      <option value="direct">Direct TAS</option>
+      <option value="total">Total TAS</option>
+      <option value="IGBP">Vegetation type (IGBP)</option>
+      <option value="climate">Climate class (Köppen)</option>
+      <option value="network">Data source</option>
+    </select></label>
+  </div>
+  <div class="grid2">
+    <div id="geo" class="plot"></div>
+    <div id="clim" class="plot"></div>
+  </div>
+  <p class="small">Click a site to open it in the site explorer. TAS colours run from blue (negative: acclimation that
+    dampens respiration) to red (positive); grey sites have no estimate with the selected temperature source.</p>
+
+  <h2>TAS of every site</h2>
+  <p class="small">TAS ± standard error (per °C); * p &lt; 0.05. Years: growing years with nighttime records.
+    Click a row to open the site.</p>
+  <div id="table"></div>
+
+  <h2>TAS against site characteristics</h2>
+  <div class="controls">
+    <label>TAS <select id="model"><option value="direct">Direct TAS</option><option value="total">Total TAS</option></select></label>
+    <label>Against <select id="predictor"></select></label>
+  </div>
+  <div id="scatter" class="plot"></div>
+  <p class="small">Each point is a site (blue: significantly negative, red: significantly positive, grey: not
+    significant, p &lt; 0.05); bars are ± 1 standard error. The line is a least-squares fit weighted equally across sites.
+    See <a href="drivers.html">Drivers of TAS</a> for the multivariate (random-forest) analysis.</p>
+</main>
+<script type="module" src="js/index.js"></script>
+</body>
+</html>

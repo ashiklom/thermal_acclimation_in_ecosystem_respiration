@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Site explorer · thermal acclimation of ecosystem respiration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main class="main">
+  <div class="controls" id="controls">
+    <label>Site <select id="site"></select></label>
+  </div>
+  <h1 id="title"></h1>
+  <p class="lead" id="meta"></p>
+  <p class="sitelinks" id="links"></p>
+  <p class="small" id="citation"></p>
+  <div class="grid2">
+    <div id="geo" class="plot" style="min-height:340px"></div>
+    <div id="clim" class="plot" style="min-height:340px"></div>
+  </div>
+
+  <h2>Temperature</h2>
+  <p class="small">Daily means of every temperature column (days with values for at least half of their records). The
+    thick line is the temperature source selected at the top, the one the TAS below and on the other pages use. Zoom
+    one plot and the other follows.</p>
+  <div class="controls">
+    <label>Average over <select id="period"><option value="day">the whole day</option>
+      <option value="night">the night (what the fits use)</option></select></label>
+  </div>
+  <h3>Soil temperature</h3>
+  <div class="columnpicks" id="soilpicks"></div>
+  <div id="soil" class="plot" style="min-height:320px"></div>
+  <h3>Air temperature</h3>
+  <div class="columnpicks" id="airpicks"></div>
+  <div id="air" class="plot" style="min-height:320px"></div>
+
+  <h2>TAS estimates</h2>
+  <p class="small">With every temperature source: TAS ± standard error per °C (* p &lt; 0.05), the growing years and
+    two-week windows with fits. The selected source is in bold.</p>
+  <div id="results"></div>
+
+  <h2>How this site's TAS is estimated</h2>
+  <p>Each two-week window of the growing season gets, in each year, a fitted curve of nighttime respiration against
+    temperature (left). Where the curves sit at the window's reference temperature is that year's reference
+    respiration, <i>ER</i><sub>ref</sub>; it is compared with the control year's as ln(<i>ER</i><sub>ref</sub> /
+    <i>ER</i><sub>ref, control</sub>). Plotted against how warm that window was in that year (middle), and within each
+    window (right), the slope is TAS. See <a href="method.html">How TAS is estimated</a>.</p>
+  <div class="controls">
+    <label>Model <select id="model"><option value="total">total TAS</option><option value="direct">direct TAS</option></select></label>
+    <label>Window <select id="window"></select></label>
+  </div>
+  <div id="walknote"></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:1rem">
+    <div id="curves" class="plot"></div>
+    <div id="ratios" class="plot"></div>
+    <div id="anomalies" class="plot"></div>
+  </div>
+  <p class="small">Left: colours run from the coolest (blue) to the warmest (red) year in the window; ticks mark each
+    year's mean temperature, dots its reference respiration. Middle and right: colours by window through the season;
+    the line is the fitted TAS with ± 1 standard error. The regression behind TAS also allows for correlation between
+    successive years (AR(1)), so the line is not exactly a least-squares fit to these points.</p>
+</main>
+<script type="module" src="js/site.js"></script>
+</body>
+</html>
