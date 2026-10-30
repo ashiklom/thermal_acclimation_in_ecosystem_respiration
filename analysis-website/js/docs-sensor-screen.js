@@ -6,7 +6,8 @@
 import { header, loadJSON, baseLayout, PLOT_CONFIG, fmt, VERDICT_COLORS } from "./common.js";
 import { loadCode, renderSnippets, renderConstants, rConstant, rng, mean, median, finite, mod, num } from "./docs-common.js";
 
-header("docs-sensor-screen.html");
+// (also run inside soil-temperature.html, whose own module draws the header)
+if (!document.querySelector("body > header")) header("docs-sensor-screen.html");
 const code = await loadCode();
 renderSnippets(code);
 renderConstants(code);

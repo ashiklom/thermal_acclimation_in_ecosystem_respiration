@@ -1,11 +1,14 @@
 // Documentation: the candidate soil-temperature columns, the estimators, their
 // cross-validation and ranking (R/ts-columns.R, R/ts-ranking.R). Static: reads
 // only data/code.json (the R code) and static/docs/ (raw-data examples).
-import { header, loadJSON, baseLayout, PLOT_CONFIG, fmt } from "./common.js";
+import { header, loadJSON, baseLayout, PLOT_CONFIG, fmt, COLUMN_LABELS, shortLabel } from "./common.js";
+// a column as the page names it: its id on the archive page, its label on the main site
+const show = (c) => (document.body.dataset.archive === "1" || !COLUMN_LABELS[c] ? `<code>${c}</code>` : shortLabel(c));
 import { loadCode, renderSnippets, renderConstants, rConstant, rStrings, escapeHTML, rng, mean, sd, cor, lstsq, rollMean,
   num, finite, CYCLIC } from "./docs-common.js";
 
-header("docs-ts-estimators.html");
+// (also run inside soil-temperature.html, whose own module draws the header)
+if (!document.querySelector("body > header")) header("docs-ts-estimators.html");
 const code = await loadCode();
 renderSnippets(code);
 renderConstants(code);
@@ -170,8 +173,8 @@ drawRealLoop();
   const subset = (s) => (s === "NULL" ? "all real readings"
     : `real readings with <code>${escapeHTML(s.replace(/^function\(d\) /, "").replace(/above_freezing\(d\)|^above_freezing$/g, `(${freezing})`).replace(/d\$/g, ""))}</code>`);
   const rows = [...body.matchAll(/^\s+(\w+) = list\(kind = "(\w+)", predictors = (.+), subset = (.+)\),?$/gm)];
-  document.getElementById("est-table").innerHTML = `<table class="plain"><tr><th>estimator</th><th>column</th><th>model</th><th>predictors</th><th>trained on</th></tr>
-    ${rows.map(([, name, kind, pred, sub]) => `<tr><td><code>${name}</code></td><td><code>TS_${name}</code></td>
+  document.getElementById("est-table").innerHTML = `<table class="plain"><tr><th>estimator</th><th>${document.body.dataset.archive === "1" ? "column" : "temperature source"}</th><th>model</th><th>predictors</th><th>trained on</th></tr>
+    ${rows.map(([, name, kind, pred, sub]) => `<tr><td><code>${name}</code></td><td>${document.body.dataset.archive === "1" ? `<code>TS_${name}</code>` : (COLUMN_LABELS[`TS_${name}`] ?? `TS_${name}`)}</td>
       <td>${kind === "rf" ? "random forest (ranger)" : "least squares (lm)"}</td><td>${predictors(pred)}</td><td>${subset(sub)}</td></tr>`).join("")}</table>
     <p class="small">The memory predictors: ${memory.map((m) => `<code>${m}</code>`).join(", ")}. <code>NETRAD</code> is the site's net
     radiation (<code>site_settings.csv</code> <code>netrad</code>), gap-filled like air temperature; where a site has none, the
@@ -295,7 +298,7 @@ const metricDefs = [...code.TS_RANK_METRICS.code.matchAll(/(\w+) = function\(q\)
 const fields = [...new Set(metricDefs.map((m) => m.field))];
 document.getElementById("rank-metrics").innerHTML = `<table class="plain"><tr><th>metric</th><th>score (R)</th><th>better</th></tr>
   ${metricDefs.map((m) => `<tr><td><code>${m.name}</code></td><td><code>${escapeHTML(m.expr)}</code></td><td>${m.name === "r2" ? "higher" : "lower"}</td></tr>`).join("")}</table>`;
-document.getElementById("ref-cols").innerHTML = rStrings(code, "TS_REFERENCE_COLUMNS").map((c) => `<code>${c}</code>`).join(", ");
+document.getElementById("ref-cols").innerHTML = rStrings(code, "TS_REFERENCE_COLUMNS").map(show).join(", ");
 const DEFAULTS = {
   TS_linear: [2.10, 0.40, 0.88, 1.25, 1.10, 0.35, 0.95, 2.5, 0.45],
   TS_lm_ta: [2.05, 0.05, 0.88, 1.10, 1.08, 0.33, 0.85, 2.5, 0.10],
@@ -309,11 +312,11 @@ const DEFAULTS = {
 };
 const DEFAULT_FIELDS = ["rmse", "bias", "r2", "sd_ratio", "cell_sd", "year_sd", "d_amp", "d_lag", "d_offset"];
 document.getElementById("calc").innerHTML = `<table class="plain calc"><tr><th>column</th>${fields.map((f) => `<th>${f}</th>`).join("")}</tr>
-  ${estimators.map((e) => `<tr><td><code>${e}</code></td>${fields.map((f) => {
+  ${estimators.map((e) => `<tr><td>${show(e)}</td>${fields.map((f) => {
     const v = (DEFAULTS[e] || [])[DEFAULT_FIELDS.indexOf(f)];
     return `<td><input type="number" step="any" data-e="${e}" data-f="${f}" value="${v ?? ""}"></td>`;
   }).join("")}</tr>`).join("")}</table>
-  <p class="small">An empty row is an estimator without values at this site (e.g. <code>TS_lm_ta_recent</code> where the sensor has
+  <p class="small">An empty row is an estimator without values at this site (e.g. ${show("TS_lm_ta_recent")} where the sensor has
   no data after 2021, fewer than ${rConstant(code, "TS_MIN_TRAIN")} training records).</p>`;
 
 // rank_ts_columns() for one site
@@ -342,7 +345,7 @@ function drawCalc() {
   const metrics = [...new Set(ranking.map((r) => r.metric))];
   const cell = (e, m) => ranking.find((r) => r.column === e && r.metric === m);
   document.getElementById("calc-out").innerHTML = `<table class="plain calc"><tr><th>column</th>${metrics.map((m) => `<th>${m}</th>`).join("")}<th>top under</th></tr>
-    ${estimators.map((e) => `<tr><td><code>${e}</code></td>${metrics.map((m) => {
+    ${estimators.map((e) => `<tr><td>${show(e)}</td>${metrics.map((m) => {
       const r = cell(e, m);
       if (!r || r.rank === null) return `<td class="na">–</td>`;
       return `<td class="${r.rank === 1 ? "best" : r.top ? "top" : ""}" title="score ${fmt(r.value, 3)}">${fmt(r.value, 3)} <span class="small">#${r.rank}</span></td>`;
@@ -353,8 +356,8 @@ function drawCalc() {
   const ref = rStrings(code, "TS_REFERENCE_COLUMNS");
   const selected = [...ref, ...estimators.filter((e) => winners.has(e) && !ref.includes(e))];
   const dropped = estimators.filter((e) => !selected.includes(e));
-  document.getElementById("calc-selected").innerHTML = `<p class="note">${selected.map((c) => `<code>${c}</code>`).join(" ")}
-    ${dropped.length ? `<br><span class="small">not selected (never top here): ${dropped.map((c) => `<code>${c}</code>`).join(" ")}</span>` : ""}</p>`;
+  document.getElementById("calc-selected").innerHTML = `<p class="note">${selected.map(show).join(" · ")}
+    ${dropped.length ? `<br><span class="small">not selected (never top here): ${dropped.map(show).join(" · ")}</span>` : ""}</p>`;
 }
 document.getElementById("calc").addEventListener("input", drawCalc);
 drawCalc();

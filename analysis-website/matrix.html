@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TAS by temperature source · thermal acclimation of ecosystem respiration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main class="main">
+  <h1>TAS by temperature source</h1>
+  <p class="lead">Every site's TAS estimated with every soil- and air-temperature source, compared with a reference
+    source (the temperature source selected at the top). Sites whose significance changes with the source, above all
+    where it flips between significantly negative and significantly positive, are listed first.</p>
+  <details class="note"><summary>The temperature sources</summary>
+    <p>Soil temperature is what respiration responds to most directly, but sensors fail, drift, or are missing. The
+      soil-temperature sources are the sensor as recorded, the repaired sensor, the default (the repaired sensor, or a
+      regression on air temperature where the sensor is unreliable), and several statistical estimates of soil
+      temperature from air temperature, net radiation and lagged air temperature; see <a
+      href="soil-temperature.html">Soil temperature in detail</a>. Each is qualified as the default is (growing season,
+      temperature range, gap screen, control year).</p>
+    <ul>
+      <li><b>Air temperature (measured)</b>: air temperature as measured, without gap filling.</li>
+      <li><b>Air temperature (3-, 7- and 30-day running means)</b>: the mean of the measured air temperature's daily
+        means over the last 3, 7 and 30 days: soil temperature lags air temperature, and these averages mimic that
+        memory without a soil sensor.</li>
+    </ul>
+    <p>Sites without any soil-temperature record have only the air-temperature sources: with a soil-temperature
+      reference they have no comparison; choose an air-temperature reference.</p>
+  </details>
+  <div class="controls" id="controls">
+    <label>TAS <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
+    <label>Sources <select id="group"><option value="all">soil + air temperature</option>
+      <option value="ts">soil temperature</option><option value="ta">air temperature</option></select></label>
+    <label>Sites <select id="sensor"><option value="all">all</option><option value="GOOD">soil sensor good</option>
+      <option value="notBAD">soil sensor not bad</option><option value="BAD">soil sensor bad</option></select></label>
+  </div>
+  <div id="stats" class="stats"></div>
+  <div id="interpretation"></div>
+  <h2>Site × temperature source</h2>
+  <p class="small">Colour: TAS. Marker: ▲ significantly positive, ▼ significantly negative (p &lt; 0.05); a red box marks
+    a significant sign flip against the reference source. Click a cell to open the site.</p>
+  <div id="heat" class="plot" style="min-height:900px"></div>
+  <h2>Each source against the reference</h2>
+  <p class="small">Sites with both estimates. ΔTAS = source − reference; class changes and sign flips as above.</p>
+  <div id="columns"></div>
+  <div id="pairs"></div>
+  <h2>Sites</h2>
+  <div id="table"></div>
+</main>
+<script type="module" src="js/matrix.js"></script>
+</body>
+</html>

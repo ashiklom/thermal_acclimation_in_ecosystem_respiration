@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Drivers of TAS · thermal acclimation of ecosystem respiration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/tabulator_simple.min.css">
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/tabulator.min.js"></script>
+</head>
+<body>
+<main class="main">
+  <h1>Drivers of TAS and future respiration</h1>
+  <p class="lead">What explains why acclimation differs between sites, and how much it matters for respiration in a
+    warmer climate.</p>
+  <p><b>Drivers.</b> Random forests relate each site's TAS to its elevation, mean annual air temperature, leaf area
+    index, soil organic carbon and the warming rate of its air-temperature record. <i>Variable importance</i> is the
+    increase in the forest's mean squared error when a predictor is permuted; <i>partial dependence</i> is the
+    forest's prediction across one predictor's range with the others averaged out (median and 90 % band over bootstrap
+    forests). Besides total and direct TAS, the <i>apparent</i> TAS (total − direct: the indirect effects) is
+    analysed.</p>
+  <p><b>Future respiration.</b> Each site's growing-season nighttime respiration is projected for 2041–2060 under
+    SSP2-4.5 from its respiration–temperature model and the projected warming of minimum (nighttime) temperature
+    (the mean of the climate models, carried from air to soil temperature by the site's soil–air temperature
+    slope), once with the short-term temperature response alone and once also shifted by
+    the site's total TAS: respiration × exp(TAS × warming).</p>
+  <div class="controls" id="controls">
+    <label>Drivers of <select id="trs"><option value="TAS_direct">direct TAS</option><option value="TAS_tot">total TAS</option>
+      <option value="TAS_app">apparent TAS (total − direct)</option></select></label>
+  </div>
+  <div id="note"></div>
+  <div id="stats" class="stats"></div>
+  <div class="grid2">
+    <div id="varimp" class="plot"></div>
+    <div id="future" class="plot"></div>
+  </div>
+  <h2>Partial dependence</h2>
+  <p class="small">Median and 90 % band over bootstrap forests.</p>
+  <div id="partial" class="grid2"></div>
+  <h2>Future respiration by site</h2>
+  <p class="small">Increase of growing-season nighttime respiration, 2041–2060 under SSP2-4.5 against the present.</p>
+  <div id="table"></div>
+</main>
+<script type="module" src="js/drivers.js"></script>
+</body>
+</html>
