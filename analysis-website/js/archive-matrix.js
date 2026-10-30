@@ -1,6 +1,6 @@
 import { header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, tasClass, fmt, loadScreen, VERDICT_COLORS, siteCell, filterSites, siteSymbol, siteLabel, siteHTML } from "./common.js";
 
-header("matrix.html");
+header("archive-matrix.html");
 const runs = await loadJSON("data/ts_runs.json");
 const sets = await loadJSON("data/resultsets.json");
 const label = (id) => (sets.find((s) => s.id === id) || { label: id }).label;
@@ -97,7 +97,7 @@ async function draw() {
   ], baseLayout({ margin: { l: 80, r: 20, t: 20, b: 150 }, xaxis: { tickangle: -45, title: "temperature column" },
     yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site", tickvals: order, ticktext: order.map(siteLabel) },
     plot_bgcolor: "#e5e5e5", height: Math.max(450, order.length * 12 + 220) }), PLOT_CONFIG);
-  document.getElementById("heat").on("plotly_click", (e) => { if (e.points[0].y) location.href = `site.html?site=${e.points[0].y}`; });
+  document.getElementById("heat").on("plotly_click", (e) => { if (e.points[0].y) location.href = `archive-site.html?site=${e.points[0].y}`; });
 
   // each column vs reference: summary, then small multiples
   const others = columns.filter((c) => c !== ref);
@@ -148,7 +148,7 @@ async function draw() {
         marker: { size: pts.map((x) => (isFlip(x) ? 11 : 7)), color: pts.map((x) => (isFlip(x) ? "#d1242f" : "#0969da")), symbol: pts.map(([, , s]) => siteSymbol(s)),
           line: { width: 0.5, color: "#333" } }, showlegend: false },
     ], baseLayout({ title: { text: c, font: { size: 12 } }, xaxis: { title: `TAS (°C⁻¹), ${ref}`, range: [-lim, lim] }, yaxis: { title: `TAS (°C⁻¹), ${c}`, range: [-lim, lim] }, margin: { l: 55, r: 10, t: 30, b: 40 } }), PLOT_CONFIG);
-    document.getElementById(`pair-${c}`).on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
+    document.getElementById(`pair-${c}`).on("plotly_click", (e) => { location.href = `archive-site.html?site=${e.points[0].customdata}`; });
   }
 
   const f = numberFormatter(4);

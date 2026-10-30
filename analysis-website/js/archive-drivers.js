@@ -1,6 +1,6 @@
 import { isNew, NEW_SYMBOL, header, loadJSON, table, params, setParams, baseLayout, PLOT_CONFIG, numberFormatter, fmt, siteCell, filterSites, siteSymbol, siteLabel, includeNew } from "./common.js";
 
-header("drivers.html");
+header("archive-drivers.html");
 const index = await loadJSON("data/drivers.json");
 const byId = new Map(index.map((e) => [e.id, e]));
 // with the added sites excluded, an analysis over all sites is shown by its
@@ -59,7 +59,7 @@ async function draw() {
   ], baseLayout({ title: { text: "Future nighttime respiration increase, with total TAS", font: { size: 13 } },
     xaxis: { title: "increase with total TAS, reference", tickformat: ".0%" },
     yaxis: { title: "increase with total TAS, analysis", tickformat: ".0%" } }), PLOT_CONFIG);
-  document.getElementById("future").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
+  document.getElementById("future").on("plotly_click", (e) => { location.href = `archive-site.html?site=${e.points[0].customdata}`; });
 
   await drawAdded(b, trs, pct);
 

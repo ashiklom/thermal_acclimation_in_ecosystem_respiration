@@ -56,7 +56,7 @@ async function draw() {
   baseLayout({ margin: { l: 80, r: 20, t: 20, b: 140 }, xaxis: { tickangle: -45, title: "soil-temperature column" },
     yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site", tickvals: sites, ticktext: sites.map(siteLabel) },
     plot_bgcolor: "#e5e5e5", height: Math.max(500, sites.length * 11 + 200) }), PLOT_CONFIG);
-  document.getElementById("heat").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].y}`; });
+  document.getElementById("heat").on("plotly_click", (e) => { location.href = `archive-site.html?site=${e.points[0].y}`; });
 
   const f = numberFormatter(3);
   const tcols = [
@@ -82,9 +82,9 @@ if (screen) {
     stat(count((r) => r.verdict === "GOOD" && r.manuscript_acted), "GOOD, manuscript corrected it");
   siteMaps("screengeo", "screenclim", sites.filter((s) => screen.sensor.has(s.site_ID)), {
     category: (s) => screen.sensor.get(s.site_ID).verdict, label: "sensor", colors: VERDICT_COLORS,
-    onClick: (id) => { location.href = `site.html?site=${id}#screen`; } });
+    onClick: (id) => { location.href = `archive-site.html?site=${id}#screen`; } });
   const pct = (c) => (c.getValue() === null ? "–" : `${Math.round(100 * c.getValue())}%`);
-  const link = (c) => siteHTML(c.getValue(), `site.html?site=${c.getValue()}#screen`);
+  const link = (c) => siteHTML(c.getValue(), `archive-site.html?site=${c.getValue()}#screen`);
   const verdict = (c) => `<span style="color:${VERDICT_COLORS[c.getValue()] || "#000"};font-weight:600">${c.getValue()}</span>`;
   table("screentable", v, [
     { title: "Site", field: "site_ID", formatter: link, frozen: true },

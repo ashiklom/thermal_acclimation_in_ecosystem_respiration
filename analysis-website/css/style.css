@@ -63,3 +63,32 @@ td.best .small { color: #fff; }
 sup.newsite { color: var(--accent); font-weight: 700; margin-left: 1px; }
 header .newtoggle { margin-left: auto; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 p.footnote { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+
+/* main pages: header title, Archive menu, temperature-source picker (common.js) */
+header a.title { color: var(--ink); text-decoration: none; }
+header .archivetag { font-size: 0.8rem; color: var(--warn); border: 1px solid #d4a72c66; border-radius: 10px; padding: 0 0.5rem; }
+header details.archive { margin-left: auto; position: relative; font-size: 0.85rem; }
+header .newtoggle + details.archive { margin-left: 0; }
+header details.archive summary { cursor: pointer; color: var(--muted); list-style: none; }
+header details.archive summary::after { content: " ▾"; }
+header details.archive[open] summary::after { content: " ▴"; }
+header details.archive .menu { position: absolute; right: 0; top: 1.6rem; background: #fff; border: 1px solid var(--line);
+  border-radius: 6px; padding: 0.4rem 0.75rem; box-shadow: 0 4px 12px #0002; min-width: 15rem; z-index: 20; }
+header details.archive .menu p { margin: 0.2rem 0 0.4rem; }
+header details.archive .menu a { display: block; color: var(--muted); text-decoration: none; padding: 0.1rem 0; }
+header details.archive .menu a.active, header details.archive .menu a:hover { color: var(--ink); }
+.temppicker { display: inline-flex; gap: 0.6rem; align-items: center; }
+.temppicker select { max-width: 30rem; }
+.temppicker .adv { font-size: 0.8rem; }
+/* main pages */
+main.main p, main.main li { max-width: 60rem; }
+.sitelinks a { margin-right: 0.9rem; }
+.columnpicks { display: flex; flex-wrap: wrap; gap: 0.1rem 0.9rem; font-size: 0.85rem; }
+.columnpicks label { white-space: nowrap; color: var(--ink); }
+.columnpicks .swatch { display: inline-block; width: 0.9rem; height: 3px; vertical-align: middle; margin-right: 0.25rem; }
+details.section { border-top: 1px solid var(--line); margin: 1.5rem 0 0; }
+details.section > summary { cursor: pointer; font-size: 1.25rem; font-weight: 600; padding: 0.6rem 0 0.3rem; }
+details.section > summary::marker { color: var(--muted); }
+nav.pagetoc ol { columns: 2; font-size: 0.95rem; }
+.formula { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.9rem; margin: 0.6rem 0; max-width: 60rem; }
+.example h3 a { text-decoration: none; }

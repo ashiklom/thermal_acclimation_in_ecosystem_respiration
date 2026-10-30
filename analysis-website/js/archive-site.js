@@ -1,6 +1,6 @@
 import { header, loadJSON, table, fmt, params, setParams, baseLayout, PLOT_CONFIG, CLASS_COLORS, tasClass, numberFormatter, siteMaps, loadScreen, VERDICT_COLORS, siteLabel, isNew } from "./common.js";
 
-header("site.html");
+header("archive-site.html");
 const sites = await loadJSON("data/sites.json");
 const sets = await loadJSON("data/resultsets.json");
 const tas = Object.fromEntries(await Promise.all(sets.map(async (s) => [s.id, await loadJSON(`data/tas/${s.id}.json`)])));

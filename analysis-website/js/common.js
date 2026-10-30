@@ -1,20 +1,116 @@
 // Shared helpers for the analysis website: data loading, navigation, TAS
 // classes and comparisons, site maps, tables.
 
+// The main pages (results of the latest run) and, in the header's Archive menu,
+// the pages that documented the refactor run by run.
 export const PAGES = [
   ["index.html", "Overview"],
+  ["method.html", "How TAS is estimated"],
+  ["site.html", "Site explorer"],
+  ["matrix.html", "TAS by temperature source"],
+  ["soil-temperature.html", "Soil temperature in detail"],
+  ["drivers.html", "Drivers of TAS"],
+];
+export const ARCHIVE_PAGES = [
+  ["archive-overview.html", "Overview (result sets)"],
   ["compare.html", "Compare runs"],
   ["stages.html", "Method stages"],
-  ["drivers.html", "Drivers & scenario"],
-  ["ts.html", "Soil temperature"],
-  ["matrix.html", "TAS by column"],
-  ["site.html", "Site explorer"],
+  ["archive-drivers.html", "Drivers & scenario"],
+  ["ts.html", "Soil temperature columns"],
+  ["archive-matrix.html", "TAS by column"],
+  ["archive-site.html", "Site explorer"],
   ["update.html", "Data update"],
   ["flux-products.html", "Records vs shuttle"],
   ["au-tum.html", "AU-Tum sources"],
   ["docs-ts-estimators.html", "Docs: TS estimators"],
   ["docs-sensor-screen.html", "Docs: sensor screen"],
 ];
+// On an archive page (set by header()): the added-sites toggle, marks and
+// triangles; on the main pages every site is shown alike.
+const archiveMode = () => document.body?.dataset.archive === "1";
+
+// The temperature columns TAS is estimated with (R/ts-columns.R, R/ta-columns.R),
+// as the main pages name them. SIMPLE_SOURCES are offered without "Advanced".
+export const COLUMN_LABELS = {
+  TS_original: "Soil temperature (sensor)",
+  TS_reconstructed: "Soil temperature (repaired sensor)",
+  TS_manuscript: "Soil temperature (reconstructed or regression)",
+  TS_linear: "Soil temperature (linear on air temperature, TA > 0)",
+  TS_lm_ta: "Soil temperature (linear on air temperature)",
+  TS_lm_ta_recent: "Soil temperature (linear on air temperature, 2022 onward)",
+  TS_lm_ta_netrad: "Soil temperature (linear on air temperature + net radiation)",
+  TS_rf_ta: "Soil temperature (random forest on air temperature)",
+  TS_rf_ta_netrad: "Soil temperature (random forest on air temperature + net radiation)",
+  TS_lm_memory: "Soil temperature (linear on lagged air temperature)",
+  TS_rf_memory: "Soil temperature (random forest on lagged air temperature)",
+  TS_rf_memory_netrad: "Soil temperature (random forest on lagged air temperature + net radiation)",
+  TA_measured: "Air temperature (measured)",
+  TA_mem3d: "Air temperature (3-day running mean)",
+  TA_mem7d: "Air temperature (7-day running mean)",
+  TA_mem30d: "Air temperature (30-day running mean)",
+};
+export const SIMPLE_SOURCES = { TS_manuscript: "Soil temperature", TA_measured: "Air temperature" };
+export const DEFAULT_SOURCE = "TS_manuscript";
+export const SOIL_COLUMNS = Object.keys(COLUMN_LABELS).filter((c) => c.startsWith("TS_"));
+export const AIR_COLUMNS = Object.keys(COLUMN_LABELS).filter((c) => c.startsWith("TA_"));
+export const isAdvanced = () => localStorage.getItem("thermal.tempAdvanced") === "1";
+// The label of a column: the simple name where "Advanced" is off and it has one.
+export const columnLabel = (c, simple = !isAdvanced()) => (simple && SIMPLE_SOURCES[c]) || COLUMN_LABELS[c] || c;
+// A colour per column (soil: warm/brown hues, air: blues), for line plots.
+export const COLUMN_COLORS = Object.fromEntries([
+  ...SOIL_COLUMNS.map((c, i) => [c, ["#8c510a", "#bf812d", "#b2182b", "#e08214", "#7f3b08", "#d6604d", "#f4a582",
+    "#9e0142", "#d53e4f", "#a6761d", "#e6ab02", "#666666"][i]]),
+  ...AIR_COLUMNS.map((c, i) => [c, ["#2166ac", "#4393c3", "#92c5de", "#053061"][i]]),
+]);
+
+// The temperature source of the TAS the main pages show: URL `temp=`, else the
+// last choice (localStorage), else soil temperature.
+export function tempSource() {
+  const v = params().get("temp");
+  if (v && COLUMN_LABELS[v]) return v;
+  const s = localStorage.getItem("thermal.tempSource");
+  return s && COLUMN_LABELS[s] ? s : DEFAULT_SOURCE;
+}
+function setTempSource(c) {
+  localStorage.setItem("thermal.tempSource", c);
+  setParams({ temp: c });
+}
+
+// The shared temperature-source control: a select (soil or air temperature;
+// with "Advanced", every column) inside `container` (an element or id), calling
+// onChange(column) on every change. Returns { get, set }.
+export function tempSourcePicker(container, onChange) {
+  const el = typeof container === "string" ? document.getElementById(container) : container;
+  el.insertAdjacentHTML("beforeend", `<span class="temppicker"><label>Temperature source <select></select></label>
+    <label class="adv" title="Every soil- and air-temperature column TAS was estimated with">
+    <input type="checkbox"> Advanced</label></span>`);
+  const span = el.lastElementChild;
+  const select = span.querySelector("select");
+  const box = span.querySelector("input");
+  const fill = () => {
+    const adv = box.checked;
+    const opt = (c) => `<option value="${c}">${columnLabel(c, !adv)}</option>`;
+    select.innerHTML = adv
+      ? `<optgroup label="Soil temperature">${SOIL_COLUMNS.map(opt).join("")}</optgroup>` +
+        `<optgroup label="Air temperature">${AIR_COLUMNS.map(opt).join("")}</optgroup>`
+      : Object.keys(SIMPLE_SOURCES).map(opt).join("");
+    select.value = tempSource();
+  };
+  box.checked = isAdvanced() || !SIMPLE_SOURCES[tempSource()];
+  localStorage.setItem("thermal.tempAdvanced", box.checked ? "1" : "0");
+  fill();
+  setTempSource(select.value);
+  select.addEventListener("change", () => { setTempSource(select.value); onChange(select.value); });
+  box.addEventListener("change", () => {
+    localStorage.setItem("thermal.tempAdvanced", box.checked ? "1" : "0");
+    const before = tempSource();
+    if (!box.checked && !SIMPLE_SOURCES[before]) setTempSource(DEFAULT_SOURCE);
+    fill();
+    // the labels change with the mode even where the column does not
+    onChange(tempSource());
+  });
+  return { get: () => select.value, set: (c) => { setTempSource(c); fill(); } };
+}
 
 // Threshold for "TAS changed" (refactor-v2-log.md, S9): 4 x the robust sd of
 // the full reproduction run vs the published TAS (total 1.2e-3, direct 1.7e-3).
@@ -57,6 +153,7 @@ export const TA_ONLY_MARK = "†";
 export const isTaOnly = (id) => Boolean(SITES.get(id)?.ta_only);
 
 export function includeNew() {
+  if (!archiveMode()) return true;
   const v = new URLSearchParams(window.location.search).get("new");
   if (v !== null) return v !== "0";
   return localStorage.getItem("thermal.includeNew") !== "0";
@@ -67,33 +164,44 @@ export function filterSites(rows, key = "site_ID") {
   return includeNew() ? rows : rows.filter((r) => !isNew(typeof r === "string" ? r : r[key]));
 }
 
-export const siteSymbol = (id, base = "circle") => (isNew(id) ? NEW_SYMBOL : base);
-const marks = (id) => (isNew(id) ? NEW_MARK : "") + (isTaOnly(id) ? TA_ONLY_MARK : "");
+export const siteSymbol = (id, base = "circle") => (archiveMode() && isNew(id) ? NEW_SYMBOL : base);
+const marks = (id) => (archiveMode() ? (isNew(id) ? NEW_MARK : "") + (isTaOnly(id) ? TA_ONLY_MARK : "") : "");
 export const siteLabel = (id) => `${id}${marks(id)}`;
 const newTitle = (id) => `added ${SITES.get(id)?.added} (FLUXNET shuttle)` +
   (isTaOnly(id) ? "; no soil temperature: air-temperature columns only" : "");
-export const siteHTML = (id, href = `site.html?site=${id}`) =>
-  `<a href="${href}">${id}</a>${isNew(id) ? `<sup class="newsite" title="${newTitle(id)}">${marks(id)}</sup>` : ""}`;
+export const siteHTML = (id, href = `${archiveMode() ? "archive-" : ""}site.html?site=${id}`) =>
+  `<a href="${href}">${id}</a>${marks(id) ? `<sup class="newsite" title="${newTitle(id)}">${marks(id)}</sup>` : ""}`;
 // Tabulator formatter for a site-ID column.
 export const siteCell = (cell) => siteHTML(cell.getValue());
 
 export function header(active) {
+  const archive = ARCHIVE_PAGES.some(([href]) => href === active);
+  if (archive) document.body.dataset.archive = "1";
   const links = PAGES.map(([href, label]) =>
     `<a href="${href}"${href === active ? ' class="active"' : ""}>${label}</a>`).join("");
+  const archiveLinks = ARCHIVE_PAGES.map(([href, label]) =>
+    `<a href="${href}"${href === active ? ' class="active"' : ""}>${label}</a>`).join("");
+  const menu = `<details class="archive"><summary>Archive</summary>
+    <div class="menu"><p class="small">How the analysis was refactored and checked, run by run</p>${archiveLinks}</div></details>`;
   const nNew = [...SITES.values()].filter((s) => s.added).length;
   const nTaOnly = [...SITES.values()].filter((s) => s.ta_only).length;
-  const toggle = nNew ? `<label class="newtoggle" title="Sites added ${ADDED_DATES.join(", ")} from the FLUXNET shuttle: ` +
+  const toggle = archive && nNew ? `<label class="newtoggle" title="Sites added ${ADDED_DATES.join(", ")} from the FLUXNET shuttle: ` +
     `triangles in figures, ${NEW_MARK} in tables; excluded, they are left out of every figure, table and statistic, ` +
     `and steps 03-04 show the run over the manuscript's sites"><input type="checkbox" id="include-new"${includeNew() ? " checked" : ""}> ` +
     `include the ${nNew} added sites (▲, ${NEW_MARK})</label>` : "";
-  document.body.insertAdjacentHTML("afterbegin",
-    `<header><span class="title">Thermal acclimation · refactor-v2</span><nav>${links}</nav>${toggle}</header>`);
+  const title = archive ? `<a class="title" href="index.html">Thermal acclimation of ecosystem respiration</a>` +
+    `<span class="archivetag">Archive: refactor-v2</span>` :
+    `<a class="title" href="index.html">Thermal acclimation of ecosystem respiration</a>`;
+  document.body.insertAdjacentHTML("afterbegin", `<header>${title}<nav>${links}</nav>${toggle}${menu}</header>`);
+  // close the archive menu on a click elsewhere (it opens over the page)
+  const details = document.querySelector("header details.archive");
+  document.addEventListener("click", (e) => { if (!details.contains(e.target)) details.open = false; });
   document.getElementById("include-new")?.addEventListener("change", (e) => {
     localStorage.setItem("thermal.includeNew", e.target.checked ? "1" : "0");
     setParams({ new: e.target.checked ? "1" : "0" });
     location.reload();
   });
-  if (nNew) {
+  if (archive && nNew) {
     const note = `<p class="small footnote"><sup class="newsite">${NEW_MARK}</sup> / ▲ site added ${ADDED_DATES.join(", ")} ` +
       `from the FLUXNET shuttle (${nNew} sites; not in the manuscript); ` +
       `${includeNew() ? "included" : "excluded"} here (toggle at the top).` +
@@ -188,45 +296,69 @@ export function baseLayout(extra = {}) {
   return layout;
 }
 
-// Two site maps, geographic and climate space (mean annual temperature from
-// the flux record vs annual precipitation, over Whittaker biomes), with
-// points coloured by `value(site)` (numeric) or `category(site)`. With
-// `focus`, for one site: the map zoomed in and centred on it, and the site
-// labelled in both (and shown whatever the added-sites toggle).
-export async function siteMaps(geoDiv, climDiv, sites, { value, category, label = "", colorscale = "RdBu", symmetric = true, onClick, focus = false, colors = CLASS_COLORS, filter = !focus } = {}) {
+// A categorical palette (colour-blind safe first, then more), for categories
+// without colours of their own.
+export const PALETTE = ["#0072b2", "#e69f00", "#009e73", "#cc79a7", "#56b4e9", "#d55e00", "#f0e442", "#000000",
+  "#8c564b", "#7f7f7f", "#bcbd22", "#17becf", "#9467bd", "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#e377c2"];
+export const NO_VALUE_COLOR = "#c8ccd1";
+
+// Two site maps, geographic and climate space (mean annual temperature vs
+// annual precipitation, over Whittaker biomes), with points coloured by
+// `value(site)` (numeric; sites without a value grey, as `missing`) or
+// `category(site)` (colours from `colors`, else PALETTE in order of
+// `categories`, with a legend). With `focus`, for one site: the map zoomed in
+// and centred on it, and the site labelled in both (and shown whatever the
+// added-sites toggle).
+export async function siteMaps(geoDiv, climDiv, sites, { value, category, categories, label = "", colorscale = "RdBu",
+  reversescale = false, symmetric = true, onClick, focus = false, colors = CLASS_COLORS, filter = !focus,
+  missing = "no estimate", hover = () => "" } = {}) {
   const biomes = await loadJSON("static/whittaker_biomes.json");
   if (filter) sites = filterSites(sites);
-  const text = sites.map((s) => `${siteLabel(s.site_ID)}<br>${s.IGBP}, ${s.Climate_class}<br>${label}: ${value ? fmt(value(s)) : category(s)}`);
-  let marker;
-  if (value) {
-    const v = sites.map(value);
-    const vmax = Math.max(...v.filter((x) => x !== null && !Number.isNaN(x)).map(Math.abs), 1e-9);
-    marker = { color: v, colorscale, cmin: symmetric ? -vmax : undefined, cmax: symmetric ? vmax : undefined,
-      size: 9, line: { width: 0.5, color: "#333" }, colorbar: { title: { text: label }, thickness: 12 } };
-  } else {
-    const cats = sites.map(category);
-    marker = { color: cats.map((c) => colors[c] || "#8c959f"), size: 9, line: { width: 0.5, color: "#333" } };
-  }
-  if (focus) Object.assign(marker, { size: 14, line: { width: 1.5, color: "#000" } });
-  marker.symbol = sites.map((s) => siteSymbol(s.site_ID));
+  const name = (s) => s.site_name ? ` ${s.site_name}` : "";
+  const text = (s) => `<b>${siteLabel(s.site_ID)}</b>${name(s)}<br>${s.IGBP}, ${s.Climate_class}<br>${label}: ` +
+    `${value ? fmt(value(s)) : category(s)}${hover(s)}`;
   const mode = focus ? "markers+text" : "markers";
-  const labels = { text: sites.map((s) => s.site_ID), textposition: "top center", textfont: { size: 12 } };
-  const geo = [{ type: "scattergeo", lon: sites.map((s) => s.LONG), lat: sites.map((s) => s.LAT), hovertext: text, hoverinfo: "text",
-    customdata: sites.map((s) => s.site_ID), mode, marker, ...(focus ? labels : {}) }];
+  const base = { size: 9, line: { width: 0.5, color: "#333" } };
+  if (focus) Object.assign(base, { size: 14, line: { width: 1.5, color: "#000" } });
+  // groups of sites, each one trace in both plots
+  const groups = [];
+  if (value) {
+    const has = sites.filter((s) => value(s) !== null && value(s) !== undefined && !Number.isNaN(value(s)));
+    const none = sites.filter((s) => !has.includes(s));
+    const v = has.map(value);
+    const vmax = Math.max(...v.map(Math.abs), 1e-9);
+    groups.push({ sites: has, name: label, showlegend: false, marker: { ...base, color: v, colorscale, reversescale,
+      cmin: symmetric ? -vmax : undefined, cmax: symmetric ? vmax : undefined,
+      colorbar: { title: { text: label }, thickness: 12 } } });
+    if (none.length) groups.push({ sites: none, name: missing, showlegend: true, marker: { ...base, color: NO_VALUE_COLOR } });
+  } else {
+    const cats = categories || [...new Set(sites.map(category))].sort();
+    cats.forEach((c, i) => {
+      const g = sites.filter((s) => category(s) === c);
+      if (g.length) groups.push({ sites: g, name: `${c} (${g.length})`, showlegend: true,
+        marker: { ...base, color: colors?.[c] || PALETTE[i % PALETTE.length] } });
+    });
+  }
+  const trace = (g, extra) => ({ hovertext: g.sites.map(text), hoverinfo: "text", customdata: g.sites.map((s) => s.site_ID), mode,
+    name: g.name, marker: { ...g.marker, symbol: g.sites.map((s) => siteSymbol(s.site_ID)) },
+    ...(focus ? { text: g.sites.map((s) => s.site_ID), textposition: "top center", textfont: { size: 12 } } : {}), ...extra });
+  const geo = groups.map((g) => trace(g, { type: "scattergeo", lon: g.sites.map((s) => s.LONG), lat: g.sites.map((s) => s.LAT),
+    showlegend: false }));
   const geoLayout = { projection: { type: "natural earth" }, showland: true, landcolor: "#f0f0f0", showcountries: true, countrycolor: "#ccc" };
   if (focus && sites.length) {
     Object.assign(geoLayout, { center: { lat: sites[0].LAT, lon: sites[0].LONG }, projection: { type: "natural earth", scale: 8,
       rotation: { lon: sites[0].LONG } }, showcoastlines: true, coastlinecolor: "#999", showlakes: true, lakecolor: "#dbe9f6",
       showrivers: true, rivercolor: "#dbe9f6", showsubunits: true, subunitcolor: "#ddd" });
   }
-  Plotly.newPlot(geoDiv, geo, baseLayout({ geo: geoLayout, margin: { l: 0, r: 0, t: 10, b: 0 } }), PLOT_CONFIG);
+  Plotly.newPlot(geoDiv, geo, baseLayout({ geo: geoLayout, margin: { l: 0, r: 0, t: 10, b: 0 }, showlegend: false }), PLOT_CONFIG);
   const shapes = biomes.map((b, i) => ({ type: "scatter", x: b.precp_cm.map((p) => p * 10), y: b.temp_c, fill: "toself",
     mode: "lines", line: { width: 0.5, color: "#999" }, fillcolor: `hsla(${(i * 47) % 360}, 35%, 85%, 0.45)`,
     name: b.biome, hoverinfo: "name", showlegend: false }));
-  const clim = shapes.concat([{ type: "scatter", mode, x: sites.map((s) => s.MAP), y: sites.map((s) => s.MAT), hovertext: text,
-    hoverinfo: "text", customdata: sites.map((s) => s.site_ID), marker, showlegend: false, ...(focus ? labels : {}) }]);
+  const clim = shapes.concat(groups.map((g) => trace(g, { type: "scatter", x: g.sites.map((s) => s.MAP), y: g.sites.map((s) => s.MAT),
+    showlegend: !focus && g.showlegend })));
   Plotly.newPlot(climDiv, clim, baseLayout({
     xaxis: { title: "Mean annual precipitation (mm)" }, yaxis: { title: "Mean annual air temperature (°C)" },
+    legend: { orientation: "h", y: -0.18, font: { size: 11 } },
   }), PLOT_CONFIG);
   if (onClick) {
     for (const div of [geoDiv, climDiv]) {
@@ -245,3 +377,41 @@ export function table(div, rows, columns, { onRowClick, height = "420px", initia
 }
 
 export const numberFormatter = (digits = 4) => (cell) => fmt(cell.getValue(), digits);
+
+// The site characteristics and driver-analysis predictors (R/step03-drivers.R)
+// TAS is plotted against, with units, as sites.json has them.
+export const PREDICTORS = {
+  LAI: "Leaf area index (MODIS, m² m⁻²)",
+  EVI: "Enhanced vegetation index (MODIS)",
+  NDVI: "Normalized difference vegetation index (MODIS)",
+  GPP: "Gross primary productivity (MODIS)",
+  SOC: "Soil organic carbon (t ha⁻¹)",
+  MATA: "Mean annual air temperature (°C)",
+  SSTA: "Seasonal variation of air temperature (°C)",
+  IATA: "Inter-annual variation of air temperature (°C)",
+  DRTA: "Daily range of air temperature (°C)",
+  warm_rate: "Warming rate (°C per year)",
+  MAP: "Mean annual precipitation (mm)",
+  ELEV: "Elevation (m)",
+  NEE: "Mean annual net ecosystem exchange (g C m⁻²)",
+  NEE_night: "Mean annual nighttime NEE (g C m⁻²)",
+};
+export const MODEL_LABELS = { direct: "Direct TAS", total: "Total TAS" };
+
+// The main run's TAS: { run, label, columns, get(model, column) -> Map(site -> row) }.
+export async function loadMain() {
+  const main = await loadJSON("data/main.json");
+  const maps = {};
+  main.get = (model, column) => (maps[`${model}|${column}`] ??= new Map(main.tas[model]
+    .filter((r) => r.column === column).map((r) => [r.site_ID, r])));
+  return main;
+}
+
+// TAS ± SE with a significance mark (p < 0.05).
+export const tasText = (r) => (r && r.TAS !== null && r.TAS !== undefined
+  ? `${fmt(r.TAS, 4)} ± ${fmt(r.TAS_se, 4)}${r.TASp < 0.05 ? " *" : ""}` : "–");
+// Links to the site's network pages and data product.
+export const siteLinks = (s) => (s.links || []).map((l) => `<a href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`).join("");
+// A short column label for crowded axes: "Soil: sensor", "Air: 3-day running mean".
+export const shortLabel = (c) => (COLUMN_LABELS[c] || c).replace(/^Soil temperature \((.*)\)$/, "Soil: $1")
+  .replace(/^Air temperature \((.*)\)$/, "Air: $1");

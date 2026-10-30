@@ -50,7 +50,7 @@ async function draw() {
     xaxis: { title: `TAS (°C⁻¹), ${label(a)}`, range: [-lim, lim], zeroline: true }, yaxis: { title: `TAS (°C⁻¹), ${label(b)}`, range: [-lim, lim], zeroline: true },
     legend: { orientation: "h", y: -0.2 },
   }), PLOT_CONFIG);
-  document.getElementById("scatter").on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
+  document.getElementById("scatter").on("plotly_click", (e) => { location.href = `archive-site.html?site=${e.points[0].customdata}`; });
 
   // ΔTAS in units of the estimate's standard error where runs report it (TAS_se), else ΔTAS itself.
   const withSe = rows.filter((r) => r.d_over_se !== null);

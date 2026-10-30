@@ -1,6 +1,6 @@
 import { header, loadJSON, compare, summarise, siteMaps, table, fmt, tasClass, params, setParams, loadScreen, VERDICT_COLORS, filterSites } from "./common.js";
 
-header("index.html");
+header("archive-overview.html");
 const sites = await loadJSON("data/sites.json");
 const sets = await loadJSON("data/resultsets.json");
 const tas = Object.fromEntries(await Promise.all(sets.map(async (s) => [s.id, await loadJSON(`data/tas/${s.id}.json`)])));
@@ -50,7 +50,7 @@ function draw() {
   const bySite = new Map((tas[set][model] || []).map((r) => [r.site_ID, r]));
   const ref = new Map((tas.published[model] || []).map((r) => [r.site_ID, r]));
   const shown = sites.filter((s) => bySite.has(s.site_ID));
-  const opts = { onClick: (id) => { location.href = `site.html?site=${id}`; } };
+  const opts = { onClick: (id) => { location.href = `archive-site.html?site=${id}`; } };
   if (colour === "tas") Object.assign(opts, { value: (s) => bySite.get(s.site_ID).TAS, label: `TAS (${model})` });
   if (colour === "delta") Object.assign(opts, { value: (s) => (bySite.get(s.site_ID).TAS ?? NaN) - (ref.get(s.site_ID)?.TAS ?? NaN), label: "ΔTAS" });
   if (colour === "class") Object.assign(opts, { category: (s) => tasClass(bySite.get(s.site_ID).TAS, bySite.get(s.site_ID).TASp), label: "class" });

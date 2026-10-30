@@ -67,7 +67,7 @@ async function draw() {
     text: withInputs.map((r) => { const i = inputs.get(r.site_ID); return `${r.site_ID}<br>night records ${i.n_night_ref} → ${i.n_night_new}<br>years ${i.n_years_ref} → ${i.n_years_new}<br>data Δ ${fmt(r.dTAS, 5)}`; }),
     hoverinfo: "text", customdata: withInputs.map((r) => r.site_ID), marker: { color: withInputs.map((r) => CLASS_COLORS[r.class_new]), symbol: withInputs.map((r) => siteSymbol(r.site_ID)), size: 8, line: { width: 0.5, color: "#333" } } }],
   baseLayout({ xaxis: { title: "change in night-time records (%)", zeroline: true }, yaxis: { title: "data effect: ΔTAS (°C⁻¹)", zeroline: true } }), PLOT_CONFIG);
-  for (const id of ["effects", "records"]) document.getElementById(id).on("plotly_click", (e) => { location.href = `site.html?site=${e.points[0].customdata}`; });
+  for (const id of ["effects", "records"]) document.getElementById(id).on("plotly_click", (e) => { location.href = `archive-site.html?site=${e.points[0].customdata}`; });
 
   // fit matrix: data effect by column
   const [tsOld, tsNew] = [await getTs(ref), await getTs(run)];
