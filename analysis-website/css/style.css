@@ -92,3 +92,13 @@ details.section > summary::marker { color: var(--muted); }
 nav.pagetoc ol { columns: 2; font-size: 0.95rem; }
 .formula { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.9rem; margin: 0.6rem 0; max-width: 60rem; }
 .example h3 a { text-decoration: none; }
+/* the legend shared by the two site maps (common.js mapLegend()) */
+.maplegend { display: flex; justify-content: center; align-items: flex-end; flex-wrap: wrap; gap: 0.4rem 1.6rem; margin: 0.25rem 0 0.75rem; font-size: 0.85rem; }
+.maplegend .colorbar { width: 340px; }
+.maplegend .cbtitle { text-align: center; margin-bottom: 0.15rem; }
+.maplegend .cbbar { height: 12px; border: 1px solid #999; }
+.maplegend .cbticks { position: relative; height: 1.2rem; }
+.maplegend .cbticks span { position: absolute; transform: translateX(-50%); top: 0.1rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+.maplegend .swatchitem { white-space: nowrap; }
+.maplegend.stacked { flex-direction: column; align-items: center; gap: 0.1rem; }
+.maplegend .dot { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 50%; border: 1px solid #333; margin-right: 0.3rem; vertical-align: -0.1rem; }

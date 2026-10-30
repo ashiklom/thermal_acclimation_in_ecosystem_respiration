@@ -301,6 +301,26 @@ export function baseLayout(extra = {}) {
 export const PALETTE = ["#0072b2", "#e69f00", "#009e73", "#cc79a7", "#56b4e9", "#d55e00", "#f0e442", "#000000",
   "#8c564b", "#7f7f7f", "#bcbd22", "#17becf", "#9467bd", "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#e377c2"];
 export const NO_VALUE_COLOR = "#c8ccd1";
+// A diverging scale for TAS: blue (negative) to red (positive), white at zero.
+export const DIVERGING = [[0, "#053061"], [0.2, "#2166ac"], [0.4, "#92c5de"], [0.5, "#f7f7f7"], [0.6, "#f4a582"],
+  [0.8, "#b2182b"], [1, "#67001f"]];
+
+// A legend shared by the two site maps, centred under both (in `div`): a
+// horizontal colour bar for values, or one swatch per category; and the
+// sites without a value.
+function mapLegend(div, { label, colorscale, vmax, missing, nMissing, categories }) {
+  const el = typeof div === "string" ? document.getElementById(div) : div;
+  const swatch = (color, text) => `<span class="swatchitem"><span class="dot" style="background:${color}"></span>${text}</span>`;
+  let bar = "";
+  if (colorscale) {
+    const ticks = [-1, -0.5, 0, 0.5, 1].map((f) => `<span style="left:${50 + 50 * f}%">${fmt(f * vmax, 2)}</span>`).join("");
+    bar = `<div class="colorbar"><div class="cbtitle">${label}</div>` +
+      `<div class="cbbar" style="background:linear-gradient(to right, ${colorscale.map(([q, c]) => `${c} ${100 * q}%`).join(", ")})"></div>` +
+      `<div class="cbticks">${ticks}</div></div>`;
+  }
+  const cats = (categories || []).map(([c, color]) => swatch(color, c)).join("");
+  el.innerHTML = `<div class="maplegend${bar ? " stacked" : ""}">${bar}${cats}${nMissing ? swatch(NO_VALUE_COLOR, `${missing} (${nMissing})`) : ""}</div>`;
+}
 
 // Two site maps, geographic and climate space (mean annual temperature vs
 // annual precipitation, over Whittaker biomes), with points coloured by
@@ -308,10 +328,12 @@ export const NO_VALUE_COLOR = "#c8ccd1";
 // `category(site)` (colours from `colors`, else PALETTE in order of
 // `categories`, with a legend). With `focus`, for one site: the map zoomed in
 // and centred on it, and the site labelled in both (and shown whatever the
-// added-sites toggle).
+// added-sites toggle). With `legendDiv`, one legend for both maps goes there
+// (mapLegend()) instead of a colour bar and legend in each plot; a numeric
+// colorscale must then be an array of [position, colour].
 export async function siteMaps(geoDiv, climDiv, sites, { value, category, categories, label = "", colorscale = "RdBu",
   reversescale = false, symmetric = true, onClick, focus = false, colors = CLASS_COLORS, filter = !focus,
-  missing = "no estimate", hover = () => "" } = {}) {
+  missing = "no estimate", hover = () => "", legendDiv = null } = {}) {
   const biomes = await loadJSON("static/whittaker_biomes.json");
   if (filter) sites = filterSites(sites);
   const name = (s) => s.site_name ? ` ${s.site_name}` : "";
@@ -329,8 +351,9 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, catego
     const vmax = Math.max(...v.map(Math.abs), 1e-9);
     groups.push({ sites: has, name: label, showlegend: false, marker: { ...base, color: v, colorscale, reversescale,
       cmin: symmetric ? -vmax : undefined, cmax: symmetric ? vmax : undefined,
-      colorbar: { title: { text: label }, thickness: 12 } } });
+      ...(legendDiv ? { showscale: false } : { colorbar: { title: { text: label }, thickness: 12 } }) } });
     if (none.length) groups.push({ sites: none, name: missing, showlegend: true, marker: { ...base, color: NO_VALUE_COLOR } });
+    if (legendDiv) mapLegend(legendDiv, { label, colorscale, vmax, missing, nMissing: none.length });
   } else {
     const cats = categories || [...new Set(sites.map(category))].sort();
     cats.forEach((c, i) => {
@@ -338,6 +361,7 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, catego
       if (g.length) groups.push({ sites: g, name: `${c} (${g.length})`, showlegend: true,
         marker: { ...base, color: colors?.[c] || PALETTE[i % PALETTE.length] } });
     });
+    if (legendDiv) mapLegend(legendDiv, { categories: groups.map((g) => [g.name, g.marker.color]) });
   }
   const trace = (g, extra) => ({ hovertext: g.sites.map(text), hoverinfo: "text", customdata: g.sites.map((s) => s.site_ID), mode,
     name: g.name, marker: { ...g.marker, symbol: g.sites.map((s) => siteSymbol(s.site_ID)) },
@@ -355,7 +379,7 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, catego
     mode: "lines", line: { width: 0.5, color: "#999" }, fillcolor: `hsla(${(i * 47) % 360}, 35%, 85%, 0.45)`,
     name: b.biome, hoverinfo: "name", showlegend: false }));
   const clim = shapes.concat(groups.map((g) => trace(g, { type: "scatter", x: g.sites.map((s) => s.MAP), y: g.sites.map((s) => s.MAT),
-    showlegend: !focus && g.showlegend })));
+    showlegend: !focus && !legendDiv && g.showlegend })));
   Plotly.newPlot(climDiv, clim, baseLayout({
     xaxis: { title: "Mean annual precipitation (mm)" }, yaxis: { title: "Mean annual air temperature (°C)" },
     legend: { orientation: "h", y: -0.18, font: { size: 11 } },

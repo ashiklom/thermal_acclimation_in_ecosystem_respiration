@@ -1,5 +1,5 @@
 import { header, SITES, loadMain, siteMaps, table, fmt, tasClass, tempSourcePicker, tempSource, columnLabel, CLASS_COLORS,
-  PREDICTORS, MODEL_LABELS, baseLayout, PLOT_CONFIG, params, setParams, siteCell, numberFormatter } from "./common.js";
+  PREDICTORS, MODEL_LABELS, DIVERGING, baseLayout, PLOT_CONFIG, params, setParams, siteCell, numberFormatter } from "./common.js";
 
 header("index.html");
 const main = await loadMain();
@@ -30,12 +30,12 @@ function draw() {
   // maps
   const byModel = { total, direct };
   if (colour === "total" || colour === "direct") {
-    siteMaps("geo", "clim", sites, { value: (s) => byModel[colour].get(s.site_ID)?.TAS ?? null, colorscale: "RdBu", label: `${MODEL_LABELS[colour]} (${source})`, onClick: open,
+    siteMaps("geo", "clim", sites, { value: (s) => byModel[colour].get(s.site_ID)?.TAS ?? null, colorscale: DIVERGING, legendDiv: "maplegend", label: `${MODEL_LABELS[colour]} (${source})`, onClick: open,
       missing: column.startsWith("TS_") ? "no estimate (e.g. no soil temperature)" : "no estimate" });
   } else {
     const category = { IGBP: (s) => s.IGBP, climate: (s) => s.Climate_class, network: (s) => s.network }[colour];
     const label = { IGBP: "Vegetation type", climate: "Climate class", network: "Data source" }[colour];
-    siteMaps("geo", "clim", sites, { category, label, colors: null, onClick: open });
+    siteMaps("geo", "clim", sites, { category, label, colors: null, onClick: open, legendDiv: "maplegend" });
   }
 
   // table
