@@ -78,10 +78,10 @@ function setTempSource(c) {
 
 // The shared temperature-source control: a select (soil or air temperature;
 // with "Advanced", every column) inside `container` (an element or id), calling
-// onChange(column) on every change. Returns { get, set }.
-export function tempSourcePicker(container, onChange) {
+// onChange(column) on every change, labelled `label`. Returns { get, set }.
+export function tempSourcePicker(container, onChange, { label = "Temperature source" } = {}) {
   const el = typeof container === "string" ? document.getElementById(container) : container;
-  el.insertAdjacentHTML("beforeend", `<span class="temppicker"><label>Temperature source <select></select></label>
+  el.insertAdjacentHTML("beforeend", `<span class="temppicker"><label>${label} <select></select></label>
     <label class="adv" title="Every soil- and air-temperature column TAS was estimated with">
     <input type="checkbox"> Advanced</label></span>`);
   const span = el.lastElementChild;

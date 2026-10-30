@@ -32,17 +32,17 @@
   </details>
   <div class="controls" id="controls">
     <label>TAS <select id="model"><option value="total">total</option><option value="direct">direct</option></select></label>
-    <label>Sources <select id="group"><option value="all">soil + air temperature</option>
-      <option value="ts">soil temperature</option><option value="ta">air temperature</option></select></label>
     <label>Sites <select id="sensor"><option value="all">all</option><option value="GOOD">soil sensor good</option>
       <option value="notBAD">soil sensor not bad</option><option value="BAD">soil sensor bad</option></select></label>
   </div>
   <div id="stats" class="stats"></div>
   <div id="interpretation"></div>
   <h2>Site × temperature source</h2>
-  <p class="small">Colour: TAS. Marker: ▲ significantly positive, ▼ significantly negative (p &lt; 0.05); a red box marks
-    a significant sign flip against the reference source. Click a cell to open the site.</p>
-  <div id="heat" class="plot" style="min-height:900px"></div>
+  <p class="small">Colour: TAS (grey: no estimate; the 2 % largest |TAS| share the end colours). Marker: ▲ significantly positive, ▼ significantly negative
+    (p &lt; 0.05); a red box marks a significant sign flip against the reference source. Sites are grouped by the
+    screen of their soil-temperature sensor (see <a href="soil-temperature.html#screen">Soil temperature in
+    detail</a>). Click a cell to open the site.</p>
+  <div id="heat" class="plot"></div>
   <h2>Each source against the reference</h2>
   <p class="small">Sites with both estimates. ΔTAS = source − reference; class changes and sign flips as above.</p>
   <div id="columns"></div>

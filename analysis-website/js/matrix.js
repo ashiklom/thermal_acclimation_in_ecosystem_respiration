@@ -6,7 +6,6 @@ const main = await loadMain();
 const p = params();
 document.getElementById("model").value = p.get("model") || "total";
 document.getElementById("sensor").value = p.get("sensor") || "all";
-document.getElementById("group").value = p.get("group") || "all";
 const screen = await loadScreen(main.run);
 const verdictOf = (site) => screen?.sensor.get(site)?.verdict || "NA";
 const VERDICTS = { GOOD: "good", SUSPECT: "suspect", BAD: "bad", NA: "–" };
@@ -15,13 +14,12 @@ let tbl, colTbl;
 
 async function draw() {
   const model = document.getElementById("model").value;
-  // soil-temperature sources, then the air-temperature ones; the reference is the selected source
-  const group = document.getElementById("group").value;
+  // every soil- and air-temperature source; the reference is the selected one
   const ref = tempSource();
-  const columns = main.columns.filter((c) => c === ref || group === "all" || (group === "ts") === c.startsWith("TS_"));
+  const columns = main.columns;
   const rows = main.tas[model].filter((r) => columns.includes(r.column));
   const sensor = document.getElementById("sensor").value;
-  setParams({ model, sensor, group });
+  setParams({ model, sensor });
   const keep = (s) => sensor === "all" || (sensor === "notBAD" ? verdictOf(s) !== "BAD" : verdictOf(s) === sensor);
   const sites = [...new Set(rows.map((r) => r.site_ID))].filter(keep).sort();
   const get = new Map(rows.map((r) => [`${r.site_ID}|${r.column}`, r]));
@@ -60,26 +58,65 @@ async function draw() {
   document.getElementById("interpretation").innerHTML = flipSites.length
     ? `<div class="note"><span class="flip">Significant sign flips against ${columnLabel(ref)}:</span> ${flipSites.map((r) => `${siteHTML(r.site_ID)} (${r.flips.map(shortLabel).join(", ")})`).join("; ")}</div>` : "";
 
-  // heatmap
-  const order = siteRows.map((r) => r.site_ID);
+  // heatmap: sites grouped by their soil sensor's screen, a labelled gap between groups
+  const GROUPS = [["GOOD", "Soil sensor good"], ["SUSPECT", "Soil sensor suspect"], ["BAD", "Soil sensor bad"],
+    ["NA", "No soil sensor screened"]];
+  const GAP = 3;
+  const ys = new Map(), labels = [], boxes = [];
+  let y = 0;
+  for (const [v, text] of GROUPS) {
+    const members = siteRows.filter((r) => (VERDICTS[r.sensor] ? r.sensor : "NA") === v).map((r) => r.site_ID);
+    if (!members.length) continue;
+    y += GAP;
+    labels.push({ text: `<b>${text}</b> (${members.length})`, y: y - 1.1 });
+    boxes.push([y, y + members.length - 1]);
+    for (const s of members) ys.set(s, y++);
+  }
+  const order = [...ys.keys()];
+  const yOf = (s) => ys.get(s);
   const z = order.map((s) => columns.map((c) => get.get(`${s}|${c}`)?.TAS ?? null));
-  const vmax = Math.max(...z.flat().filter((v) => v !== null).map(Math.abs), 1e-6);
-  const marks = { x: [], y: [], text: [], color: [] };
+  // colour range: the 98th percentile of |TAS| (the few larger values saturate)
+  const abs = z.flat().filter((v) => v !== null).map(Math.abs).sort((a, b) => a - b);
+  const vmax = Math.max(abs[Math.floor(0.98 * (abs.length - 1))] ?? 0, 1e-6);
+  const marks = { x: [], y: [], text: [] };
   const flipsXY = { x: [], y: [] };
+  const flipsOf = new Map(siteRows.map((r) => [r.site_ID, r.flips]));
   for (const s of order) for (const c of columns) {
-    const r = get.get(`${s}|${c}`); const k = cls(r);
-    if (k === "sig+" || k === "sig-") { marks.x.push(c); marks.y.push(s); marks.text.push(k === "sig+" ? "▲" : "▼"); }
-    if (siteRows.find((x) => x.site_ID === s).flips.includes(c)) { flipsXY.x.push(c); flipsXY.y.push(s); }
+    const k = cls(get.get(`${s}|${c}`));
+    if (k === "sig+" || k === "sig-") { marks.x.push(c); marks.y.push(yOf(s)); marks.text.push(k === "sig+" ? "▲" : "▼"); }
+    if (flipsOf.get(s).includes(c)) { flipsXY.x.push(c); flipsXY.y.push(yOf(s)); }
   }
   const hover = order.map((s) => columns.map((c) => { const r = get.get(`${s}|${c}`); return r ? `${s} ${name(s)}<br>${columnLabel(c, false)}<br>TAS ${fmt(r.TAS)} (p ${fmt(r.TASp, 3)})` : `${s}<br>${columnLabel(c, false)}<br>no estimate`; }));
-  Plotly.newPlot("heat", [
-    { type: "heatmap", x: columns, y: order, z, text: hover, hoverinfo: "text", colorscale: "RdBu", zmin: -vmax, zmax: vmax, colorbar: { title: { text: "TAS" }, thickness: 12 } },
+  // one heatmap per group (so the gaps stay empty), on one colour scale
+  const heat = boxes.map(([y0, y1], i) => {
+    const idx = order.map((s, j) => j).filter((j) => yOf(order[j]) >= y0 && yOf(order[j]) <= y1);
+    return { type: "heatmap", x: columns, y: idx.map((j) => yOf(order[j])), z: idx.map((j) => z[j]), text: idx.map((j) => hover[j]),
+      hoverinfo: "text", coloraxis: "coloraxis", xgap: 0, ygap: 0 };
+  });
+  const nrow = y;
+  const height = Math.round(nrow * 12 + 260);
+  document.getElementById("heat").style.height = `${height}px`;
+  Plotly.react("heat", [
+    ...heat,
     { type: "scatter", mode: "text", x: marks.x, y: marks.y, text: marks.text, textfont: { size: 9, color: "#111" }, hoverinfo: "skip", showlegend: false },
     { type: "scatter", mode: "markers", x: flipsXY.x, y: flipsXY.y, marker: { symbol: "square-open", size: 14, color: "#d1242f", line: { width: 2 } }, hoverinfo: "skip", showlegend: false },
-  ], baseLayout({ margin: { l: 80, r: 20, t: 20, b: 230 }, xaxis: { tickangle: -45, title: "temperature source", tickvals: columns, ticktext: columns.map(shortLabel) },
-    yaxis: { autorange: "reversed", tickfont: { size: 9 }, title: "site", tickvals: order, ticktext: order },
-    plot_bgcolor: "#e5e5e5", height: Math.max(450, order.length * 12 + 220) }), PLOT_CONFIG);
-  document.getElementById("heat").on("plotly_click", (e) => { if (e.points[0].y) location.href = `site.html?site=${e.points[0].y}`; });
+  ], baseLayout({ margin: { l: 80, r: 20, t: 10, b: 10 },
+    coloraxis: { colorscale: [[0, "#053061"], [0.25, "#4393c3"], [0.5, "#f7f7f7"], [0.75, "#d6604d"], [1, "#67001f"]], cmin: -vmax, cmax: vmax, colorbar: { title: { text: "TAS" }, thickness: 12, ticks: "outside", len: 400, lenmode: "pixels", y: 1, yanchor: "top" } },
+    xaxis: { tickangle: -45, title: "temperature source", tickvals: columns, ticktext: columns.map(shortLabel), side: "bottom",
+      range: [-0.5, columns.length - 0.5], showgrid: false, zeroline: false },
+    yaxis: { range: [nrow - 0.5, 0.3], tickfont: { size: 9 }, tickvals: order.map(yOf), ticktext: order, showgrid: false, zeroline: false },
+    // grey behind each group (a missing estimate), white in the gaps
+    shapes: boxes.map(([y0, y1]) => ({ type: "rect", layer: "below", xref: "x", yref: "y", x0: -0.5, x1: columns.length - 0.5,
+      y0: y0 - 0.5, y1: y1 + 0.5, fillcolor: "#bdbdbd", line: { width: 0 } })),
+    annotations: labels.map((l) => ({ text: l.text, xref: "paper", x: 0, xanchor: "left", y: l.y, yref: "y", yanchor: "middle",
+      showarrow: false, font: { size: 12 } })),
+    plot_bgcolor: "#fff", height }), PLOT_CONFIG);
+  const heatDiv = document.getElementById("heat");
+  heatDiv.siteAt = (yv) => order.find((s) => yOf(s) === yv);
+  if (!heatDiv.dataset.bound) {
+    heatDiv.on("plotly_click", (e) => { const s = heatDiv.siteAt(e.points[0].y); if (s) location.href = `site.html?site=${s}`; });
+    heatDiv.dataset.bound = "1";
+  }
 
   // each column vs reference: summary, then small multiples
   const others = columns.filter((c) => c !== ref);
@@ -149,6 +186,6 @@ async function draw() {
   ];
   if (tbl) tbl.replaceData(siteRows); else tbl = table("table", siteRows, cols, { height: "520px" });
 }
-tempSourcePicker("controls", draw);
-for (const id of ["model", "sensor", "group"]) document.getElementById(id).addEventListener("change", draw);
+tempSourcePicker("controls", draw, { label: "Reference temperature source" });
+for (const id of ["model", "sensor"]) document.getElementById(id).addEventListener("change", draw);
 draw();
