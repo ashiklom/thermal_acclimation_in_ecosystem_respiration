@@ -85,10 +85,7 @@ ta_only_values <- data.frame(site_id = ta_only_sites, name = gsub("-", "_", ta_o
 
 inputs <- list(
   tar_target(site_info_file, site_info_path, format = "file"),
-  # the fits read the site rows without the FLUXNET-format sites' NEE column,
-  # which only step 01 reads (without_fluxnet_nee())
-  tar_target(site_info, without_fluxnet_nee(read_site_info(site_info_file))),
-  tar_target(site_nee, read_site_info(site_info_file)[c("site_ID", "NEE")]),
+  tar_target(site_info, read_site_info(site_info_file)),
   tar_target(site_settings_file, file.path("data", "site_settings.csv"), format = "file"),
   tar_target(site_settings, read_site_settings(site_settings_file)),
   tar_target(coordinates_file, file.path("data", "ameriflux_coordinates.csv"), format = "file"),
@@ -201,14 +198,14 @@ per_site <- tar_map(
     }),
     tar_target(step01, {
       raw_files
-      prepare_site(with_site_nee(site, site_nee), ts_rf, coordinates, site_data_dir(site, data_version))
+      prepare_site(site, ts_rf, coordinates, site_data_dir(site, data_version))
     })
   ) else list(
     tar_target(raw_files, site_raw_files(site), format = "file"),
     tar_target(ts_rf, read_published_ts_rf(site, ts_rf_files)),
     tar_target(step01, {
       raw_files
-      prepare_site(with_site_nee(site, site_nee), ts_rf, coordinates)
+      prepare_site(site, ts_rf, coordinates)
     })
   ),
   tar_target(step01_files, write_step01_outputs(step01, site_id), format = "file"),

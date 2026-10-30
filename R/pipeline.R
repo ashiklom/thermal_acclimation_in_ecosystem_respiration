@@ -24,32 +24,6 @@ read_site_info <- function(path) {
   site_info
 }
 
-#' The site table without the FLUXNET-format sites' NEE column names
-#'
-#' Step 01 alone reads NEE (with_site_nee()). The site rows are dependencies of every fit, so the
-#' fits read them with the FLUXNET-format sites' NEE empty, as before the site table named it
-#' (refactor-v2 S21): naming it would have refitted every site. Goes with the deferred refit,
-#' after which the fits depend only on the site fields they use.
-#'
-#' @param site_info The site table (read_site_info()).
-#' @return The table, NEE empty where source is not AmeriFlux_BASE.
-#' @noRd
-without_fluxnet_nee <- function(site_info) {
-  site_info$NEE[site_info$source != "AmeriFlux_BASE"] <- ""
-  site_info
-}
-
-#' A site's row with the NEE column the site table names
-#'
-#' @param site The site's row of without_fluxnet_nee()'s table.
-#' @param site_nee The site table's site_ID and NEE columns.
-#' @return The row, its NEE from site_nee.
-#' @noRd
-with_site_nee <- function(site, site_nee) {
-  site$NEE <- site_nee$NEE[site_nee$site_ID == site$site_ID]
-  site
-}
-
 #' Raw files of a site's step-01 preparation
 #'
 #' The raw files a site's step-01 preparation reads, for file targets: its products' files, plus
