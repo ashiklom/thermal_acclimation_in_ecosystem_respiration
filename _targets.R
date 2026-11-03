@@ -238,7 +238,7 @@ per_site <- tar_map(
     columns <- names(ts_candidate_values$values)
     inputs <- stats::setNames(lapply(columns, ts_column_inputs, site = site, settings = settings, step01 = step01,
                                      candidates = ts_candidate_values, swc_ERA5 = era5, manuscript_inputs = tas_inputs), columns)
-    list(table = ts_columns_table(step01, ts_candidate_values, inputs), summary = ts_columns_summary(ts_candidate_values, inputs))
+    list(table = ts_columns_table(step01, ts_candidate_values, inputs), summary = ts_columns_summary(site_id, ts_candidate_values, inputs))
   }),
   tar_target(ts_columns_file, write_table(ts_columns[["table"]], path_proc("ts-columns", paste0(site_id, ".parquet"))), format = "file"),
   tar_target(ts_summary, ts_columns[["summary"]]),

@@ -330,19 +330,21 @@ ts_columns_table <- function(step01, candidates, inputs) {
 #' the number of nighttime fit records and years, and its coverage of the record and of the
 #' sensor's real data.
 #'
+#' @param site_id Site ID.
 #' @param candidates ts_candidates()'s list.
 #' @param inputs ts_column_inputs() results, named by column.
-#' @return A data frame: the settings' columns, column, coverage, truth_coverage, n_night and
-#'   n_years (only column and the coverages where a column has no inputs).
+#' @return A data frame: the settings' columns (site_ID first), column, coverage,
+#'   truth_coverage, n_night and n_years (only site_ID, column and the coverages where a column
+#'   has no inputs).
 #' @noRd
-ts_columns_summary <- function(candidates, inputs) {
+ts_columns_summary <- function(site_id, candidates, inputs) {
   dplyr::bind_rows(lapply(names(candidates$values), function(column) {
     x <- inputs[[column]]
     v <- candidates$values[[column]]
-    row <- data.frame(column = column,
+    row <- data.frame(site_ID = site_id, column = column,
                       coverage = mean(!is.na(v) & candidates$ok[[column]]),
                       truth_coverage = if (any(candidates$truth)) mean(!is.na(v[candidates$truth])) else NA_real_)
     if (is.null(x)) return(row)
-    cbind(x$settings, row, n_night = nrow(x$night), n_years = length(unique(x$night$growing_year)))
+    cbind(x$settings, row[, names(row) != "site_ID"], n_night = nrow(x$night), n_years = length(unique(x$night$growing_year)))
   }))
 }
