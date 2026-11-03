@@ -493,7 +493,7 @@ write_ts_screen <- function(screen, dir = path_proc(), validation = NULL) {
 #' legitimately disagree.
 #'
 #' @param screen combine_ts_screen()'s result.
-#' @param site_info data/site_info.csv.
+#' @param site_info The site table (read_site_info()).
 #' @param settings data/site_settings.csv.
 #' @return Data frame, one row per site.
 #' @noRd

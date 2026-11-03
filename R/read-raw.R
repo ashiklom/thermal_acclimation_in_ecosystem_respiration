@@ -54,7 +54,7 @@ update_products <- c("SHUTTLE", "ICOSL2", "TERN")
 #' The products named by a site's source: its parts split at "_" or "+", except that
 #' "AmeriFlux_BASE" is one product.
 #'
-#' @param source The site's `source` (data/site_info.csv).
+#' @param source The site's `source` (the site table).
 #' @return A character vector of product names, in the source's order.
 #' @noRd
 source_products <- function(source) {
@@ -142,7 +142,7 @@ read_fluxnet <- function(site_id, product, base_dir = path_original("SiteData"))
 #' (splice_products()) if the source joins them by "+", else stitched (stitch_products()).
 #'
 #' @param site_id Site ID.
-#' @param source The site's `source` (data/site_info.csv).
+#' @param source The site's `source` (the site table).
 #' @param base_dir Root of the raw site data.
 #' @return A data frame, one row per record.
 #' @noRd

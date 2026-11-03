@@ -15,7 +15,7 @@
 # that do not depend on soil temperature, from which ts_column_tables() in
 # R/ts-qualify.R makes the other four, as it does here from the site's soil
 # temperature (climatology$TS), usable where ts_ok>). `site` is the site's
-# row of data/site_info.csv; `base_dir` holds the raw site data (R/read-raw.R);
+# row of the site table (read_site_info()); `base_dir` holds the raw site data (R/read-raw.R);
 # `ts_rf` is the site's 01_01 table (needed where soil temperature is
 # estimated); `coordinates` holds the AmeriFlux sites' coordinates
 # (data/ameriflux_coordinates.csv).
@@ -97,7 +97,7 @@ predict_soil_temp <- function(data, use_NETRAD) {
 #' lm(TS ~ TA + NETRAD) at DE-Hte and FR-FBn (one or two years of soil temperature, incomplete
 #' net radiation), and by lm(TS ~ TA) fitted where TA > 0 elsewhere.
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param base_dir Root of the raw site data (R/read-raw.R).
 #' @return The table written to TS_RandomForest/<site>_TS_rfp.csv: TIMESTAMP and TS_pred at the
 #'   random-forest sites; the site's record (TIMESTAMP, YEAR, DOY, HOUR, MINUTE, TS, TA, ...)
@@ -223,7 +223,7 @@ check_good_years <- function(out, name_site) {
 #' NEE-uptake days and the growing-season end, and passes the record to ts_column_tables()
 #' (R/ts-qualify.R).
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param ts_rf The site's 01_01 table (needed where soil temperature is estimated), or NULL.
 #' @param base_dir Root of the raw site data (R/read-raw.R).
 #' @return list(ac = <the site's half-hourly table>, night = <its filtered nighttime table>,
@@ -401,11 +401,11 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
 #' The per-site body of 01_02b (AmeriFlux BASE sites). Reads the site's record, labels each
 #' record day or night from sunrise and sunset at the site's coordinates in its standard time
 #' (sun_times_published()), applies site-specific repairs and the variables chosen in
-#' data/site_info.csv (NEE, FC, TA, TS, SWC, SW_IN, USTAR, RH or VPD), estimates u* thresholds
+#' the site table (NEE, FC, TA, TS, SWC, SW_IN, USTAR, RH or VPD), estimates u* thresholds
 #' and gap-fills NEE with REddyProc, applies the nighttime filters that do not involve soil
 #' temperature, and passes the record to ts_column_tables() (R/ts-qualify.R).
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param ts_rf The site's 01_01 table (needed where soil temperature is estimated), or NULL.
 #' @param coordinates The AmeriFlux sites' coordinates as used for the published outputs
 #'   (data/ameriflux_coordinates.csv: site_ID, LAT, LONG).
@@ -780,7 +780,7 @@ prep_site_ameriflux <- function(site, ts_rf = NULL, coordinates = utils::read.cs
 #' 01_01's random forests do not reproduce them exactly on current package versions);
 #' "regenerated": 01_01's output in data-proc/TS_RandomForest.
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param source "published" or "regenerated".
 #' @return A data frame, or NULL.
 #' @noRd

@@ -1,6 +1,6 @@
 # Workflow step 02, part 1: turn a site's step-01 tables into the inputs of
 # the TAS fits (Junna Wang, 2025). All site-specific choices are made here,
-# from data/site_info.csv (SWC_use) and data/site_settings.csv:
+# from the site table (SWC_use) and data/site_settings.csv:
 #
 #   ts_regression          "none"; "halfhourly_ta_positive": replace TS by
 #                          lm(TS ~ TA) fitted to the half-hourly table where
@@ -117,7 +117,7 @@ add_era5_sites <- function(swc_ERA5, added) {
 #' control year (the year with growing-season TS closest to the long-term mean) and the minimum
 #' number of observations of a window-year (100 at half-hourly, 60 at hourly sites).
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param settings The site's row of data/site_settings.csv.
 #' @param feature_gs The growing-season features (gStart, gEnd by site_ID).
 #' @param a_measure_night_complete The site's step-01 nighttime table.

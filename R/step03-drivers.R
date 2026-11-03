@@ -115,7 +115,7 @@ site_climate_stats <- function(site_id, ac, a_measure_night_complete) {
 #' GSOC map value where there are no measurements and, where there are, the GSOC value predicted
 #' from the measurement by lm(GSOC ~ soc_obs).
 #'
-#' @param site_info data/site_info.csv (site_ID, LAT, LONG).
+#' @param site_info The site table (read_site_info(); site_ID, LAT, LONG).
 #' @param bif_file The AmeriFlux BIF table (CSV).
 #' @param gsoc_file The GSOC map (raster).
 #' @return A data frame, one row per site: site_ID, GSOC, soc_obs, GSOC_obs, SOC.
@@ -244,7 +244,7 @@ driver_sites <- function(drivers) {
 #' metadata, climate statistics, MODIS indices, soil carbon, and total (TAS_tot) and direct
 #' (TAS) TAS with their p-values.
 #'
-#' @param site_info data/site_info.csv.
+#' @param site_info The site table (read_site_info()).
 #' @param climate_stats site_climate_stats() rows of all sites.
 #' @param spectral spectral_indices()'s table.
 #' @param soil soil_carbon()'s table.

@@ -15,7 +15,7 @@
 #' the 2041-2060 monthly means minus the mean of the 2000-2020 monthly series, averaged over the
 #' site's cell and its four rook neighbours.
 #'
-#' @param site_info data/site_info.csv (site_ID, LAT, LONG).
+#' @param site_info The site table (read_site_info(); site_ID, LAT, LONG).
 #' @param baseline_files The baseline monthly GeoTIFFs (names ending in the two-digit month).
 #' @param future_files The future 12-layer GeoTIFFs, one per GCM; those whose path contains
 #'   `ssp` are used.

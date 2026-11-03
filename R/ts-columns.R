@@ -45,7 +45,7 @@ TS_MIN_TRAIN <- 1000
 #' The site's sensor, its real readings and net radiation, by timestamp, from the raw record
 #' (-9999 read as missing). A column the settings leave empty is all NA.
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param settings The site's row of data/site_settings.csv (ts_sensor, ts_sensor_truth,
 #'   netrad).
 #' @param base_dir Root of the raw site data.
@@ -282,7 +282,7 @@ ts_candidates <- function(step01, sensor, settings, manuscript_inputs) {
 #' no year qualifies.
 #'
 #' @param column Candidate column name, e.g. "TS_linear".
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param settings The site's row of data/site_settings.csv.
 #' @param step01 The site's step-01 list.
 #' @param candidates ts_candidates()'s list.

@@ -46,7 +46,7 @@ site_rows <- function(x, site_id, by = "site_ID") {
 #' The raw files a site's step-01 preparation reads, for file targets: its products' files, plus
 #' US-BZF's record at US-BZS (borrowed air temperature) and the PI soil-water files at FR-Pue.
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param base_dir Root of the raw site data.
 #' @return A character vector of file paths.
 #' @noRd
@@ -66,7 +66,7 @@ site_raw_files <- function(site, base_dir = path_original("SiteData")) {
 #' data-raw/flux (R/download-flux.R); FLUXNET-format sites read their new product from there
 #' whatever this is (R/read-raw.R).
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param data_version "published" or "update".
 #' @return path_raw("flux") for AmeriFlux BASE sites in the update, else
 #'   path_original("SiteData").
@@ -169,7 +169,7 @@ summarise_tas_inputs <- function(inputs, window_size = 14) {
 #' A site's published random-forest soil temperatures (01_01), or NULL if the site does not
 #' estimate soil temperature. Stops if the site's file is not among `files`.
 #'
-#' @param site The site's row of data/site_info.csv.
+#' @param site The site's row of the site table (read_site_info()).
 #' @param files Paths of the published TS_RandomForest files (<site>_TS_rfp.csv).
 #' @return A data frame, or NULL.
 #' @noRd
