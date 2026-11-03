@@ -315,7 +315,7 @@ combined <- list(
   tar_combine(tas_inputs_summary_all, per_site[["tas_inputs_summary"]], command = dplyr::bind_rows(!!!.x)),
   tar_combine(ts_columns_summary_all, per_site[["ts_summary"]], command = dplyr::bind_rows(!!!.x)),
   tar_target(ts_columns_summary_file, {
-    path <- file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "ts_columns_summary.csv")
+    path <- path_proc("ts_columns_summary.csv")
     utils::write.csv(ts_columns_summary_all, path, row.names = FALSE)
     path
   }, format = "file"),
@@ -348,8 +348,7 @@ combined <- list(
   tar_combine(ts_climate_all, per_site[["ts_climate_stats"]], command = combine_ts_rows(list(!!!.x), ts_methods_selected)),
   tar_combine(ts_scenario_all, per_site[["ts_scenario"]], command = combine_ts_rows(list(!!!.x), ts_methods_selected)),
   tar_target(ts_outcome_files, {
-    dir <- Sys.getenv("THERMAL_DATA_PROC", "data-proc")
-    paths <- file.path(dir, c("ts_outcome_total.csv", "ts_outcome_direct.csv", "ts_siteyear_total.csv", "ts_siteyear_direct.csv"))
+    paths <- path_proc(c("ts_outcome_total.csv", "ts_outcome_direct.csv", "ts_siteyear_total.csv", "ts_siteyear_direct.csv"))
     utils::write.csv(ts_outcome_table(ts_fit_sets_total), paths[1], row.names = FALSE)
     utils::write.csv(ts_outcome_table(ts_fit_sets_direct), paths[2], row.names = FALSE)
     utils::write.csv(ts_outcome_table(ts_fit_sets_total, "siteyear"), paths[3], row.names = FALSE)
@@ -366,11 +365,10 @@ combined <- list(
   tar_target(ts_future, scenario_data(ts_drivers, tmin_month, ts_scenario_all[[ts_methods_selected]]),
              pattern = map(ts_drivers, ts_methods_selected), iteration = "list"),
   tar_target(ts_step0304_files, write_step0304_outputs(ts_methods_selected, ts_drivers, ts_driver_results, ts_future, tmin_month,
-                                                       dir = file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "step03-04-ts", ts_methods_selected)),
+                                                       dir = path_proc("step03-04-ts", ts_methods_selected)),
              pattern = map(ts_methods_selected, ts_drivers, ts_driver_results, ts_future), format = "file"),
   tar_target(ts_quality_files, {
-    dir <- Sys.getenv("THERMAL_DATA_PROC", "data-proc")
-    paths <- file.path(dir, c("ts_quality.csv", "ts_ranking.csv", "ts_methods_selected.csv"))
+    paths <- path_proc(c("ts_quality.csv", "ts_ranking.csv", "ts_methods_selected.csv"))
     utils::write.csv(ts_quality_all, paths[1], row.names = FALSE)
     utils::write.csv(ts_ranking, paths[2], row.names = FALSE)
     utils::write.csv(data.frame(column = ts_methods_selected), paths[3], row.names = FALSE)

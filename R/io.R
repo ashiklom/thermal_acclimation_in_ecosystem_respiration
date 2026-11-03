@@ -53,7 +53,7 @@ read_step01_table <- function(site_id, kind = c("ac", "nightNEE", "climatology")
 #' @param dir Directory holding the two parquet files.
 #' @return A data frame, one row per site (site_ID, gStart, gEnd, tStart, tEnd, nyear).
 #' @noRd
-read_growing_season_features <- function(dir = Sys.getenv("THERMAL_DATA_PROC", "data-proc")) {
+read_growing_season_features <- function(dir = path_proc()) {
   rbind(read_table(file.path(dir, "growing_season_feature_EuropFlux.parquet")),
         read_table(file.path(dir, "growing_season_feature_AmeriFlux.parquet")))
 }

@@ -194,7 +194,7 @@ read_published_ts_rf <- function(site, files) {
 #' @param dir Destination directory.
 #' @return The paths of the six CSV files.
 #' @noRd
-write_pipeline_outputs <- function(features, total, direct, inputs_summary, dir = Sys.getenv("THERMAL_DATA_PROC", "data-proc")) {
+write_pipeline_outputs <- function(features, total, direct, inputs_summary, dir = path_proc()) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   paths <- file.path(dir, c(
     "growing_season_feature.csv",
@@ -225,7 +225,7 @@ write_pipeline_outputs <- function(features, total, direct, inputs_summary, dir 
 #' @return The paths of the five CSV files.
 #' @noRd
 write_step0304_outputs <- function(fit_set, drivers, driver_results, future, tmin_month,
-                                   dir = file.path(Sys.getenv("THERMAL_DATA_PROC", "data-proc"), "step03-04", fit_set)) {
+                                   dir = path_proc("step03-04", fit_set)) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   paths <- file.path(dir, c("acclimation_data.csv", "varImp_plot.csv", "partial_plot.csv",
                             "acclimation_data_future_ssp245.csv", "Tmin_month_ssp245_wc.csv"))

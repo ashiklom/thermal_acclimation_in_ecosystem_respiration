@@ -466,7 +466,7 @@ combine_ts_screen <- function(sites) {
 #'   and ts_screen_diurnal.csv (time stamps as "YYYY-MM-DD HH:MM:SS", the
 #'   record's own clock), and ts_screen_validation.csv if given.
 #' @noRd
-write_ts_screen <- function(screen, dir = Sys.getenv("THERMAL_DATA_PROC", "data-proc"), validation = NULL) {
+write_ts_screen <- function(screen, dir = path_proc(), validation = NULL) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   paths <- file.path(dir, paste0("ts_screen", c("", "_yearly", "_windows", "_diurnal"), ".csv"))
   if (!is.null(validation)) {
