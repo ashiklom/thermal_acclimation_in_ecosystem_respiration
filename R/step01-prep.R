@@ -216,8 +216,9 @@ check_good_years <- function(out, name_site) {
 #'
 #' The per-site body of 01_02a (FLUXNET/ICOS sites). Reads and combines the site's record and
 #' takes soil temperature from TS_F_MDS_1, with site-specific choices (the second layer at
-#' CZ-Stn; the 01_01 estimate `ts_rf` at FR-Fon, CH-Dav, DE-Akm, DE-Hte, FR-Bil, FR-Pue, FR-FBn
-#' and CZ-RAJ; the first years rebuilt from the second profile at FI-Sod; air temperature at
+#' CZ-Stn; the 01_01 estimate `ts_rf` where the site table's estimate_Ts is YES, in the
+#' manuscript FR-Fon, CH-Dav, DE-Akm, DE-Hte, FR-Bil, FR-Pue, FR-FBn and CZ-RAJ; the first years
+#' rebuilt from the second profile at FI-Sod; air temperature at
 #' GF-Guy) and the PI soil water at FR-Pue. It wraps the day of year at the southern-hemisphere
 #' sites, applies the nighttime filters that do not involve soil temperature, finds the
 #' NEE-uptake days and the growing-season end, and passes the record to ts_column_tables()
@@ -273,7 +274,7 @@ prep_site_euroflux <- function(site, ts_rf = NULL, base_dir = path_original("Sit
   if (name_site %in% c('CZ-Stn')) {
     a$TS_F_MDS_1 <- a$TS_F_MDS_2  # use TS of second layer because the first layer is incomplete
     a$TS_F_MDS_1_QC <- a$TS_F_MDS_2_QC
-  } else if (name_site %in% c("FR-Fon", "CH-Dav", "DE-Akm", "DE-Hte", "FR-Bil", "FR-Pue", "FR-FBn", "CZ-RAJ")) {
+  } else if (site$estimate_Ts == "YES") {
     stopifnot(!is.null(ts_rf))
     df_TS <- ts_rf
     if (!inherits(df_TS$TIMESTAMP, "POSIXct")) df_TS$TIMESTAMP <- lubridate::ymd_hms(df_TS$TIMESTAMP)
