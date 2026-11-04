@@ -18,6 +18,8 @@
 #   - soil_temperature: FALSE where the site's products have no soil
 #     temperature at all (added sites without TS_F_MDS_1): such a site is run
 #     with the air-temperature columns only (R/ta-columns.R)
+#   - fit: FALSE where the site's flux record is not available yet (it gets
+#     no per-site targets, only its rows of the tables of all sites)
 # and every FLUXNET-format site (not AmeriFlux BASE) gets its NEE column, which
 # step 01 reads (prep_site_euroflux()): NEE_VUT_REF where one of its products has
 # it (read_fluxnet_record() combines their columns), else NEE_CUT_REF (e.g.
@@ -56,6 +58,7 @@ manuscript_columns <- function(x) {
   x$season_wrap <- x$site_ID %in% wrapped
   x$added <- ""
   x$soil_temperature <- TRUE
+  x$fit <- TRUE
   x
 }
 
@@ -109,6 +112,7 @@ required <- c("TIMESTAMP_START", "TA_F_MDS", "TA_F_MDS_QC", "NIGHT", "SW_IN_F_MD
 not_downloaded <- character()
 keep <- rep(TRUE, nrow(new))
 new$soil_temperature <- TRUE
+new$fit <- TRUE
 for (i in seq_len(nrow(new))) {
   s <- new$site_ID[i]
   if (!s %in% manifest$site_ID[manifest$product == "SHUTTLE" & !is.na(manifest$file)]) {

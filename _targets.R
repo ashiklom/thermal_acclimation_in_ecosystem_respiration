@@ -8,7 +8,8 @@
 #                    TAR_PROJECT=original, data/site_info_original.csv; its
 #                    sites without soil temperature (`soil_temperature`
 #                    FALSE) are run with the air-temperature columns only
-#                    (R/ta-columns.R)
+#                    (R/ta-columns.R); its sites with `fit` FALSE (no flux
+#                    record yet) get no per-site targets
 #   TAS_SITES        "all" (default), "original" (the manuscript's sites: an
 #                    empty `added`), "dev" (DEV_SITES in R/step02-tas.R), or
 #                    a comma-separated list of site IDs
@@ -64,9 +65,9 @@ pipeline_sites <- switch(selected,
 )
 stopifnot(all(pipeline_sites %in% all_sites))
 # the sites with soil temperature, and those without (the air-temperature
-# columns only), in the site table's order
+# columns only), in the site table's order; only sites with a flux record (`fit`)
 site_map_values <- function(soil_temperature) {
-  ids <- all_sites[all_sites %in% pipeline_sites & all_site_info$soil_temperature == soil_temperature]
+  ids <- all_sites[all_sites %in% pipeline_sites & all_site_info$fit & all_site_info$soil_temperature == soil_temperature]
   data.frame(site_id = ids, name = gsub("-", "_", ids))
 }
 site_values <- site_map_values(TRUE)

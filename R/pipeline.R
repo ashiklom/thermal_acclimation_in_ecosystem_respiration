@@ -5,18 +5,21 @@
 #' The site table (THERMAL_SITE_INFO; scripts/derive-site-info-new.R writes them): one row per
 #' site, with every column step 01 reads, `season_wrap` (TRUE/FALSE: whether the growing season
 #' spans New Year), `soil_temperature` (TRUE/FALSE: FALSE at a site run with the
-#' air-temperature columns only, R/ta-columns.R) and `added` (the date a site was added; empty
-#' for the manuscript's sites). Stops if a site lacks any of them or a site is listed twice.
+#' air-temperature columns only, R/ta-columns.R), `added` (the date a site was added; empty
+#' for the manuscript's sites) and `fit` (TRUE/FALSE: FALSE at a site whose flux record is not
+#' available yet, e.g. the self-compiled sites; it gets the tables of all sites' rows (ERA5,
+#' MODIS, Tmin, soil carbon) but no per-site targets). Stops if a site lacks any of them or a
+#' site is listed twice.
 #'
 #' @param path Path of the site table.
 #' @return The table, as utils::read.csv() reads it.
 #' @noRd
 read_site_info <- function(path) {
   site_info <- utils::read.csv(path)
-  for (col in c("season_wrap", "soil_temperature", "added")) {
+  for (col in c("season_wrap", "soil_temperature", "added", "fit")) {
     if (!col %in% names(site_info)) stop(path, ": no column `", col, "` (scripts/derive-site-info-new.R)", call. = FALSE)
   }
-  for (col in c("season_wrap", "soil_temperature")) {
+  for (col in c("season_wrap", "soil_temperature", "fit")) {
     bad <- if (is.logical(site_info[[col]])) site_info$site_ID[is.na(site_info[[col]])] else site_info$site_ID
     if (length(bad)) stop(path, ": ", col, " must be TRUE or FALSE; not at ", paste(bad, collapse = ", "), call. = FALSE)
   }
@@ -30,7 +33,8 @@ read_site_info <- function(path) {
 #'
 #' The rows of one site, for its per-site targets: what a site's targets read from a table of
 #' all sites is its own rows, so that adding or editing other sites' rows reruns nothing of it.
-#' Of the site table, the fields step 01 and later read: not `added`, which is bookkeeping.
+#' Of the site table, the fields step 01 and later read: not `added` and `fit`, which are
+#' bookkeeping (a site's `fit` turning TRUE adds its targets and changes nothing of it).
 #'
 #' @param x A table with a site column.
 #' @param site_id Site ID.
@@ -38,7 +42,7 @@ read_site_info <- function(path) {
 #' @return The site's rows.
 #' @noRd
 site_rows <- function(x, site_id, by = "site_ID") {
-  x[x[[by]] == site_id, setdiff(names(x), "added"), drop = FALSE]
+  x[x[[by]] == site_id, setdiff(names(x), c("added", "fit")), drop = FALSE]
 }
 
 #' Raw files of a site's step-01 preparation
