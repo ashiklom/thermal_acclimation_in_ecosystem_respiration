@@ -1,1 +1,4 @@
 "site_ID","field","declared","used","reason"
+"AU-Tum","source","FLUXNET_Shuttle","FLUXNET2015","shuttle product unusable alongside the published record (scripts/derive-site-info-update.R)"
+"FR-FBn","source","FLUXNET_Shuttle","FLUXNET2025_ICOS2025","shuttle product unusable alongside the published record (scripts/derive-site-info-update.R)"
+"DE-Akm","source","FLUXNET_Shuttle","FLUXNET2025","shuttle product unusable alongside the published record (scripts/derive-site-info-update.R)"
