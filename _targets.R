@@ -76,7 +76,10 @@ ta_only_values <- site_map_values(FALSE)
 inputs <- list(
   tar_target(site_info_file, site_info_path, format = "file"),
   tar_target(site_info, read_site_info(site_info_file)),
-  tar_target(site_settings_file, file.path("data", "site_settings.csv"), format = "file"),
+  # the per-site settings (scripts/derive-ts-sensor-settings.R); the original
+  # project's are the manuscript sites' as they were for its input data
+  tar_target(site_settings_file, file.path("data", if (data_version == "update") "site_settings.csv" else "site_settings_original.csv"),
+             format = "file"),
   tar_target(site_settings, read_site_settings(site_settings_file)),
   tar_target(coordinates_file, file.path("data", "ameriflux_coordinates.csv"), format = "file"),
   tar_target(coordinates, utils::read.csv(coordinates_file)),
