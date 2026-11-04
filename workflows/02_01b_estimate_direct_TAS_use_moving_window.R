@@ -408,6 +408,6 @@ for (id in 1:nrow(site_info)) {
 }
 # end of each site
 
-write.csv(outcome, file = file.path('data', paste0(temp_var, '_outcome_temp.csv')), row.names = F)
-write.csv(outcome_siteyear, file = file.path('data', paste0(temp_var, '_outcome_siteyear_temp.csv')), row.names = F)
+write.csv(outcome, file = file.path('data', paste0(temp_var, '_outcome_temp_water_gpp.csv')), row.names = F)
+write.csv(outcome_siteyear, file = file.path('data', paste0(temp_var, '_outcome_siteyear_temp_water_gpp.csv')), row.names = F)
 
