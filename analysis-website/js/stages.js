@@ -60,8 +60,8 @@ async function draw() {
     sec.appendChild(div);
     root.appendChild(sec);
     const pair = (name, field, digits = 3) => ({ title: name, columns: [
-      { title: "ref", field: `${field}_ref`, formatter: numberFormatter(digits), hozAlign: "right", headerFilter: false },
-      { title: "new", field: `${field}_new`, formatter: numberFormatter(digits), hozAlign: "right", headerFilter: false }] });
+      { title: "ref", titleDownload: `${name} ref`, field: `${field}_ref`, formatter: numberFormatter(digits), hozAlign: "right", headerFilter: false },
+      { title: "new", titleDownload: `${name} new`, field: `${field}_new`, formatter: numberFormatter(digits), hozAlign: "right", headerFilter: false }] });
     const cols = [
       { title: "Site", field: "site_ID", frozen: true, formatter: siteCell },
       { title: "inputs changed", field: "changed" },

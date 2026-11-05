@@ -9,7 +9,7 @@ const options = await loadJSON("data/au_tum_options.json").catch(() => ({}));
 const streams = Object.keys(d.streams);
 
 // ---- streams table
-document.getElementById("streams").innerHTML = `<table class="plain"><tr><th>stream</th><th>NEE column</th><th>file</th>
+document.getElementById("streams").innerHTML = `<table class="plain" data-csv="streams"><tr><th>stream</th><th>NEE column</th><th>file</th>
   <th>period</th><th class="num">hours</th><th class="num">night records (step 01's selection)</th></tr>${streams.map((s) => {
   const x = d.streams[s];
   return `<tr><td><span class="pill" style="background:${COLORS[s]}">${SHORT[s]}</span></td><td><code>${x.nee_column}</code></td>
@@ -95,7 +95,7 @@ drawPair();
 // ---- agreement table
 const row = (label, a) => `<td>${label}</td><td class="num">${a.n?.toLocaleString() ?? "–"}</td><td class="num">${fmt(a.bias, 3)}</td>
   <td class="num">${fmt(a.rmse, 3)}</td><td class="num">${fmt(a.r, 3)}</td><td class="num">${fmt(a.slope, 3)}</td>`;
-document.getElementById("agreement").innerHTML = `<table class="plain"><tr><th>a</th><th>b</th><th>years</th><th>variable</th><th class="num">n</th>
+document.getElementById("agreement").innerHTML = `<table class="plain" data-csv="agreement"><tr><th>a</th><th>b</th><th>years</th><th>variable</th><th class="num">n</th>
   <th class="num">bias (b − a)</th><th class="num">RMSE</th><th class="num">r</th><th class="num">slope</th></tr>${d.pairs.map((p) => {
   const vars = [["night NEE (both select)", p.night], ["day NEE (observations in both)", p.day], ...Object.entries(p.drivers)];
   return vars.map(([k, a], i) => `<tr>${i === 0 ? `<td rowspan="${vars.length}">${SHORT[p.a]}</td><td rowspan="${vars.length}">${SHORT[p.b]}</td>
@@ -153,8 +153,8 @@ if (!optIds.length) {
     return { o, inputs: x.inputs, total: t("total"), direct: t("direct") };
   });
   const cls = (r) => { const c = tasClass(r.TAS, r.TASp); return `<span class="pill" style="background:${CLASS_COLORS[c]}">${c}</span>`; };
-  document.getElementById("tas-table").innerHTML = `<table class="plain"><tr><th>source</th><th class="num">night records</th><th class="num">years</th>
-    <th>control year</th><th class="num">tStart–tEnd (°C)</th>${["total", "direct"].map((m) => `<th class="num">${m} TAS (± se)</th><th>p, class</th>`).join("")}</tr>
+  document.getElementById("tas-table").innerHTML = `<table class="plain" data-csv="tas"><tr><th>source</th><th class="num">night records</th><th class="num">years</th>
+    <th>control year</th><th class="num">tStart–tEnd (°C)</th>${["total", "direct"].map((m) => `<th class="num" data-csv-split="${m} TAS|${m} TAS se">${m} TAS (± se)</th><th data-csv-split="${m} p|${m} class">p, class</th>`).join("")}</tr>
     ${rows.map((r) => `<tr><td>${OPTION_LABELS[r.o]}</td><td class="num">${r.inputs.n_night.toLocaleString()}</td>
       <td class="num">${r.inputs.n_years} (${r.inputs.first_year}–${r.inputs.last_year})</td><td>${r.inputs.control_year}</td>
       <td class="num">${fmt(r.inputs.tStart, 3)}–${fmt(r.inputs.tEnd, 3)}</td>

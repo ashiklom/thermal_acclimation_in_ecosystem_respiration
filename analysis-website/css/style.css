@@ -102,3 +102,10 @@ nav.pagetoc ol { columns: 2; font-size: 0.95rem; }
 .maplegend .swatchitem { white-space: nowrap; }
 .maplegend.stacked { flex-direction: column; align-items: center; gap: 0.1rem; }
 .maplegend .dot { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 50%; border: 1px solid #333; margin-right: 0.3rem; vertical-align: -0.1rem; }
+
+/* "Download CSV" above the results tables (common.js) */
+.csv-tools { display: flex; justify-content: flex-end; margin: 0.25rem 0; }
+.csv-tools button { font: inherit; font-size: 0.8rem; color: var(--accent); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0.1rem 0.6rem; cursor: pointer; }
+.csv-tools button:hover { background: var(--panel); border-color: var(--accent); }
+.csv-tools button::before { content: "⤓ "; }

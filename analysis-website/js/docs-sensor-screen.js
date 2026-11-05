@@ -190,7 +190,7 @@ drawBasis();
   baseLayout({ title: { text: `${real.site}: growing-season mean diurnal cycles`, font: { size: 13 } }, xaxis: { title: "hour (record's clock)", dtick: 6 },
     yaxis: { title: "temperature (°C)" }, legend: { orientation: "h", y: -0.25 } }), PLOT_CONFIG);
   const cols = ["amp_ratio", "lag_h", "zd_amp", "zd_lag", "stuck_frac", "coverage"];
-  document.getElementById("b-table").innerHTML = `<table class="plain"><tr><th>sensor</th>${cols.map((c) => `<th>${c}</th>`).join("")}<th>ẑ<sub>lag</sub> / ẑ<sub>amp</sub></th><th>verdict</th><th>flags</th></tr>
+  document.getElementById("b-table").innerHTML = `<table class="plain" data-csv="${real.site}-sensor-diagnostics"><tr><th>sensor</th>${cols.map((c) => `<th>${c}</th>`).join("")}<th data-csv-split="zd_lag / zd_amp">ẑ<sub>lag</sub> / ẑ<sub>amp</sub></th><th>verdict</th><th>flags</th></tr>
     ${SENSORS.map((s) => { const r = real.sensors[s].summary[0]; return `<tr><td><code>${s}</code></td>${cols.map((c) => `<td class="num">${fmt(r[c], 3)}</td>`).join("")}
       <td class="num">${fmt(r.zd_lag / r.zd_amp, 2)}</td><td>${pill(r.verdict)}</td><td>${r.flags}</td></tr>`; }).join("")}</table>
     <p class="small">The R screen (<code>ts_screen_series()</code>) of each sensor's measured readings, ${real.site}, growing season fixed to day of year
@@ -438,7 +438,7 @@ function drawYearly() {
   let html = `Changepoints: ${changeText}. Odd years: ${odd.length ? odd.join(", ") : "none"}.
     ${flags.length ? `${pill("SUSPECT")} <code>${flags.join(",")}</code>` : "No yearly flag."}`;
   if (res.windows.length) {
-    html += `<table class="plain"><tr><th>years</th><th>scale</th><th>rule</th><th>value</th><th>reference</th></tr>${res.windows.map((w) =>
+    html += `<table class="plain"${isSim ? "" : ` data-csv="${real.site}-${ySel.value}-bad-windows"`}><tr><th>years</th><th>scale</th><th>rule</th><th>value</th><th>reference</th></tr>${res.windows.map((w) =>
       `<tr><td>${w.years[0]}–${w.years[1]}</td><td>${w.scale}</td><td><code>${w.rule}</code></td><td class="num">${fmt(w.value, 3)}</td><td class="num">${fmt(w.reference, 3)}</td></tr>`).join("")}</table>`;
   }
   if (!isSim) {
@@ -476,7 +476,7 @@ drawYearly();
     ${rows.map(([f, l, rule, what]) => `<tr><td><code>${f}</code></td><td>${pill(l)}</td><td>${rule}</td><td>${what}</td></tr>`).join("")}</table>
     <p class="small">Thresholds read from the <code>TS_SCREEN_*</code> constants of <code>R/ts-screen.R</code>; the 0.05 damping floor, the 6-record run
     length and the ±0.5 °C zero band are written in the code itself. Missing diagnostics never fire a rule (R's <code>isTRUE()</code>).</p>`;
-  document.getElementById("real-verdicts").innerHTML = `<table class="plain"><tr><th>${real.site} sensor</th><th>verdict</th><th>flags</th><th>bad_fraction</th></tr>
+  document.getElementById("real-verdicts").innerHTML = `<table class="plain" data-csv="${real.site}-verdicts"><tr><th>${real.site} sensor</th><th>verdict</th><th>flags</th><th>bad_fraction</th></tr>
     ${SENSORS.map((s) => { const r = real.sensors[s].summary[0]; return `<tr><td><code>${s}</code></td><td>${pill(r.verdict)}</td><td><code>${r.flags}</code></td><td class="num">${fmt(r.bad_fraction, 3)}</td></tr>`; }).join("")}</table>`;
 }
 

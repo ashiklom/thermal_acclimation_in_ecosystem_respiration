@@ -80,7 +80,7 @@ function drawTable() {
   const cols = [
     { title: "show", field: "site_ID", headerSort: false, headerFilter: false, hozAlign: "center", width: 60,
       formatter: (c) => `<input type="radio" name="flux-site" ${c.getValue() === picked ? "checked" : ""}>`,
-      cellClick: (e, c) => pick(c.getValue()) },
+      cellClick: (e, c) => pick(c.getValue()), download: false },
     { title: "Site", field: "site_ID", formatter: siteCell },
     { title: "network", field: "network" },
     { title: "reference", field: "reference_product" },

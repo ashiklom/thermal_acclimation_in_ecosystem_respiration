@@ -128,8 +128,8 @@ async function drawAdded(b, trs, pct) {
       marker: { size: 5, symbol: i ? NEW_SYMBOL : "circle", color: i ? "#0969da" : "#8c959f" }, hovertemplate: "%{text}: %{y:.4f}<extra></extra>" };
   }), baseLayout({ title: { text: `${RESPONSES[trs] || trs} of the sites`, font: { size: 13 } }, yaxis: { title: "TAS (°C⁻¹)", zeroline: true }, showlegend: false }), PLOT_CONFIG);
   const skill = All.new_sites_effect || [];
-  document.getElementById("addedskill").innerHTML = skill.length ? `<table class="plain"><tr><th>TAS</th><th>forest fitted to (n)</th><th>scored on added sites (n)</th>
-    <th>r² on added sites</th><th>r</th><th>RMSE</th><th>bias</th><th>OOB r², manuscript's sites</th><th>mean ± sd, manuscript's</th><th>mean ± sd, added</th></tr>${
+  document.getElementById("addedskill").innerHTML = skill.length ? `<table class="plain" data-csv="added-sites-skill"><tr><th>TAS</th><th>forest fitted to (n)</th><th>scored on added sites (n)</th>
+    <th>r² on added sites</th><th>r</th><th>RMSE</th><th>bias</th><th>OOB r², manuscript's sites</th><th data-csv-split="mean, manuscript's|sd, manuscript's">mean ± sd, manuscript's</th><th data-csv-split="mean, added|sd, added">mean ± sd, added</th></tr>${
     skill.map((r) => `<tr><td>${RESPONSES[r.type] || r.type}</td><td>${r.n_original}</td><td>${r.n_added}</td><td>${fmt(r.r2, 2)}</td><td>${fmt(r.r, 2)}</td>
       <td>${fmt(r.rmse, 4)}</td><td>${fmt(r.bias, 4)}</td><td>${fmt(r.oob_r2_original, 2)}</td><td>${fmt(r.mean_original, 4)} ± ${fmt(r.sd_original, 4)}</td>
       <td>${fmt(r.mean_added, 4)} ± ${fmt(r.sd_added, 4)}</td></tr>`).join("")}</table>` : "";

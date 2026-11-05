@@ -91,19 +91,24 @@ function drawResults() {
   const rows = [...SOIL_COLUMNS, ...AIR_COLUMNS].map((c) => {
     const t = main.get("total", c).get(site.site_ID), d = main.get("direct", c).get(site.site_ID);
     return { column: c, label: columnLabel(c, false), total: tasText(t), direct: tasText(d), years: t?.n_years ?? d?.n_years ?? null,
-      windows: t?.nwindow ?? null, control: t?.control_year ?? null, has: Boolean(t || d) };
+      windows: t?.nwindow ?? null, control: t?.control_year ?? null, has: Boolean(t || d),
+      total_TAS: t?.TAS ?? null, total_se: t?.TAS_se ?? null, total_p: t?.TASp ?? null,
+      direct_TAS: d?.TAS ?? null, direct_se: d?.TAS_se ?? null, direct_p: d?.TASp ?? null };
   }).filter((r) => r.has);
   const bold = (cell) => (cell.getRow().getData().column === selected ? `<b>${cell.getValue() ?? "–"}</b>` : (cell.getValue() ?? "–"));
   const columns = [
     { title: "Temperature source", field: "label", formatter: bold, headerFilter: false },
-    { title: "Total TAS", field: "total", formatter: bold, hozAlign: "right", headerFilter: false, headerSort: false },
-    { title: "Direct TAS", field: "direct", formatter: bold, hozAlign: "right", headerFilter: false, headerSort: false },
+    { title: "Total TAS", field: "total", formatter: bold, hozAlign: "right", headerFilter: false, headerSort: false, download: false },
+    { title: "Direct TAS", field: "direct", formatter: bold, hozAlign: "right", headerFilter: false, headerSort: false, download: false },
     { title: "Years", field: "years", hozAlign: "right", headerFilter: false },
     { title: "Windows", field: "windows", hozAlign: "right", headerFilter: false },
     { title: "Control year", field: "control", hozAlign: "right", headerFilter: false },
+    // the CSV's columns: the column's name and the unrounded estimates
+    ...["column", "total_TAS", "total_se", "total_p", "direct_TAS", "direct_se", "direct_p"]
+      .map((f) => ({ title: f, field: f, visible: false, download: true })),
   ];
   if (tbl) tbl.destroy();
-  tbl = table("results", rows, columns, { height: false });
+  tbl = table("results", rows, columns, { height: false, csvName: `site-${site.site_ID}-tas` });
 }
 
 function drawWalk() {

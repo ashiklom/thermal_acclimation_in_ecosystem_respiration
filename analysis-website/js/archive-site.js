@@ -24,7 +24,7 @@ function drawScreen(site) {
   if (!screen) { box.innerHTML = `<p class="note">No run with the sensor screen yet.</p>`; return; }
   const d = screen.data;
   const summary = (d.summary || []).filter((r) => r.site_ID === site);
-  box.innerHTML = `<table class="plain"><tr><th>column</th><th>verdict</th><th>flags</th><th>range ratio</th><th>lag (h)</th>
+  box.innerHTML = `<table class="plain" data-csv="${site}-sensor-screen"><tr><th>column</th><th>verdict</th><th>flags</th><th>range ratio</th><th>lag (h)</th>
     <th>offset from air (°C)</th><th>coverage</th><th>bad share</th></tr>${summary.map((r) => `<tr><td>${r.column}</td>
     <td style="color:${VERDICT_COLORS[r.verdict]};font-weight:600">${r.verdict}</td><td>${r.flags || ""}</td><td>${fmt(r.amp_ratio, 3)}</td>
     <td>${fmt(r.lag_h, 2)}</td><td>${fmt(r.mean_offset, 2)}</td><td>${fmt(r.coverage, 2)}</td><td>${fmt(r.bad_fraction, 2)}</td></tr>`).join("")}</table>`;
@@ -49,7 +49,7 @@ function drawScreen(site) {
     grid: { rows: 3, columns: 1, pattern: "coupled" }, xaxis: { title: "growing year" },
     yaxis: { title: "range ratio" }, yaxis2: { title: "lag (h)" }, yaxis3: { title: "offset (°C)" }, legend: { orientation: "h", y: -0.25 }, height: 520 }), PLOT_CONFIG);
   const w = (d.windows || []).filter((r) => r.site_ID === site);
-  document.getElementById("screenwindows").innerHTML = w.length ? `<table class="plain"><tr><th>column</th><th>start</th><th>end</th><th>scale</th><th>rule</th><th>value</th><th>reference</th></tr>${
+  document.getElementById("screenwindows").innerHTML = w.length ? `<table class="plain" data-csv="${site}-bad-windows"><tr><th>column</th><th>start</th><th>end</th><th>scale</th><th>rule</th><th>value</th><th>reference</th></tr>${
     w.map((r) => `<tr><td>${r.column}</td><td>${r.start}</td><td>${r.end}</td><td>${r.scale}</td><td>${r.rule}</td><td>${fmt(r.value, 3)}</td><td>${fmt(r.reference, 3)}</td></tr>`).join("")}</table>`
     : `<p class="small">No bad windows.</p>`;
 }
@@ -99,7 +99,8 @@ async function draw() {
   const f = numberFormatter(4);
   const cols = ["growing_year", "window", "nobsv", "extend_days", "alpha", "beta", "C0", "Hs", "k2", "TS", "ERref", "lnRatio"]
     .map((k) => ({ title: k, field: k, formatter: typeof sy[0]?.[k] === "number" && !["growing_year", "nobsv", "extend_days"].includes(k) ? f : undefined }));
-  if (tbl) tbl.replaceData(sy); else tbl = table("siteyears", sy, cols, { height: "360px" });
+  if (tbl) tbl.replaceData(sy); else tbl = table("siteyears", sy, cols, { height: "360px",
+    csvName: () => `archive-site-${document.getElementById("site").value}-siteyears` });
 }
 for (const id of ["site", "set", "model"]) document.getElementById(id).addEventListener("change", draw);
 draw();

@@ -210,6 +210,7 @@ export function header(active) {
     // (module scripts run once the page is parsed: <main> exists)
     document.querySelector("main")?.insertAdjacentHTML("beforeend", note);
   }
+  watchPlainTables();
 }
 
 export function params() {
@@ -391,13 +392,105 @@ export async function siteMaps(geoDiv, climDiv, sites, { value, category, catego
   }
 }
 
-export function table(div, rows, columns, { onRowClick, height = "420px", initialSort } = {}) {
+// csvName: the downloaded file's name without ".csv" (a string, or a function
+// called at download time); by default the page's and the table's names.
+export function table(div, rows, columns, { onRowClick, height = "420px", initialSort, csvName } = {}) {
   const t = new Tabulator(`#${div}`, {
     data: rows, columns, layout: "fitDataStretch", height, initialSort,
     columnDefaults: { headerFilter: "input", headerFilterPlaceholder: "filter" },
   });
   if (onRowClick) t.on("rowClick", (e, row) => onRowClick(row.getData()));
+  const name = () => (typeof csvName === "function" ? csvName() : csvName) || `${pageName()}-${div}`;
+  csvButton(document.getElementById(div), `tabulator-${div}`,
+    "Download the rows shown (after the filters, in the current order) as CSV, with unrounded values",
+    () => t.download("csv", `${name()}.csv`, { bom: true }));
   return t;
+}
+
+// ---------------------------------------------------------------- CSV downloads
+const pageName = () => (location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "");
+
+// A "Download CSV" button just before `el` (once per key: tables redrawn into
+// the same place keep their button, whose click calls the current onClick).
+function csvButton(el, key, title, onClick) {
+  let bar = el.previousElementSibling;
+  if (!bar?.classList.contains("csv-tools") || bar.dataset.key !== key) {
+    bar = document.createElement("div");
+    bar.className = "csv-tools";
+    bar.dataset.key = key;
+    bar.innerHTML = `<button type="button" class="csv-download">Download CSV</button>`;
+    el.before(bar);
+  }
+  const btn = bar.querySelector("button");
+  btn.title = title;
+  btn.onclick = onClick;
+}
+
+const csvField = (v) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+};
+export function downloadCSV(name, header, rows) {
+  const text = [header, ...rows].map((r) => r.map(csvField).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["﻿", text, "\r\n"], { type: "text/csv;charset=utf-8" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.csv` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// A results table written as HTML (<table class="plain" data-csv="NAME">) as rows
+// of text: row- and column-spans repeated into every cell they cover, "–" (no
+// value) empty, thousands separators and typographic minus signs removed. A
+// <th data-csv-split="a|b"> splits its column's cells ("x ± y", "p class") into
+// the columns a and b.
+function plainTableRows(tbl) {
+  const grid = [];
+  [...tbl.rows].forEach((tr, i) => {
+    grid[i] ??= [];
+    let j = 0;
+    for (const cell of tr.cells) {
+      while (grid[i][j] !== undefined) j++;
+      for (let di = 0; di < cell.rowSpan; di++) {
+        for (let dj = 0; dj < cell.colSpan; dj++) (grid[i + di] ??= [])[j + dj] = cell;
+      }
+      j += cell.colSpan;
+    }
+  });
+  const text = (cell) => {
+    const s = (cell?.textContent ?? "").replace(/\s+/g, " ").trim().replaceAll("−", "-");
+    if (s === "–") return "";
+    return /^-?\d{1,3}(,\d{3})+$/.test(s) ? s.replaceAll(",", "") : s;
+  };
+  const head = grid[0] || [];
+  const out = grid.map((row, i) => row.flatMap((cell, j) => {
+    const split = head[j]?.dataset.csvSplit?.split("|");
+    if (!split) return [text(cell)];
+    if (i === 0) return split;
+    const parts = text(cell).split(/\s*±\s*|\s+/);
+    return split.map((_, k) => (parts.length === split.length ? parts[k] : k ? "" : text(cell)));
+  }));
+  return { header: out[0] || [], rows: out.slice(1) };
+}
+
+function plainTableButtons() {
+  for (const tbl of document.querySelectorAll("table.plain[data-csv]")) {
+    if (tbl.dataset.csvReady) continue;
+    tbl.dataset.csvReady = "1";
+    csvButton(tbl, `plain-${tbl.dataset.csv}`, "Download this table as CSV", () => {
+      const { header, rows } = plainTableRows(tbl);
+      downloadCSV(`${pageName()}-${tbl.dataset.csv}`, header, rows);
+    });
+  }
+}
+// Buttons for the results tables pages write now and later (set up by header()).
+let plainObserver;
+function watchPlainTables() {
+  if (plainObserver) return;
+  plainTableButtons();
+  plainObserver = new MutationObserver(plainTableButtons);
+  plainObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 export const numberFormatter = (digits = 4) => (cell) => fmt(cell.getValue(), digits);
